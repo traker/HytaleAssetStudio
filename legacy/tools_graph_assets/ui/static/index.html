@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>FineCraft Asset Graph Explorer</title>
+  <script type="text/javascript" src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+  <style>
+    body { font-family: sans-serif; margin: 0; padding: 0; background: #1e1e1e; color: #ddd; display: flex; height: 100vh; flex-direction: column; }
+    #toolbar { background: #2d2d2d; padding: 10px 20px; display: flex; gap: 10px; align-items: center; border-bottom: 1px solid #444; }
+    #toolbar select, #toolbar input, #toolbar button { padding: 5px 10px; background: #333; color: white; border: 1px solid #555; border-radius: 3px; }
+    #toolbar button { cursor: pointer; background: #0066cc; border-color: #0055aa; }
+    #toolbar button:hover { background: #0077ee; }
+    #main { display: flex; flex: 1; overflow: hidden; }
+    #mynetwork { flex: 1; height: 100%; }
+    #sidebar { width: 350px; background: #252525; border-left: 1px solid #444; padding: 15px; overflow-y: auto; display: flex; flex-direction: column; gap: 15px; }
+    h3 { margin-top: 0; margin-bottom: 10px; border-bottom: 1px solid #444; padding-bottom: 5px; font-size: 16px; }
+    .panel-section { background: #2a2a2a; border: 1px solid #333; padding: 10px; border-radius: 4px; }
+    .node-info-text { font-family: monospace; font-size: 12px; word-break: break-all; margin-bottom: 5px; color: #aaa; }
+    .form-group { margin-bottom: 10px; }
+    .form-group label { display: block; font-size: 12px; margin-bottom: 4px; color: #aaa; }
+    .form-group input, .form-group select { width: 100%; box-sizing: border-box; }
+    #clone-btn { background: #28a745; border-color: #218838; width: 100%; margin-top: 10px; }
+    #clone-btn:hover { background: #218838; }
+    #clone-log { font-size: 11px; font-family: monospace; color: #88ff88; margin-top: 10px; white-space: pre-wrap; }
+    
+    .selected-list { max-height: 150px; overflow-y: auto; font-size: 11px; font-family: monospace; background: #1a1a1a; padding: 5px; border: 1px solid #444; }
+    .selected-list div { padding: 2px 0; border-bottom: 1px solid #333; }
+    .selected-list div:last-child { border-bottom: none; }
+  </style>
+</head>
+<body>
+
+<div id="toolbar">
+  <strong>FineCraft Asset Graph</strong>
+  <select id="item-select"><option value="">-- Loading items... --</option></select>
+  <label for="depth-input">Depth:</label>
+  <input type="number" id="depth-input" value="4" min="1" max="10" style="width: 60px;">
+  <button onclick="loadGraph()">Load Graph</button>
+  <span id="status-msg" style="margin-left:auto; font-size:12px; color:#aaa;"></span>
+</div>
+
+<div id="main">
+  <div id="mynetwork"></div>
+  <div id="sidebar">
+    <div class="panel-section">
+      <h3>Node Selection</h3>
+      <div id="selection-info" class="node-info-text">Click a node to view info. Shift+Click or drag to select multiple for cloning.</div>
+      <div id="selected-nodes-list" class="selected-list"></div>
+      <button onclick="selectAllJson()" style="margin-top:5px; width:100%; font-size:11px;">Select All JSON in Subgraph</button>
+    </div>
+
+    <div class="panel-section">
+      <h3>Clone Selected Assets</h3>
+      <div class="form-group">
+        <label>Namespace (Folder prefix)</label>
+        <input type="text" id="clone-ns" value="FineCraft">
+      </div>
+      <div class="form-group">
+        <label>Prefix (File rename prefix)</label>
+        <input type="text" id="clone-prefix" value="FC_Clone_">
+      </div>
+      <div class="form-group" style="display:none;">
+        <label>Clone Mode (Auto-overridden by selection)</label>
+        <select id="clone-mode">
+          <option value="behavior" selected>Behavior (Items, Proj)</option>
+          <option value="full-json">All JSON</option>
+        </select>
+      </div>
+      <button id="clone-btn" onclick="executeClone()">Write Cloned Assets</button>
+      <div id="clone-log"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+  let network = null;
+  let currentNodes = new vis.DataSet([]);
+  let currentEdges = new vis.DataSet([]);
+  let groups = {
+    'item': { color: '#FF6B6B', shape: 'box' },
+    'block': { color: '#4ECDC4', shape: 'box' },
+    'interaction': { color: '#F4A261', shape: 'diamond' },
+    'projectile': { color: '#FF9FF3', shape: 'dot' },
+    'sound_event': { color: '#FFE66D', shape: 'triangle' },
+    'sound': { color: '#FFEAA7', shape: 'triangleDown' },
+    'model': { color: '#45B7D1', shape: 'ellipse' },
+    'texture': { color: '#96CEB4', shape: 'ellipse' },
+    'particle': { color: '#DDA0DD', shape: 'star' },
+    'json_data': { color: '#9B9B9B', shape: 'ellipse' },
+    'other': { color: '#95A5A6', shape: 'ellipse' }
+  };
+
+  // Fetch item list on load
+  fetch('/api/items')
+    .then(r => r.json())
+    .then(items => {
+      const sel = document.getElementById('item-select');
+      sel.innerHTML = '<option value="">-- Select an Item --</option>';
+      items.forEach(i => {
+        let opt = document.createElement('option');
+        opt.value = i; opt.innerText = i;
+        sel.appendChild(opt);
+      });
+      // Try load crude arrow by default if exist
+      if (items.includes('Weapon_Arrow_Crude')) {
+        sel.value = 'Weapon_Arrow_Crude';
+        loadGraph();
+      }
+    });
+
+  function setStatus(msg) {
+    document.getElementById('status-msg').innerText = msg;
+  }
+
+  function loadGraph() {
+    const item = document.getElementById('item-select').value;
+    const depth = document.getElementById('depth-input').value;
+    if (!item) return;
+
+    setStatus(`Loading ${item}...`);
+    fetch(`/api/graph?item=${item}&depth=${depth}`)
+      .then(r => r.json())
+      .then(data => {
+        if(data.error) {
+            setStatus("Error: " + data.error);
+            return;
+        }
+        
+        currentNodes.clear();
+        currentEdges.clear();
+        
+        // Highlight root node
+        data.nodes.forEach(n => {
+            if(n.id === data.rootId) n.borderWidth = 3;
+            currentNodes.add(n);
+        });
+        currentEdges.add(data.edges);
+
+        const container = document.getElementById('mynetwork');
+        const graphData = { nodes: currentNodes, edges: currentEdges };
+        const options = {
+          groups: groups,
+          physics: { stabilization: { iterations: 150 } },
+          nodes: { font: { color: 'white' } },
+          edges: { color: { inherit: 'from' }, arrows: 'to' }
+        };
+
+        if (network) network.destroy();
+        network = new vis.Network(container, graphData, options);
+
+        network.on("selectNode", updateSelectionPanel);
+        network.on("deselectNode", updateSelectionPanel);
+
+        setStatus(`Loaded ${data.nodes.length} nodes, ${data.edges.length} edges.`);
+      });
+  }
+
+  function updateSelectionPanel() {
+    if(!network) return;
+    const selectedIds = network.getSelectedNodes();
+    const infoDiv = document.getElementById('selection-info');
+    const listDiv = document.getElementById('selected-nodes-list');
+    
+    if (selectedIds.length === 0) {
+      infoDiv.innerText = "No node selected.";
+      listDiv.innerHTML = "";
+      return;
+    }
+
+    if (selectedIds.length === 1) {
+      let node = currentNodes.get(selectedIds[0]);
+      infoDiv.innerHTML = `<strong>Path:</strong><br/>${node.id}<br/><strong>Type:</strong> ${node.group}`;
+    } else {
+      infoDiv.innerHTML = `<strong>${selectedIds.length} nodes selected.</strong>`;
+    }
+
+    // Only allow JSON nodes to be listed/cloned to prevent crashing/logic faults on UI
+    let jsonIds = selectedIds.filter(id => id.toLowerCase().endsWith('.json'));
+    listDiv.innerHTML = jsonIds.map(id => `<div>${id}</div>`).join('');
+  }
+
+  function selectAllJson() {
+      if(!network) return;
+      let allIds = currentNodes.getIds();
+      let jsonIds = allIds.filter(id => id.toLowerCase().endsWith('.json'));
+      network.selectNodes(jsonIds);
+      updateSelectionPanel();
+  }
+
+  function executeClone() {
+    if(!network) return;
+    const selectedIds = network.getSelectedNodes();
+    let jsonIds = selectedIds.filter(id => id.toLowerCase().endsWith('.json'));
+    
+    if(jsonIds.length === 0) {
+        alert("Please select at least one JSON node to clone.");
+        return;
+    }
+
+    const item = document.getElementById('item-select').value;
+    const depth = document.getElementById('depth-input').value;
+    const ns = document.getElementById('clone-ns').value;
+    const prefix = document.getElementById('clone-prefix').value;
+    const mode = document.getElementById('clone-mode').value;
+
+    document.getElementById('clone-btn').innerText = "Cloning...";
+    document.getElementById('clone-btn').disabled = true;
+
+    fetch('/api/clone', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        item: item,
+        depth: depth,
+        namespace: ns,
+        prefix: prefix,
+        mode: mode,
+        selectedNodes: jsonIds
+      })
+    })
+    .then(r => r.json())
+    .then(data => {
+      document.getElementById('clone-btn').innerText = "Write Cloned Assets";
+      document.getElementById('clone-btn').disabled = false;
+
+      const log = document.getElementById('clone-log');
+      if(data.error) {
+          log.style.color = '#ff8888';
+          log.innerText = "Error: " + data.error;
+      } else {
+          log.style.color = '#88ff88';
+          log.innerText = `Success!\n${data.message}\nCheck plugin-poison/src/main/resources/${ns}`;
+      }
+    }).catch(err => {
+      document.getElementById('clone-btn').innerText = "Write Cloned Assets";
+      document.getElementById('clone-btn').disabled = false;
+      document.getElementById('clone-log').innerText = "Request Failed: " + err;
+    });
+  }
+</script>
+</body>
+</html>

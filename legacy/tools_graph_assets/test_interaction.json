@@ -1,0 +1,19 @@
+{
+  "AllowIndefiniteHold": false,
+  "Effects": {
+    "ItemAnimationId": "StabCharging"
+  },
+  "Next": {
+    "0": {
+      "ChainingAllowance": 1.25,
+      "Next": [
+        "Longsword_Swing_Left",
+        "Longsword_Swing_Right",
+        "Longsword_Swing_Up_Left"
+      ],
+      "Type": "Chaining"
+    },
+    "1.565": "Longsword_Stab_Charged"
+  },
+  "Type": "Charging"
+}

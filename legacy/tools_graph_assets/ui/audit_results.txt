@@ -1,0 +1,144 @@
+Type: Simple
+Keys: ['HorizontalSpeedMultiplier', 'Next', 'Effects', 'CancelOnItemChange', 'Failed', '$Comment', 'Tags', 'RunTime', 'Type']
+---
+Type: UseBlock
+Keys: ['Next', 'Type', 'Failed']
+---
+Type: Condition
+Keys: ['Crouching', 'Jumping', 'Next', 'Flying', 'Swimming', 'Failed', '$Comment', 'RequiredGameMode', 'Type']
+---
+Type: MovementCondition
+Keys: ['Back', 'Right', 'BackRight', 'Failed', '$Comment', 'BackLeft', 'Left', 'ForwardLeft', 'Type', 'ForwardRight']
+---
+Type: StatsCondition
+Keys: ['LessThan', 'Next', 'Effects', 'Failed', 'ValueType', '$Comment', 'Costs', 'Lenient', 'RunTime', 'Type']
+---
+Type: Serial
+Keys: ['$Comment', 'Tags', 'Type', 'Interactions']
+---
+Type: EffectCondition
+Keys: ['Next', 'Failed', '$Comment', 'Entity', 'Match', 'EntityEffectIds', 'Type']
+---
+Type: ApplyEffect
+Keys: ['HorizontalSpeedMultiplier', 'Next', 'Entity', 'EffectId', 'Type']
+---
+Type: Seating
+Keys: ['Type']
+---
+Type: DestroyCondition
+Keys: ['Type', 'Next']
+---
+Type: Parallel
+Keys: ['Next', 'Interactions', '$Comment', 'Tags', 'Type']
+---
+Type: Replace
+Keys: ['Var', 'Next', '$Comment', 'DefaultValue', 'Type', 'DefaultOk']
+---
+Type: BlockCondition
+Keys: ['Next', 'Failed', '$Comment', 'Type', 'Matchers']
+---
+Type: ChangeState
+Keys: ['Changes', 'Type']
+---
+Type: OpenContainer
+Keys: ['Type']
+---
+Type: OpenProcessingBench
+Keys: ['Type']
+---
+Type: MemoriesCondition
+Keys: ['Failed', 'Type', 'Next']
+---
+Type: PlacementCountCondition
+Keys: ['Value', 'Block', 'Next', 'Failed', 'Type']
+---
+Type: PlaceBlock
+Keys: ['AllowDragPlacement', 'RemoveItemInHand', 'BlockTypeToPlace', 'Effects', 'RunTime', 'Type']
+---
+Type: ContextualUseNPC
+Keys: ['Effects', 'Context', 'Type', 'Failed']
+---
+Type: ModifyInventory
+Keys: ['NotifyOnBreakMessage', 'NotifyOnBreak', 'AdjustHeldItemDurability', 'Next', 'ItemToRemove', 'Failed', 'BrokenItem', 'ItemToAdd', 'AdjustHeldItemQuantity', 'Type']
+---
+Type: RefillContainer
+Keys: ['Next', 'Effects', 'States', 'RunTime', 'Type']
+---
+Type: Charging
+Keys: ['HorizontalSpeedMultiplier', 'Next', 'FailOnDamage', 'MouseSensitivityAdjustmentTarget', 'Effects', 'AllowIndefiniteHold', 'Failed', 'Delay', 'Type', 'DisplayProgress', 'MouseSensitivityAdjustmentDuration']
+---
+Type: StatsConditionWithModifier
+Keys: ['Next', 'Failed', 'Costs', 'InteractionModifierId', 'Type']
+---
+Type: Door
+Keys: ['Horizontal', 'Effects', 'Type']
+---
+Type: Explode
+Keys: ['Config', 'Effects', 'Parent', 'RunTime', 'Type']
+---
+Type: Selector
+Keys: ['Next', 'Selector', 'Effects', 'HitEntityRules', 'Failed', '$Comment', 'FailOn', 'HitEntity', 'HitBlock', 'RunTime', 'Type']
+---
+Type: LaunchProjectile
+Keys: ['Next', 'Effects', 'ProjectileId', 'Tags', 'RunTime', 'Type']
+---
+Type: ApplyForce
+Keys: ['WaitForGround', 'WaitForCollision', 'AdjustVertical', 'Direction', 'CollisionNext', 'Next', 'Effects', 'ChangeVelocityType', 'Type', 'VelocityType', 'VelocityConfig', 'Force', 'GroundCheckDelay', 'Forces', 'RaycastDistance', 'MouseSensitivityAdjustmentDuration', 'RaycastHeightOffset', 'MouseSensitivityAdjustmentTarget', 'VerticalClamp', 'GroundNext', 'RunTime']
+---
+Type: Projectile
+Keys: ['Next', 'Config', 'Effects', 'Tags', 'RunTime', 'Type']
+---
+Type: Chaining
+Keys: ['Next', 'Flags', '$Comment', 'ChainingAllowance', 'ChainId', 'Type']
+---
+Type: SpawnPrefab
+Keys: ['Force', 'Offset', 'OriginSource', 'PrefabPath', 'RotationYaw', 'Type']
+---
+Type: Wielding
+Keys: ['CancelOnOtherClick', 'BlockedEffects', 'HorizontalSpeedMultiplier', 'Next', 'Forks', 'DamageModifiers', 'FailOnDamage', 'Effects', 'Failed', '$Comment', 'StaminaCost', 'RunTime', 'Type', 'AngledWielding', 'BlockedInteractions']
+---
+Type: Repeat
+Keys: ['ForkInteractions', 'HorizontalSpeedMultiplier', 'Next', 'Repeat', 'Failed', '$Comment', 'Rules', 'RunTime', 'Type']
+---
+Type: SpawnNPC
+Keys: ['$Comment', 'EntityId', 'SpawnOffset', 'Type']
+---
+Type: BreakBlock
+Keys: ['Type', 'Harvest']
+---
+Type: ChangeBlock
+Keys: ['Next', 'Effects', 'Failed', 'RequireNotBroken', 'WorldSoundEventId', 'Changes', 'RunTime', 'Type']
+---
+Type: DamageEntity
+Keys: ['Next', 'EntityStatsOnHit', 'Effects', 'DamageCalculator', 'AngledDamage', 'Type', 'DamageEffects']
+---
+Type: FirstClick
+Keys: ['Held', 'Type', 'Click']
+---
+Type: OpenCustomUI
+Keys: ['Type', 'Page']
+---
+Type: TeleportInstance
+Keys: ['CloseOnBlockRemove', 'InstanceKey', 'InstanceName', 'PersonalReturnPoint', 'PositionOffset', 'Rotation', 'RemoveBlockAfter', 'OriginSource', 'Type']
+---
+Type: UseEntity
+Keys: ['Type', 'Failed']
+---
+Type: FertilizeSoil
+Keys: ['Next', 'Type', 'RefreshModifiers']
+---
+Type: UseWateringCan
+Keys: ['Next', 'Effects', 'CancelOnItemChange', 'Duration', 'RefreshModifiers', 'RunTime', 'Type']
+---
+Type: ClearEntityEffect
+Keys: ['Entity', 'Next', 'Type', 'EntityEffectId']
+---
+Type: ChangeStat
+Keys: ['Next', 'Behaviour', 'StatModifiers', 'Failed', '$Comment', 'ValueType', 'Type']
+---
+Type: RemoveEntity
+Keys: ['Entity', 'Effects', 'Type']
+---
+Type: SpawnDeployableFromRaycast
+Keys: ['Next', 'Config', 'Failed', 'MaxPlacementDistance', 'PreviewStatConditions', 'Type']
+---
