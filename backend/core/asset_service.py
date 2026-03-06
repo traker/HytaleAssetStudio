@@ -1,0 +1,149 @@
+from __future__ import annotations
+
+import mimetypes
+from dataclasses import dataclass
+from pathlib import Path
+
+from backend.core.errors import http_error
+from backend.core.graph_service import _ID_CANDIDATE
+from backend.core.index_service import build_mounts, ensure_index, rebuild_project_index
+from backend.core.io import write_json
+from backend.core.models import ProjectConfig
+from backend.core.vfs import Mount, read_json_from_mount
+
+
+def _ensure_no_parent_segments(vfs_path: str) -> None:
+    parts = [p for p in vfs_path.replace("\\", "/").split("/") if p]
+    if any(p == ".." for p in parts):
+        raise http_error(422, "PATH_INVALID", "Path must not contain '..' segments", {"path": vfs_path})
+
+
+@dataclass(frozen=True)
+class ResolvedServerJson:
+    asset_key: str
+    server_id: str
+    vfs_path: str
+    origin: str
+    mount: Mount
+
+
+def resolve_server_json(cfg: ProjectConfig, asset_key: str) -> ResolvedServerJson:
+    if not asset_key.startswith("server:"):
+        raise http_error(422, "KEY_INVALID", "Only server:* is supported", {"key": asset_key})
+
+    server_id = asset_key.split(":", 1)[1].strip()
+    if not server_id or not _ID_CANDIDATE.match(server_id):
+        raise http_error(422, "ID_INVALID", "Invalid server id", {"id": server_id})
+
+    # Ensure index present (memory or disk cache or rebuild)
+    index = ensure_index(cfg.project.id, cfg)
+
+    paths = index.server_id_to_all_paths.get(server_id)
+    if not paths:
+        raise http_error(404, "ASSET_NOT_FOUND", "Server asset not found", {"id": server_id})
+    if len(paths) != 1:
+        raise http_error(409, "ID_AMBIGUOUS", "Server ID resolves to multiple JSON paths", {"id": server_id, "paths": paths})
+
+    vfs_path = paths[0]
+    _ensure_no_parent_segments(vfs_path)
+
+    mount_id = index.effective_mount_by_vfs_path.get(vfs_path)
+    if not mount_id:
+        raise http_error(500, "MOUNT_MISSING", "Index is missing mount for resolved path", {"path": vfs_path})
+
+    mounts = build_mounts(cfg)
+    mounts_by_id = {m.mount_id: m for m in mounts}
+    mount = mounts_by_id[mount_id]
+
+    origin = index.origin_by_server_path.get(vfs_path, "vanilla")
+
+    return ResolvedServerJson(
+        asset_key=asset_key,
+        server_id=server_id,
+        vfs_path=vfs_path,
+        origin=origin,
+        mount=mount,
+    )
+
+
+def read_server_json(cfg: ProjectConfig, asset_key: str) -> dict:
+    resolved = resolve_server_json(cfg, asset_key)
+    return {
+        "assetKey": resolved.asset_key,
+        "resolvedPath": resolved.vfs_path,
+        "origin": resolved.origin,
+        "json": read_json_from_mount(resolved.mount, resolved.vfs_path),
+    }
+
+
+def write_server_json_override(cfg: ProjectConfig, asset_key: str, payload_json: dict) -> dict:
+    resolved = resolve_server_json(cfg, asset_key)
+
+    # En override, on écrit toujours dans le projet actif, au même chemin VFS.
+    if not resolved.vfs_path.lower().startswith("server/"):
+        raise http_error(500, "RESOLVE_INVALID", "Resolved path is not under Server/", {"path": resolved.vfs_path})
+
+    project_root = Path(cfg.project.assetsWritePath)
+    dst = (project_root / resolved.vfs_path).resolve()
+
+    # Safety: ensure destination stays under project_root
+    try:
+        dst.relative_to(project_root.resolve())
+    except Exception:
+        raise http_error(422, "PATH_INVALID", "Resolved path escapes project root", {"path": str(dst)})
+
+    if not isinstance(payload_json, dict):
+        raise http_error(422, "PAYLOAD_INVALID", "json must be an object", {})
+
+    write_json(dst, payload_json)
+
+    # Rebuild index so origin/state updates immediately.
+    rebuild_project_index(cfg.project.id, cfg)
+
+    return {
+        "ok": True,
+        "assetKey": resolved.asset_key,
+        "resolvedPath": resolved.vfs_path,
+        "origin": "project",
+    }
+
+
+@dataclass(frozen=True)
+class ResolvedCommonResource:
+    asset_key: str
+    vfs_path: str
+    origin: str
+    mount: Mount
+    media_type: str | None
+
+
+def resolve_common_resource(cfg: ProjectConfig, asset_key: str) -> ResolvedCommonResource:
+    if not asset_key.startswith("common:"):
+        raise http_error(422, "KEY_INVALID", "Only common:* is supported", {"key": asset_key})
+
+    rel = asset_key.split(":", 1)[1].lstrip("/")
+    vfs_path = f"Common/{rel}" if not rel.startswith("Common/") else rel
+    vfs_path = vfs_path.replace("\\", "/")
+    _ensure_no_parent_segments(vfs_path)
+
+    # Ensure index present (memory or disk cache or rebuild)
+    index = ensure_index(cfg.project.id, cfg)
+
+    mount_id = index.effective_mount_by_vfs_path.get(vfs_path)
+    if not mount_id:
+        raise http_error(404, "RESOURCE_NOT_FOUND", "Common resource not found", {"path": vfs_path})
+
+    mounts = build_mounts(cfg)
+    mounts_by_id = {m.mount_id: m for m in mounts}
+    mount = mounts_by_id[mount_id]
+
+    origin = index.origin_by_vfs_path.get(vfs_path, "vanilla")
+    media_type, _ = mimetypes.guess_type(Path(vfs_path).name)
+
+    return ResolvedCommonResource(
+        asset_key=asset_key,
+        vfs_path=vfs_path,
+        origin=origin,
+        mount=mount,
+        media_type=media_type,
+    )

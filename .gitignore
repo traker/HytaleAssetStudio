@@ -22,3 +22,6 @@ Thumbs.db
 # Local env
 .env
 .env.*
+
+# Hytale Asset Studio local caches
+.studio_cache/

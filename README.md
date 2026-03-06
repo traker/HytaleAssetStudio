@@ -16,3 +16,11 @@ Voir [VISION.md](VISION.md).
 - `backend/` : API Python (lecture/écriture, VFS, génération de graphe)
 - `frontend/` : UI web (React + graphe + éditeurs)
 
+## Lancer (dev)
+
+- Script (Windows PowerShell): `./scripts/dev.ps1`
+- Backend (manuel): `python -m uvicorn backend.app.main:app --reload --host 127.0.0.1 --port 8000`
+- Frontend (manuel): `cd frontend; npm run dev` (par défaut: `http://127.0.0.1:5173/`)
+
+Note: éviter de lancer plusieurs instances du backend sur des ports différents, sinon le frontend peut parler à un backend qui n'a pas la dernière version des routes.
+

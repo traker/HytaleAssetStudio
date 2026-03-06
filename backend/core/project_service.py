@@ -1,0 +1,45 @@
+from __future__ import annotations
+
+from pathlib import Path
+
+from backend.core.errors import http_error
+from backend.core.io import read_json, write_json
+from backend.core.models import ProjectConfig
+
+
+def find_project_config_path(workspace_root: Path, project_id: str) -> Path:
+    projects_dir = workspace_root / "projects"
+    if not projects_dir.exists():
+        raise http_error(404, "PROJECT_NOT_FOUND", "Workspace projects dir missing", {"projectsDir": str(projects_dir)})
+
+    for cfg_path in projects_dir.rglob("has.project.json"):
+        try:
+            cfg = read_json(cfg_path)
+            pid = (cfg.get("project") or {}).get("id")
+            if pid == project_id:
+                return cfg_path
+        except Exception:
+            continue
+
+    raise http_error(404, "PROJECT_NOT_FOUND", "Project not found", {"projectId": project_id})
+
+
+def load_project_config(workspace_root: Path, project_id: str) -> tuple[ProjectConfig, Path]:
+    cfg_path = find_project_config_path(workspace_root, project_id)
+    cfg_dict = read_json(cfg_path)
+    try:
+        cfg = ProjectConfig(**cfg_dict)
+    except Exception as e:
+        raise http_error(422, "PROJECT_CONFIG_INVALID", "Invalid has.project.json", {"path": str(cfg_path), "error": str(e)})
+    return cfg, cfg_path
+
+
+def save_project_config(cfg_path: Path, cfg: ProjectConfig) -> None:
+    # Compatibility: pydantic v1/v2
+    from backend.core.pydantic_compat import model_dump
+
+    write_json(cfg_path, model_dump(cfg))
+
+
+def get_project_assets_root(cfg: ProjectConfig) -> Path:
+    return Path(cfg.project.assetsWritePath)
