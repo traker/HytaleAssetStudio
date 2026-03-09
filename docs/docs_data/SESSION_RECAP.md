@@ -92,3 +92,11 @@ Objectif : garder des fichiers petits, respecter le style legacy, et avancer par
 ### Tranche D — Vue “Modifiés”
 - Déjà implémentée : lister **Server + Common**, actions click (ouvrir JSON ou ressource).
 - Améliorations ultérieures seulement si demandées (tri/filtre/refresh).
+
+---
+
+## 2026-03-09 — Ajout d'une base de docs Hytale (référence)
+
+**Fait** : ajout du dossier `docs/Hytale Docs/` avec un point d'entrée.
+
+- Entrée : `docs/Hytale Docs/01_Getting_Started.md`

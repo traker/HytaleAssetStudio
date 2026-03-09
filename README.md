@@ -6,6 +6,10 @@ Repo dédié pour l'outil d'édition/visualisation d'assets Hytale (séparé du 
 
 Voir [VISION.md](VISION.md).
 
+## Docs Hytale (référence)
+
+Point d'entrée : [docs/Hytale Docs/01_Getting_Started.md](docs/Hytale%20Docs/01_Getting_Started.md)
+
 ## Statut
 
 - Ce repo est initialisé proprement (sans historique) après un revert du mono-repo.
