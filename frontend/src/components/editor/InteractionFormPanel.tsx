@@ -8,7 +8,7 @@
  * - Shows type-specific fields from interactionSchemas
  */
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { getColorForInteractionType } from '../graph/colors'
 import { getSchemaForType, type FieldDef } from '../graph/interactionSchemas'
 
@@ -252,6 +252,203 @@ function renderField(
         placeholder={placeholder}
         spellCheck={false}
       />
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────
+// DictTimeEditor — structured editor for Charging.Next (time-dict)
+// { "0": "ServerId" | { Type: "...", ... }, "0.35": ... }
+// ─────────────────────────────────────────────────────────────
+
+type DictTimeEntry = { id: string; timeKey: string; val: unknown }
+
+function valLabel(val: unknown): { text: string; isInline: boolean } {
+  if (val === null || val === undefined || val === '')
+    return { text: '(empty)', isInline: false }
+  if (typeof val === 'string') return { text: val, isInline: false }
+  if (typeof val === 'object' && !Array.isArray(val)) {
+    const t = (val as Record<string, unknown>)['Type']
+    return { text: typeof t === 'string' ? t : 'inline object', isInline: true }
+  }
+  return { text: String(val), isInline: false }
+}
+
+function dictFromUnknown(val: unknown): Record<string, unknown> {
+  return typeof val === 'object' && val !== null && !Array.isArray(val)
+    ? (val as Record<string, unknown>)
+    : {}
+}
+
+function DictTimeEditor({
+  field,
+  value,
+  onChange,
+}: {
+  field: FieldDef
+  value: unknown
+  onChange: (key: string, val: unknown) => void
+}) {
+  const { key, label, description, required } = field
+
+  const toEntries = (v: unknown): DictTimeEntry[] =>
+    Object.entries(dictFromUnknown(v)).map(([k, vv], i) => ({ id: `${i}_${k}`, timeKey: k, val: vv }))
+
+  const [entries, setEntries] = useState<DictTimeEntry[]>(() => toEntries(value))
+
+  // Sync when the node changes (value prop changes externally)
+  const prevSig = useRef(JSON.stringify(value))
+  useEffect(() => {
+    const sig = JSON.stringify(value)
+    if (sig !== prevSig.current) {
+      prevSig.current = sig
+      setEntries(toEntries(value))
+    }
+  })
+
+  function emit(next: DictTimeEntry[]) {
+    const d: Record<string, unknown> = {}
+    for (const e of next) {
+      if (e.timeKey.trim() !== '') d[e.timeKey.trim()] = e.val ?? null
+    }
+    onChange(key, Object.keys(d).length === 0 ? undefined : d)
+  }
+
+  function handleKeyChange(id: string, newKey: string) {
+    const updated = entries.map((e) => (e.id === id ? { ...e, timeKey: newKey } : e))
+    setEntries(updated)
+    emit(updated)
+  }
+
+  function handleStrValChange(id: string, newVal: string) {
+    const updated = entries.map((e) =>
+      e.id === id ? { ...e, val: newVal.trim() === '' ? null : newVal } : e,
+    )
+    setEntries(updated)
+    emit(updated)
+  }
+
+  function handleRemove(id: string) {
+    const updated = entries.filter((e) => e.id !== id)
+    setEntries(updated)
+    emit(updated)
+  }
+
+  function handleAdd() {
+    setEntries((prev) => [...prev, { id: `new_${Date.now()}`, timeKey: '', val: null }])
+  }
+
+  return (
+    <div style={{ ...FIELD_WRAP, borderLeft: '2px solid #333', paddingLeft: 8 }}>
+      <span style={LABEL_STYLE}>
+        {label}
+        {required && <span style={{ color: '#FF6B6B' }}> *</span>}
+      </span>
+      {description && (
+        <div style={{ fontSize: 10, color: '#666', marginBottom: 4 }}>{description}</div>
+      )}
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+        {entries.length === 0 && (
+          <div style={{ fontSize: 11, color: '#555', fontStyle: 'italic' }}>No entries yet.</div>
+        )}
+
+        {entries.map((entry) => {
+          const { text, isInline } = valLabel(entry.val)
+          return (
+            <div key={entry.id} style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+
+              {/* ── Time-key input ── */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 2, flexShrink: 0 }}>
+                <input
+                  type="text"
+                  value={entry.timeKey}
+                  onChange={(e) => handleKeyChange(entry.id, e.target.value)}
+                  style={{
+                    ...INPUT_STYLE,
+                    width: 50,
+                    fontSize: 11,
+                    textAlign: 'right',
+                    padding: '4px 5px',
+                    fontFamily: 'monospace',
+                  }}
+                  placeholder="0.0"
+                  title="Time offset in seconds"
+                />
+                <span style={{ color: '#555', fontSize: 10, flexShrink: 0 }}>s</span>
+              </div>
+
+              <span style={{ color: '#444', fontSize: 12, flexShrink: 0 }}>→</span>
+
+              {/* ── Value: editable if string ref, read-only badge if inline ── */}
+              {isInline ? (
+                <div
+                  style={{
+                    flex: 1,
+                    background: '#1a2030',
+                    border: '1px solid #2a3a5c',
+                    borderRadius: 3,
+                    padding: '4px 7px',
+                    fontSize: 11,
+                    color: '#74B9FF',
+                    fontWeight: 700,
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                  }}
+                  title="Inline interaction — edit this node directly on the canvas"
+                >
+                  {text}
+                </div>
+              ) : (
+                <input
+                  type="text"
+                  value={typeof entry.val === 'string' ? entry.val : ''}
+                  onChange={(e) => handleStrValChange(entry.id, e.target.value)}
+                  style={{ ...INPUT_STYLE, flex: 1, fontSize: 11, padding: '4px 6px' }}
+                  placeholder="Server_Id_Reference"
+                  title="Server ID of the referenced interaction"
+                />
+              )}
+
+              {/* ── Remove ── */}
+              <button
+                onClick={() => handleRemove(entry.id)}
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  color: '#FF6B6B',
+                  cursor: 'pointer',
+                  fontSize: 15,
+                  lineHeight: 1,
+                  padding: '0 2px',
+                  flexShrink: 0,
+                }}
+                title="Remove entry"
+              >
+                ×
+              </button>
+            </div>
+          )
+        })}
+
+        <button
+          onClick={handleAdd}
+          style={{
+            alignSelf: 'flex-start',
+            marginTop: 2,
+            background: 'transparent',
+            border: '1px dashed #444',
+            borderRadius: 3,
+            color: '#666',
+            cursor: 'pointer',
+            fontSize: 11,
+            padding: '3px 8px',
+          }}
+        >
+          + Add entry
+        </button>
+      </div>
     </div>
   )
 }
@@ -504,7 +701,16 @@ export function InteractionFormPanel({
             ) : schema ? (
               <>
                 {schema.fields.map((field) =>
-                  renderField(field, draft[field.key], handleFieldChange),
+                  field.type === 'dict-time' ? (
+                    <DictTimeEditor
+                      key={field.key}
+                      field={field}
+                      value={draft[field.key]}
+                      onChange={handleFieldChange}
+                    />
+                  ) : (
+                    renderField(field, draft[field.key], handleFieldChange)
+                  ),
                 )}
                 <ExtraFields
                   rawFields={draft}
