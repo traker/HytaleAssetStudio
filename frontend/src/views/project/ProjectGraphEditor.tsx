@@ -94,6 +94,7 @@ export function ProjectGraphEditor(props: Props) {
   const [assetError, setAssetError] = useState<string | null>(null)
   const [asset, setAsset] = useState<AssetGetResponse | null>(null)
   const assetSeq = useRef(0)
+  const [assetReloadTick, setAssetReloadTick] = useState(0)
 
   const searchEnabled = props.searchEnabled ?? true
   const canLoad = useMemo(() => status.kind !== 'loading' && selected !== null, [status.kind, selected])
@@ -137,7 +138,7 @@ export function ProjectGraphEditor(props: Props) {
     if (!props.autoLoad) return
     if (!selected) return
     void load()
-  }, [props.autoLoad, selected?.assetKey])
+  }, [props.autoLoad, selected?.assetKey, load])
 
   useEffect(() => {
     if (!searchEnabled) return
@@ -194,7 +195,7 @@ export function ProjectGraphEditor(props: Props) {
         setAssetError(e instanceof HasApiError ? e.message : 'Unexpected error')
       }
     })()
-  }, [props.projectId, selectedNodeId])
+  }, [props.projectId, selectedNodeId, assetReloadTick])
 
   const selectedNode = useMemo(() => {
     if (!selectedNodeId) return null
@@ -361,11 +362,13 @@ export function ProjectGraphEditor(props: Props) {
 
       {selectedNodeId && (
         <AssetSidePanel
+          projectId={props.projectId}
           selectedNodeId={selectedNodeId}
           asset={asset}
           loading={assetStatus.kind === 'loading'}
           error={assetError}
           onClose={() => setSelectedNodeId(null)}
+          onRefresh={() => setAssetReloadTick((t) => t + 1)}
           onOpenInteractions={
             props.onOpenInteractions
               ? () => {

@@ -14,8 +14,9 @@ import {
 import '@xyflow/react/dist/style.css'
 
 import { HasApiError, hasApi } from '../../api'
-import type { InteractionTreeResponse } from '../../api'
+import type { AssetGetResponse, InteractionTreeResponse } from '../../api'
 
+import { AssetSidePanel } from '../../components/editor/AssetSidePanel'
 import { InteractionNode, type InteractionNodeData } from '../../components/graph/InteractionNode'
 import { layoutGraph } from '../../components/graph/layoutDagre'
 
@@ -75,8 +76,23 @@ export function InteractionTreeEditor(props: Props) {
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
   const loadSeq = useRef(0)
 
+  const [treeReloadTick, setTreeReloadTick] = useState(0)
+
+  const [asset, setAsset] = useState<AssetGetResponse | null>(null)
+  const [assetError, setAssetError] = useState<string | null>(null)
+  const [assetLoading, setAssetLoading] = useState(false)
+  const assetSeq = useRef(0)
+  const [assetReloadTick, setAssetReloadTick] = useState(0)
+
   const onNodesChange = useCallback((changes: NodeChange[]) => setNodes((prev) => applyNodeChanges(changes, prev)), [])
   const onEdgesChange = useCallback((changes: EdgeChange[]) => setEdges((prev) => applyEdgeChanges(changes, prev)), [])
+
+  useEffect(() => {
+    setSelectedNodeId(null)
+    setAsset(null)
+    setAssetError(null)
+    setAssetLoading(false)
+  }, [props.projectId, props.root.assetKey])
 
   useEffect(() => {
     const mySeq = ++loadSeq.current
@@ -84,7 +100,6 @@ export function InteractionTreeEditor(props: Props) {
     setError(null)
     setNodes([])
     setEdges([])
-    setSelectedNodeId(null)
 
     ;(async () => {
       try {
@@ -101,7 +116,7 @@ export function InteractionTreeEditor(props: Props) {
         setError(e instanceof HasApiError ? e.message : 'Unexpected error')
       }
     })()
-  }, [props.projectId, props.root.assetKey])
+  }, [props.projectId, props.root.assetKey, treeReloadTick])
 
   const selectedNode = useMemo(() => {
     if (!selectedNodeId) return null
@@ -109,6 +124,37 @@ export function InteractionTreeEditor(props: Props) {
   }, [nodes, selectedNodeId])
 
   const selectedRaw = (selectedNode?.data as any)?.rawFields as Record<string, unknown> | undefined
+
+  const selectedIsExternal = Boolean((selectedNode?.data as any)?.isExternal)
+  const selectedIsServerAsset = Boolean(selectedNodeId && selectedNodeId.startsWith('server:') && selectedIsExternal)
+
+  useEffect(() => {
+    if (!selectedIsServerAsset || !selectedNodeId) {
+      setAsset(null)
+      setAssetError(null)
+      setAssetLoading(false)
+      return
+    }
+
+    const mySeq = ++assetSeq.current
+    setAssetLoading(true)
+    setAssetError(null)
+    setAsset(null)
+
+    ;(async () => {
+      try {
+        const a = await hasApi.assetGet(props.projectId, selectedNodeId)
+        if (assetSeq.current !== mySeq) return
+        setAsset(a)
+      } catch (e) {
+        if (assetSeq.current !== mySeq) return
+        setAsset(null)
+        setAssetError(e instanceof HasApiError ? e.message : 'Unexpected error')
+      } finally {
+        if (assetSeq.current === mySeq) setAssetLoading(false)
+      }
+    })()
+  }, [props.projectId, selectedIsServerAsset, selectedNodeId, assetReloadTick])
 
   return (
     <div className="editor-container" style={{ position: 'fixed', inset: 0 }}>
@@ -153,7 +199,22 @@ export function InteractionTreeEditor(props: Props) {
         </Panel>
       </ReactFlow>
 
-      {selectedNodeId && (
+      {selectedNodeId && selectedIsServerAsset && (
+        <AssetSidePanel
+          projectId={props.projectId}
+          selectedNodeId={selectedNodeId}
+          asset={asset}
+          loading={assetLoading}
+          error={assetError}
+          onClose={() => setSelectedNodeId(null)}
+          onRefresh={() => {
+            setAssetReloadTick((t) => t + 1)
+            setTreeReloadTick((t) => t + 1)
+          }}
+        />
+      )}
+
+      {selectedNodeId && !selectedIsServerAsset && (
         <div
           style={{
             position: 'absolute',

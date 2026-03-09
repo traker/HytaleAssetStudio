@@ -16,6 +16,7 @@ Si le contexte est confus, contradictoire, ou si tu ne sais pas “quoi faire en
 2. Re-lire `VISION.md` : vérifier que l’action demandée correspond à un Workflow et respecte les Anti-Objectifs.
 3. Re-lire `docs/docs_data/API_BACKEND_MINIMAL.md` si la question touche aux endpoints/payloads backend.
 4. Regarder le legacy `legacy/tools_graph_assets/` uniquement comme référence (ne pas y développer).
+5. Si le sujet touche aux formats/mécaniques Hytale (structures JSON, paths `Common/`, types d'interaction), consulter `docs/Hytale Docs/01_Getting_Started.md`.
 
 Ensuite :
 
@@ -49,6 +50,18 @@ Objectif : que le repo contienne toujours un point d’ancrage clair pour repren
 
 - Ce repo est **indépendant** du mono-repo FineCraft `TestPluginHytale`.
 - Le snapshot `legacy/tools_graph_assets/` sert de référence (code historique) ; on n’y développe pas.
+
+## Docs Hytale (référence)
+
+Le repo contient une base de documentation Hytale utile pour comprendre :
+
+- la structure `Assets/Common` vs `Assets/Server`,
+- les conventions de paths (références Common relatives à `Common/`),
+- les mécaniques d'Interactions (types, champs fréquents).
+
+Point d'entrée : `docs/Hytale Docs/01_Getting_Started.md`
+
+Règle pratique : si un comportement attendu n'est pas spécifié dans `VISION.md` / `API_BACKEND_MINIMAL.md`, s'appuyer sur ces docs pour **interpréter** les JSON ; si c'est encore ambigu, revenir à la règle "ne pas inventer" et poser des questions.
 
 ## Dev: Accès aux assets vanilla locaux (hors-repo)
 

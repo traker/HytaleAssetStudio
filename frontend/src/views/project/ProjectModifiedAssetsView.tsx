@@ -19,6 +19,7 @@ export function ProjectModifiedAssetsView(props: Props) {
   const [asset, setAsset] = useState<AssetGetResponse | null>(null)
   const [assetError, setAssetError] = useState<string | null>(null)
   const [assetLoading, setAssetLoading] = useState(false)
+  const [assetReloadTick, setAssetReloadTick] = useState(0)
   const assetSeq = useRef(0)
 
   const entries = useMemo(() => data?.entries ?? [], [data])
@@ -73,7 +74,7 @@ export function ProjectModifiedAssetsView(props: Props) {
         if (assetSeq.current === mySeq) setAssetLoading(false)
       }
     })()
-  }, [props.projectId, selectedNodeId])
+  }, [props.projectId, selectedNodeId, assetReloadTick])
 
   function handleEntryClick(e: ModifiedAssetEntry): void {
     if (!e.assetKey) return
@@ -173,11 +174,13 @@ export function ProjectModifiedAssetsView(props: Props) {
 
       {selectedNodeId && (
         <AssetSidePanel
+          projectId={props.projectId}
           selectedNodeId={selectedNodeId}
           asset={asset}
           loading={assetLoading}
           error={assetError}
           onClose={() => setSelectedNodeId(null)}
+          onRefresh={() => setAssetReloadTick((t) => t + 1)}
         />
       )}
     </div>
