@@ -79,6 +79,13 @@ export function exportInteractionTree(
 
     const newAncestors = new Set(ancestors).add(nodeId)
 
+    // _ref node → emit as bare server-ID string (not inline object)
+    if ((data.nodeType as string) === '_ref') {
+      const rawFields = (data.rawFields as Record<string, unknown> | undefined) ?? {}
+      const serverId = rawFields['ServerId']
+      return typeof serverId === 'string' && serverId.trim() ? serverId.trim() : null
+    }
+
     // Start from rawFields (preserves fields the form panel may not know about)
     const rawFields = (data.rawFields as Record<string, unknown> | undefined) ?? {}
     const result: Record<string, unknown> = { ...rawFields }

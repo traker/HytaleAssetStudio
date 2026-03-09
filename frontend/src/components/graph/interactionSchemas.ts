@@ -31,6 +31,7 @@ export type InteractionCategory =
   | 'inventory'
   | 'ui'
   | 'condition'
+  | 'special'
 
 export interface InteractionSchema {
   type: string
@@ -524,6 +525,30 @@ const MemoriesCondition: InteractionSchema = {
 }
 
 // ─────────────────────────────────────────────────────────────
+// SPECIAL
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * _ref — placeholder node that points to an external interaction file by ServerId.
+ * Exports as a bare string (the ServerId), not as an inline object.
+ */
+const ExternalRef: InteractionSchema = {
+  type: '_ref',
+  label: 'External Reference',
+  category: 'special',
+  fields: [
+    {
+      key: 'ServerId',
+      label: 'Server ID',
+      type: 'string',
+      required: true,
+      description: 'ID of the target interaction file (e.g. Weapon_Sword_Primary_Chain)',
+    },
+  ],
+  outgoingEdges: {},
+}
+
+// ─────────────────────────────────────────────────────────────
 // EXPORT
 // ─────────────────────────────────────────────────────────────
 
@@ -544,6 +569,8 @@ export const INTERACTION_SCHEMAS: InteractionSchema[] = [
   // Conditions
   StatsCondition, StatsConditionWithModifier, EffectCondition,
   PlacementCountCondition, MemoriesCondition,
+  // Special
+  ExternalRef,
 ]
 
 export const SCHEMA_BY_TYPE = new Map(INTERACTION_SCHEMAS.map((s) => [s.type, s]))
@@ -560,9 +587,11 @@ export const CATEGORY_LABELS: Record<InteractionCategory, string> = {
   'inventory': 'Inventory',
   'ui': 'UI / Communication',
   'condition': 'Conditions',
+  'special': 'Special',
 }
 
 export const CATEGORY_ORDER: InteractionCategory[] = [
+  'special',
   'control-flow',
   'entity-action',
   'condition',

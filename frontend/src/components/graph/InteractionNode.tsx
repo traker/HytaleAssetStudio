@@ -63,7 +63,7 @@ export function InteractionNode({ data }: Props) {
         }}
       >
         <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-          {data.nodeType}
+          {data.nodeType === '_ref' ? '↗ ref' : data.nodeType}
         </span>
         {data.isExternal && (
           <span
@@ -85,7 +85,9 @@ export function InteractionNode({ data }: Props) {
 
       {/* ── Label ── */}
       <div style={{ padding: '8px 10px', wordBreak: 'break-word', fontSize: 13, fontWeight: 600 }}>
-        {data.label}
+        {data.nodeType === '_ref'
+          ? String(data.rawFields?.ServerId ?? '(no ID)')
+          : data.label}
       </div>
 
       {/* ── Raw fields preview (top 3 scalar fields) ── */}

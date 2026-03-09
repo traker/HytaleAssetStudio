@@ -25,6 +25,10 @@ _REL_KEY_TO_EDGE_TYPE: dict[str, str] = {
     "GroundNext": "next",
     "StartInteraction": "child",
     "CancelInteraction": "child",
+    # Selector containers — these wrap { Interactions: [...] }
+    "HitBlock": "child",
+    "HitEntity": "child",
+    "HitNothing": "child",
 }
 
 
@@ -84,6 +88,22 @@ def build_interaction_tree(project_id: str, root_key: str, max_nodes: int = 5000
                             ref = scan_value(t, f"{path}/{k}/{i}")
                             if ref:
                                 add_edge(node_id, ref.value, edge_type)
+                    elif isinstance(target, dict) and "Type" not in target:
+                        # Two sub-cases:
+                        # 1. Container with Interactions key: { Interactions: [...] } (HitBlock, HitEntity)
+                        # 2. Time-dict (Charging.Next): { "0": ..., "0.35": ... }
+                        inner = target.get("Interactions")
+                        if isinstance(inner, list):
+                            for i, t in enumerate(inner):
+                                ref = scan_value(t, f"{path}/{k}/Interactions/{i}")
+                                if ref:
+                                    add_edge(node_id, ref.value, edge_type)
+                        else:
+                            # Time-dict or other flat dict—scan each value
+                            for sub_key, sub_val in target.items():
+                                ref = scan_value(sub_val, f"{path}/{k}/{sub_key}")
+                                if ref:
+                                    add_edge(node_id, ref.value, edge_type)
                     else:
                         ref = scan_value(target, f"{path}/{k}")
                         if ref:

@@ -39,6 +39,7 @@ export const getColorForInteractionType = (nodeType: string): string => {
   if (t === 'wielding')       return '#FFB347'
   if (t === 'chaining')       return '#F4A261'
   if (t === 'external')       return '#9B9B9B'
+  if (t === '_ref')           return '#61dafb'
   return '#888888'
 }
 
