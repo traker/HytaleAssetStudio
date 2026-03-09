@@ -18,7 +18,11 @@ export function layoutGraph(nodes: Node[], edges: Edge[], direction: 'TB' | 'LR'
   const dagreGraph = new dagre.graphlib.Graph()
   dagreGraph.setDefaultEdgeLabel(() => ({}))
 
-  dagreGraph.setGraph({ rankdir: direction, nodesep: 60, ranksep: 140 })
+  // TB (interaction tree, legacy): generous vertical ranksep
+  // LR (items graph): wide ranksep for readability, moderate nodesep
+  const nodesep = direction === 'TB' ? 80 : 60
+  const ranksep = direction === 'TB' ? 100 : 150
+  dagreGraph.setGraph({ rankdir: direction, nodesep, ranksep })
 
   for (const node of nodes) {
     const h = estimateNodeHeight(node)

@@ -75,7 +75,7 @@ function toFlow(data: InteractionTreeResponse): { nodes: Node[]; edges: Edge[] }
     }
   })
 
-  return layoutGraph(nodes, edges, 'TB')
+  return layoutGraph(nodes, edges, 'LR')
 }
 
 // ─────────────────────────────────────────────────────────────

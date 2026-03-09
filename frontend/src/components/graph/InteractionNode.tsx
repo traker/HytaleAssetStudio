@@ -45,7 +45,7 @@ export function InteractionNode({ data }: Props) {
         boxShadow,
       }}
     >
-      <Handle type="target" position={Position.Top} style={{ background: '#555', width: 8, height: 8, border: '2px solid #222' }} />
+      <Handle type="target" position={Position.Left} style={{ background: '#555', width: 8, height: 8, border: '2px solid #222' }} />
 
       {/* ── Header ── */}
       <div
@@ -113,7 +113,7 @@ export function InteractionNode({ data }: Props) {
       <Handle
         id="failed"
         type="source"
-        position={Position.Left}
+        position={Position.Top}
         style={{ background: '#FF6B6B', width: 8, height: 8, border: '2px solid #222' }}
         title="failed"
       />
