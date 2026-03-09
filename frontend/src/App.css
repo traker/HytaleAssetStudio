@@ -7,7 +7,8 @@
 .app-shell {
   display: flex;
   flex-direction: column;
-  min-height: 100vh;
+  height: 100vh;
+  overflow: hidden;
   background: #0e0e16;
   color: #ddd;
 }

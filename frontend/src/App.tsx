@@ -12,8 +12,6 @@ import { ProjectModifiedAssetsView } from './views/project/ProjectModifiedAssets
 type ProjectView = 'config' | 'graph-items' | 'graph-interactions' | 'modified'
 type GraphRoot = { assetKey: string; display: string }
 
-const FULLSCREEN_VIEWS: ProjectView[] = ['graph-items', 'graph-interactions']
-
 function App() {
   const [workspaceRoot, setWorkspaceRoot] = useState('K:/hytale-asset-studio-workspace')
   const [workspace, setWorkspace] = useState<WorkspaceOpenResponse | null>(null)
@@ -48,31 +46,6 @@ function App() {
   function backToHome(): void {
     setSelectedProjectId(null)
     setProjectView('config')
-  }
-
-  // Full-screen views bypass the shell entirely
-  if (selectedProjectId && FULLSCREEN_VIEWS.includes(projectView)) {
-    if (projectView === 'graph-items') {
-      return (
-        <ProjectGraphItemsView
-          projectId={selectedProjectId}
-          onBack={() => setProjectView('config')}
-          onOpenInteractions={(root) => {
-            setInteractionRoot(root)
-            setProjectView('graph-interactions')
-          }}
-        />
-      )
-    }
-    if (projectView === 'graph-interactions') {
-      return (
-        <ProjectGraphInteractionsView
-          projectId={selectedProjectId}
-          root={interactionRoot}
-          onBack={() => setProjectView('graph-items')}
-        />
-      )
-    }
   }
 
   // Truncate long workspace path for breadcrumb display
@@ -149,6 +122,21 @@ function App() {
           workspace={workspace}
           projects={projects}
           onSelectProject={selectProject}
+        />
+      ) : projectView === 'graph-items' ? (
+        <ProjectGraphItemsView
+          projectId={selectedProjectId}
+          onBack={() => setProjectView('config')}
+          onOpenInteractions={(root) => {
+            setInteractionRoot(root)
+            setProjectView('graph-interactions')
+          }}
+        />
+      ) : projectView === 'graph-interactions' ? (
+        <ProjectGraphInteractionsView
+          projectId={selectedProjectId}
+          root={interactionRoot}
+          onBack={() => setProjectView('graph-items')}
         />
       ) : projectView === 'modified' ? (
         <div className="page-content">

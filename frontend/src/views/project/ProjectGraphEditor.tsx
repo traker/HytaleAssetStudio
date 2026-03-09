@@ -289,7 +289,7 @@ export function ProjectGraphEditor(props: Props) {
   }
 
   return (
-    <div className="editor-container" style={{ position: 'fixed', inset: 0 }}>
+    <div style={{ flex: 1, position: 'relative', overflow: 'hidden', background: '#1e1e1e' }}>
       <ReactFlow
         nodes={nodes}
         edges={edges}

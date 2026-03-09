@@ -372,7 +372,7 @@ function InteractionTreeEditorInner(props: Props) {
   const showFormPanel = Boolean(selectedNodeId && !selectedIsServerAsset && selectedData)
 
   return (
-    <div style={{ position: 'fixed', inset: 0, display: 'flex', flexDirection: 'row' }}>
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'row', minHeight: 0, position: 'relative', overflow: 'hidden', background: '#1e1e1e' }}>
       {/* Palette (edit mode only) */}
       {editMode && <InteractionPalette />}
 
