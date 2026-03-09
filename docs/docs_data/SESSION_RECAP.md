@@ -100,3 +100,35 @@ Objectif : garder des fichiers petits, respecter le style legacy, et avancer par
 **Fait** : ajout du dossier `docs/Hytale Docs/` avec un point d'entrée.
 
 - Entrée : `docs/Hytale Docs/01_Getting_Started.md`
+
+---
+
+## 2026-03-10 — Blueprint Interaction Editor (MVP complet)
+
+**Objectif** : transformer la vue Interactions en éditeur blueprint complet (création/édition/connexion/save).
+
+**Fait** :
+
+### Nouveaux fichiers
+- `frontend/src/components/graph/interactionSchemas.ts` — schémas de champs pour les 35 types d'interaction (7 catégories : control-flow, entity-action, condition, block-action, projectile, inventory, ui). Chaque schéma définit `fields[]` et `outgoingEdges` (JSON key → edge type).
+- `frontend/src/components/graph/interactionExport.ts` — algorithme de reconstruction JSON Hytale depuis le graphe ReactFlow. Gère : arêtes `next`/`failed`/`child`, nœuds externes (→ chaîne), nœuds inline (→ objet), cycles (protection via ancestors set).
+- `frontend/src/components/editor/InteractionPalette.tsx` — palette de types d'interaction organisée par catégorie, collapsible, avec drag-start (MIME `application/interaction-type`). Simple flex widget (pas de position absolute).
+- `frontend/src/components/editor/InteractionFormPanel.tsx` — panneau form structuré par type. 2 onglets : Form (champs connus) + Raw JSON (textarea éditable). Bouton Apply (activé quand dirty). Gère tous les FieldType : string, number, boolean, string-ref, effects (ItemAnimationId/WorldSoundEventId/LocalSoundEventId/CameraEffect/Trails), object/dict-time/dict-stat-number/array-ref (JSON textarea).
+
+### Fichier modifié
+- `frontend/src/views/project/InteractionTreeEditor.tsx` — réécriture complète :
+  - Wrappé dans `ReactFlowProvider` → `InteractionTreeEditorInner` utilise `useReactFlow()` pour `screenToFlowPosition`
+  - Mode edit (`editMode` toggle) : affiche palette, active `nodesConnectable`, `onConnect`, `onNodesDelete`, `onEdgesDelete`, `deleteKeyCode="Delete"`
+  - Drag from palette → `onDrop` crée un nœud `internal:new_*` avec rawFields = `{ Type }` au bon endroit dans le flow
+  - `onConnect` : lit le `sourceHandle` pour déterminer l'edge type (next/failed/child) et crée l'arête colorée
+  - `handleNodeApply` : met à jour rawFields + nodeType + label depuis le form panel
+  - `handleSaveTree` : appelle `exportInteractionTree` + `hasApi.assetPut` avec mode override
+  - Panneau droit : `AssetSidePanel` pour nœuds externes, `InteractionFormPanel` pour nœuds inline
+
+**Schéma de données du graphe éditable** :
+- Nœud externe : `{ id: "server:X", data: { label, nodeType: "External", isExternal: true } }` → exporté comme string `"X"`
+- Nœud inline : `{ id: "internal:*", data: { label, nodeType: "Simple", isExternal: false, rawFields: {...} } }` → exporté comme objet
+
+**Pattern export** : DFS depuis treeRootRef ; edges "next" → `result.Next`; "failed" → `result.Failed`; "child" → `result.Interactions[]`.
+
+**Prochain** : tester sur un asset vanilla, éventuellement ajouter un ID picker pour sauvegarder un nœud inline comme nouvel asset serveur indépendant.

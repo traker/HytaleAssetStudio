@@ -2,14 +2,18 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Background,
   Controls,
+  type Connection,
   type Edge,
   type EdgeChange,
   type Node,
   type NodeChange,
   Panel,
   ReactFlow,
+  ReactFlowProvider,
+  addEdge,
   applyEdgeChanges,
   applyNodeChanges,
+  useReactFlow,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 
@@ -17,8 +21,12 @@ import { HasApiError, hasApi } from '../../api'
 import type { AssetGetResponse, InteractionTreeResponse } from '../../api'
 
 import { AssetSidePanel } from '../../components/editor/AssetSidePanel'
+import { InteractionPalette, DRAG_MIME } from '../../components/editor/InteractionPalette'
+import { InteractionFormPanel } from '../../components/editor/InteractionFormPanel'
 import { InteractionNode, type InteractionNodeData } from '../../components/graph/InteractionNode'
+import { getColorForEdgeType } from '../../components/graph/colors'
 import { layoutGraph } from '../../components/graph/layoutDagre'
+import { exportInteractionTree } from '../../components/graph/interactionExport'
 
 type Props = {
   projectId: string
@@ -27,10 +35,13 @@ type Props = {
 }
 
 type Status = { kind: 'idle' | 'loading'; message?: string }
+type SaveStatus = 'idle' | 'saving' | 'ok' | 'error'
 
-const nodeTypes = {
-  interaction: InteractionNode,
-}
+const nodeTypes = { interaction: InteractionNode }
+
+const SEMANTIC_EDGE_TYPES = new Set([
+  'next', 'failed', 'replace', 'fork', 'blocked', 'collisionNext', 'groundNext', 'calls',
+])
 
 function toFlow(data: InteractionTreeResponse): { nodes: Node[]; edges: Edge[] } {
   const nodes: Node[] = data.nodes.map((n) => ({
@@ -43,40 +54,63 @@ function toFlow(data: InteractionTreeResponse): { nodes: Node[]; edges: Edge[] }
       isExternal: n.isExternal,
       rawFields: n.rawFields,
     } satisfies InteractionNodeData,
-    style: {
-      borderRadius: 6,
-      boxShadow: '2px 2px 5px rgba(0,0,0,0.5)',
-    },
   }))
 
   const edges: Edge[] = data.edges.map((e) => {
     const sourceHandle = e.type === 'next' ? 'next' : e.type === 'failed' ? 'failed' : 'child'
+    const color = getColorForEdgeType(e.type)
     return {
       id: `${e.from}->${e.to}:${e.type}`,
       source: e.from,
       target: e.to,
       sourceHandle,
       type: 'smoothstep',
-      label: e.type,
+      label: SEMANTIC_EDGE_TYPES.has(e.type) ? e.type : undefined,
       animated: false,
-      style: { stroke: '#666', strokeWidth: 1.5 },
-      labelStyle: { fill: '#aaa', fontSize: 10, fontStyle: 'italic' },
+      style: { stroke: color, strokeWidth: 1.5 },
+      labelStyle: { fill: color, fontSize: 9, fontStyle: 'italic', fontWeight: 600 },
       labelShowBg: false,
+      markerEnd: { type: 'arrowclosed' as const, color },
+      data: { edgeType: e.type },
     }
   })
 
   return layoutGraph(nodes, edges, 'TB')
 }
 
-export function InteractionTreeEditor(props: Props) {
+// ─────────────────────────────────────────────────────────────
+// Button style helper
+// ─────────────────────────────────────────────────────────────
+
+function btnStyle(bg: string): React.CSSProperties {
+  return {
+    padding: '5px 10px',
+    background: bg,
+    color: '#fff',
+    border: '1px solid #555',
+    borderRadius: '4px',
+    cursor: 'pointer',
+    fontSize: 12,
+  }
+}
+
+function InteractionTreeEditorInner(props: Props) {
+  const { screenToFlowPosition } = useReactFlow()
+
   const [status, setStatus] = useState<Status>({ kind: 'idle' })
   const [error, setError] = useState<string | null>(null)
   const [nodes, setNodes] = useState<Node[]>([])
   const [edges, setEdges] = useState<Edge[]>([])
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
+  const [activeHighlight, setActiveHighlight] = useState<{ edgeIds: Set<string>; nodeIds: Set<string> } | null>(null)
+  const baseEdgesRef = useRef<Edge[]>([])
   const loadSeq = useRef(0)
+  const treeRootRef = useRef<string | null>(null)
 
   const [treeReloadTick, setTreeReloadTick] = useState(0)
+  const [editMode, setEditMode] = useState(false)
+  const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle')
+  const [saveError, setSaveError] = useState<string | null>(null)
 
   const [asset, setAsset] = useState<AssetGetResponse | null>(null)
   const [assetError, setAssetError] = useState<string | null>(null)
@@ -84,16 +118,55 @@ export function InteractionTreeEditor(props: Props) {
   const assetSeq = useRef(0)
   const [assetReloadTick, setAssetReloadTick] = useState(0)
 
-  const onNodesChange = useCallback((changes: NodeChange[]) => setNodes((prev) => applyNodeChanges(changes, prev)), [])
-  const onEdgesChange = useCallback((changes: EdgeChange[]) => setEdges((prev) => applyEdgeChanges(changes, prev)), [])
+  const onNodesChange = useCallback(
+    (changes: NodeChange[]) => setNodes((prev) => applyNodeChanges(changes, prev)),
+    [],
+  )
+  const onEdgesChange = useCallback(
+    (changes: EdgeChange[]) => setEdges((prev) => applyEdgeChanges(changes, prev)),
+    [],
+  )
 
+  // Sync isSelected + isConnected + edge highlight
+  useEffect(() => {
+    setNodes((prev) =>
+      prev.map((n) => ({
+        ...n,
+        data: {
+          ...n.data,
+          isSelected: n.id === selectedNodeId,
+          isConnected: activeHighlight?.nodeIds.has(n.id) === true && n.id !== selectedNodeId,
+        },
+      }))
+    )
+    setEdges(
+      baseEdgesRef.current.map((e) =>
+        activeHighlight?.edgeIds.has(e.id)
+          ? {
+              ...e,
+              animated: true,
+              zIndex: 1000,
+              style: { ...(e.style as object), stroke: '#00D4FF', strokeDasharray: '6 3', strokeWidth: 2.5 },
+              markerEnd: { type: 'arrowclosed' as const, color: '#00D4FF' },
+            }
+          : e,
+      ),
+    )
+  }, [selectedNodeId, activeHighlight])
+
+  // Reset on asset key change
   useEffect(() => {
     setSelectedNodeId(null)
+    setActiveHighlight(null)
     setAsset(null)
     setAssetError(null)
     setAssetLoading(false)
+    setEditMode(false)
+    setSaveStatus('idle')
+    setSaveError(null)
   }, [props.projectId, props.root.assetKey])
 
+  // Load tree
   useEffect(() => {
     const mySeq = ++loadSeq.current
     setStatus({ kind: 'loading' })
@@ -105,7 +178,9 @@ export function InteractionTreeEditor(props: Props) {
       try {
         const data = await hasApi.projectInteractionTree(props.projectId, props.root.assetKey)
         if (loadSeq.current !== mySeq) return
+        treeRootRef.current = data.root
         const flow = toFlow(data)
+        baseEdgesRef.current = flow.edges
         setNodes(flow.nodes)
         setEdges(flow.edges)
         setStatus({ kind: 'idle', message: `Loaded: ${data.nodes.length} nodes, ${data.edges.length} edges` })
@@ -118,15 +193,14 @@ export function InteractionTreeEditor(props: Props) {
     })()
   }, [props.projectId, props.root.assetKey, treeReloadTick])
 
-  const selectedNode = useMemo(() => {
-    if (!selectedNodeId) return null
-    return nodes.find((n) => n.id === selectedNodeId) ?? null
-  }, [nodes, selectedNodeId])
+  const selectedNode = useMemo(
+    () => nodes.find((n) => n.id === selectedNodeId) ?? null,
+    [nodes, selectedNodeId],
+  )
 
-  const selectedRaw = (selectedNode?.data as any)?.rawFields as Record<string, unknown> | undefined
-
-  const selectedIsExternal = Boolean((selectedNode?.data as any)?.isExternal)
-  const selectedIsServerAsset = Boolean(selectedNodeId && selectedNodeId.startsWith('server:') && selectedIsExternal)
+  const selectedData = selectedNode?.data as (InteractionNodeData & { rawFields?: Record<string, unknown> }) | undefined
+  const selectedIsExternal = Boolean(selectedData?.isExternal)
+  const selectedIsServerAsset = Boolean(selectedNodeId?.startsWith('server:') && selectedIsExternal)
 
   useEffect(() => {
     if (!selectedIsServerAsset || !selectedNodeId) {
@@ -148,7 +222,6 @@ export function InteractionTreeEditor(props: Props) {
         setAsset(a)
       } catch (e) {
         if (assetSeq.current !== mySeq) return
-        setAsset(null)
         setAssetError(e instanceof HasApiError ? e.message : 'Unexpected error')
       } finally {
         if (assetSeq.current === mySeq) setAssetLoading(false)
@@ -156,147 +229,260 @@ export function InteractionTreeEditor(props: Props) {
     })()
   }, [props.projectId, selectedIsServerAsset, selectedNodeId, assetReloadTick])
 
+  // ── Edit mode: connect edges ──
+  const onConnect = useCallback(
+    (connection: Connection) => {
+      const handle = connection.sourceHandle
+      const edgeType = handle === 'failed' ? 'failed' : handle === 'child' ? 'child' : 'next'
+      const color = getColorForEdgeType(edgeType)
+      const edgeId = `${connection.source}->${connection.target}:${edgeType}:${Date.now()}`
+      const newEdge: Edge = {
+        ...connection,
+        id: edgeId,
+        type: 'smoothstep',
+        label: SEMANTIC_EDGE_TYPES.has(edgeType) ? edgeType : undefined,
+        style: { stroke: color, strokeWidth: 1.5 },
+        labelStyle: { fill: color, fontSize: 9, fontStyle: 'italic', fontWeight: 600 },
+        labelShowBg: false,
+        markerEnd: { type: 'arrowclosed' as const, color },
+        data: { edgeType },
+      }
+      setEdges((prev) => addEdge(newEdge, prev))
+      baseEdgesRef.current = [...baseEdgesRef.current, newEdge]
+    },
+    [],
+  )
+
+  // ── Edit mode: drag from palette ──
+  const onDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'copy'
+  }, [])
+
+  const onDrop = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault()
+      const type = e.dataTransfer.getData(DRAG_MIME) || e.dataTransfer.getData('text/plain')
+      if (!type) return
+      const position = screenToFlowPosition({ x: e.clientX, y: e.clientY })
+      const newId = `internal:new_${Date.now()}_${Math.floor(Math.random() * 10000)}`
+      const newNode: Node = {
+        id: newId,
+        type: 'interaction',
+        position,
+        data: {
+          label: type,
+          nodeType: type,
+          isExternal: false,
+          rawFields: { Type: type },
+        } satisfies InteractionNodeData,
+      }
+      setNodes((prev) => [...prev, newNode])
+      setSelectedNodeId(newId)
+      setActiveHighlight(null)
+    },
+    [screenToFlowPosition],
+  )
+
+  // ── Edit mode: delete nodes/edges ──
+  const onNodesDelete = useCallback(
+    (deleted: Node[]) => {
+      const deletedIds = new Set(deleted.map((n) => n.id))
+      if (selectedNodeId && deletedIds.has(selectedNodeId)) {
+        setSelectedNodeId(null)
+        setActiveHighlight(null)
+      }
+      baseEdgesRef.current = baseEdgesRef.current.filter(
+        (e) => !deletedIds.has(e.source) && !deletedIds.has(e.target),
+      )
+    },
+    [selectedNodeId],
+  )
+
+  const onEdgesDelete = useCallback((deleted: Edge[]) => {
+    const deletedIds = new Set(deleted.map((e) => e.id))
+    baseEdgesRef.current = baseEdgesRef.current.filter((e) => !deletedIds.has(e.id))
+  }, [])
+
+  // ── Form panel: apply node field edits ──
+  function handleNodeApply(updatedFields: Record<string, unknown>) {
+    if (!selectedNodeId) return
+    setNodes((prev) =>
+      prev.map((n) => {
+        if (n.id !== selectedNodeId) return n
+        const newType =
+          typeof updatedFields['Type'] === 'string'
+            ? updatedFields['Type']
+            : (n.data as InteractionNodeData).nodeType
+        return {
+          ...n,
+          data: { ...n.data, rawFields: updatedFields, nodeType: newType, label: newType },
+        }
+      }),
+    )
+  }
+
+  // ── Save tree to server ──
+  async function handleSaveTree() {
+    const root = treeRootRef.current
+    if (!root) { setSaveError('No tree root — reload first'); setSaveStatus('error'); return }
+    setSaveStatus('saving')
+    setSaveError(null)
+    const { json, errors } = exportInteractionTree(root, nodes, edges)
+    if (!json) { setSaveStatus('error'); setSaveError('Export produced empty result'); return }
+    if (errors.length > 0) console.warn('[InteractionTree] Export warnings:', errors)
+    try {
+      await hasApi.assetPut(props.projectId, props.root.assetKey, {
+        json: json as Record<string, unknown>,
+        mode: 'override',
+      })
+      setSaveStatus('ok')
+      setTimeout(() => setSaveStatus('idle'), 2500)
+      setTreeReloadTick((t) => t + 1)
+    } catch (e) {
+      setSaveStatus('error')
+      setSaveError(e instanceof HasApiError ? e.message : 'Unexpected save error')
+    }
+  }
+
+  const handleNodeClick = useCallback((_: React.MouseEvent, n: Node) => {
+    setSelectedNodeId(n.id)
+    const connectedEdges = baseEdgesRef.current.filter((e) => e.source === n.id || e.target === n.id)
+    const neighborIds = new Set<string>()
+    connectedEdges.forEach((e) => {
+      if (e.source !== n.id) neighborIds.add(e.source)
+      if (e.target !== n.id) neighborIds.add(e.target)
+    })
+    setActiveHighlight({ edgeIds: new Set(connectedEdges.map((e) => e.id)), nodeIds: neighborIds })
+  }, [])
+
+  const saveLabel =
+    saveStatus === 'saving' ? 'Saving…'
+    : saveStatus === 'ok' ? '✓ Saved'
+    : saveStatus === 'error' ? '✗ Error'
+    : 'Save Tree'
+
+  const saveColor =
+    saveStatus === 'ok' ? '#55EFC4'
+    : saveStatus === 'error' ? '#FF6B6B'
+    : saveStatus === 'saving' ? '#aaa'
+    : '#74B9FF'
+
+  const showAssetPanel = Boolean(selectedNodeId && selectedIsServerAsset)
+  const showFormPanel = Boolean(selectedNodeId && !selectedIsServerAsset && selectedData)
+
   return (
-    <div className="editor-container" style={{ position: 'fixed', inset: 0 }}>
-      <ReactFlow
-        nodes={nodes}
-        edges={edges}
-        nodeTypes={nodeTypes}
-        onNodesChange={onNodesChange}
-        onEdgesChange={onEdgesChange}
-        onNodeClick={(_, n) => setSelectedNodeId(n.id)}
-        fitView
-        fitViewOptions={{ padding: 0.2 }}
-        minZoom={0.1}
-        maxZoom={2}
+    <div style={{ position: 'fixed', inset: 0, display: 'flex', flexDirection: 'row' }}>
+      {/* Palette (edit mode only) */}
+      {editMode && <InteractionPalette />}
+
+      {/* Canvas */}
+      <div
+        style={{ flex: 1, position: 'relative', minWidth: 0 }}
+        onDrop={editMode ? onDrop : undefined}
+        onDragOver={editMode ? onDragOver : undefined}
       >
-        <Background gap={20} size={1} color="#444" />
-        <Controls />
-
-        <Panel position="top-left" className="panel">
-          <h3>Interactions</h3>
-          <div style={{ opacity: 0.85, marginBottom: 8, fontSize: 12 }}>{props.root.display}</div>
-
-          <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-            <button
-              onClick={props.onBack}
-              disabled={status.kind === 'loading'}
-              style={{
-                padding: '5px 10px',
-                background: '#333',
-                color: '#fff',
-                border: '1px solid #555',
-                borderRadius: '4px',
-                cursor: 'pointer',
-              }}
-            >
-              Back
-            </button>
-          </div>
-
-          {status.message && <p style={{ marginTop: 10, opacity: 0.8 }}>{status.message}</p>}
-          {error && <p style={{ marginTop: 8, color: '#FF6B6B' }}>{error}</p>}
-        </Panel>
-      </ReactFlow>
-
-      {selectedNodeId && selectedIsServerAsset && (
-        <AssetSidePanel
-          projectId={props.projectId}
-          selectedNodeId={selectedNodeId}
-          asset={asset}
-          loading={assetLoading}
-          error={assetError}
-          onClose={() => setSelectedNodeId(null)}
-          onRefresh={() => {
-            setAssetReloadTick((t) => t + 1)
-            setTreeReloadTick((t) => t + 1)
-          }}
-        />
-      )}
-
-      {selectedNodeId && !selectedIsServerAsset && (
-        <div
-          style={{
-            position: 'absolute',
-            top: 0,
-            right: 0,
-            height: '100%',
-            width: 460,
-            background: 'rgba(30, 30, 30, 0.96)',
-            borderLeft: '1px solid #333',
-            boxShadow: '0 0 20px rgba(0,0,0,0.5)',
-            color: '#fff',
-            display: 'flex',
-            flexDirection: 'column',
-          }}
+        <ReactFlow
+          nodes={nodes}
+          edges={edges}
+          nodeTypes={nodeTypes}
+          onNodesChange={onNodesChange}
+          onEdgesChange={onEdgesChange}
+          onConnect={editMode ? onConnect : undefined}
+          onNodesDelete={editMode ? onNodesDelete : undefined}
+          onEdgesDelete={editMode ? onEdgesDelete : undefined}
+          onNodeClick={handleNodeClick}
+          nodesConnectable={editMode}
+          elementsSelectable={true}
+          deleteKeyCode={editMode ? 'Delete' : null}
+          fitView
+          fitViewOptions={{ padding: 0.2 }}
+          minZoom={0.1}
+          maxZoom={2}
         >
-          <div
-            style={{
-              padding: '10px 12px',
-              borderBottom: '1px solid #333',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              gap: 10,
-            }}
-          >
-            <div style={{ minWidth: 0 }}>
-              <div
-                style={{
-                  fontSize: 12,
-                  color: '#61dafb',
-                  fontWeight: 700,
-                  whiteSpace: 'nowrap',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                }}
+          <Background gap={20} size={1} color="#444" />
+          <Controls />
+
+          <Panel position="top-left" className="panel">
+            <h3 style={{ margin: '0 0 4px' }}>Interactions</h3>
+            <div style={{ opacity: 0.85, marginBottom: 8, fontSize: 12 }}>{props.root.display}</div>
+
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
+              <button onClick={props.onBack} disabled={status.kind === 'loading'} style={btnStyle('#333')}>
+                ← Back
+              </button>
+              <button
+                onClick={() => { setEditMode((v) => !v); if (editMode) { setSelectedNodeId(null); setActiveHighlight(null) } }}
+                style={{ ...btnStyle(editMode ? '#1a3a1a' : '#2a2a3a'), color: editMode ? '#55EFC4' : '#aaa', borderColor: editMode ? '#55EFC4' : '#555' }}
               >
-                {selectedNodeId}
-              </div>
-              <div style={{ fontSize: 11, color: '#aaa', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                type: {String((selectedNode?.data as any)?.nodeType ?? '')}
-              </div>
+                {editMode ? '✏ Edit ON' : '✏ Edit'}
+              </button>
+              {editMode && (
+                <button
+                  onClick={handleSaveTree}
+                  disabled={saveStatus === 'saving'}
+                  style={{ ...btnStyle('#1a2a3a'), color: saveColor, borderColor: saveColor }}
+                >
+                  {saveLabel}
+                </button>
+              )}
             </div>
 
-            <button
-              onClick={() => setSelectedNodeId(null)}
-              style={{
-                padding: '4px 8px',
-                background: '#333',
-                color: '#fff',
-                border: '1px solid #555',
-                borderRadius: 4,
-                cursor: 'pointer',
-              }}
-              title="Fermer"
-            >
-              X
-            </button>
-          </div>
-
-          <div style={{ padding: 12, overflow: 'auto', flex: 1 }}>
-            {!selectedRaw ? (
-              <div style={{ color: '#ccc', fontStyle: 'italic' }}>No fields (external node).</div>
-            ) : (
-              <pre
-                style={{
-                  margin: 0,
-                  padding: 10,
-                  background: '#1e1e1e',
-                  border: '1px solid #333',
-                  borderRadius: 6,
-                  fontSize: 12,
-                  lineHeight: 1.35,
-                  whiteSpace: 'pre-wrap',
-                  wordBreak: 'break-word',
-                }}
-              >
-                {JSON.stringify(selectedRaw, null, 2)}
-              </pre>
+            {editMode && (
+              <div style={{ marginTop: 6, fontSize: 10, color: '#666', lineHeight: 1.4 }}>
+                Drag from palette → canvas to add nodes.<br />
+                Drag handle → node to connect. Delete removes selected.
+              </div>
             )}
-          </div>
+            {status.message && <p style={{ marginTop: 8, opacity: 0.8, fontSize: 12 }}>{status.message}</p>}
+            {error && <p style={{ marginTop: 8, color: '#FF6B6B', fontSize: 12 }}>{error}</p>}
+            {saveStatus === 'error' && saveError && (
+              <p style={{ marginTop: 6, color: '#FF6B6B', fontSize: 11 }}>{saveError}</p>
+            )}
+          </Panel>
+        </ReactFlow>
+      </div>
+
+      {/* Right: Asset panel (external nodes) */}
+      {showAssetPanel && (
+        <div style={{ position: 'absolute', top: 0, right: 0, height: '100%', width: 460, zIndex: 20 }}>
+          <AssetSidePanel
+            projectId={props.projectId}
+            selectedNodeId={selectedNodeId!}
+            asset={asset}
+            loading={assetLoading}
+            error={assetError}
+            onClose={() => { setSelectedNodeId(null); setActiveHighlight(null) }}
+            onRefresh={() => { setAssetReloadTick((t) => t + 1); setTreeReloadTick((t) => t + 1) }}
+          />
+        </div>
+      )}
+
+      {/* Right: Form panel (inline nodes) */}
+      {showFormPanel && selectedData && (
+        <div style={{ position: 'absolute', top: 0, right: 0, height: '100%', width: 420, zIndex: 20, boxShadow: '-4px 0 20px rgba(0,0,0,0.5)' }}>
+          <InteractionFormPanel
+            nodeId={selectedNodeId!}
+            nodeType={selectedData.nodeType}
+            rawFields={selectedData.rawFields ?? {}}
+            isExternal={selectedData.isExternal ?? false}
+            onApply={handleNodeApply}
+            onClose={() => { setSelectedNodeId(null); setActiveHighlight(null) }}
+          />
         </div>
       )}
     </div>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────
+// Public export — wraps with ReactFlowProvider
+// ─────────────────────────────────────────────────────────────
+
+export function InteractionTreeEditor(props: Props) {
+  return (
+    <ReactFlowProvider>
+      <InteractionTreeEditorInner {...props} />
+    </ReactFlowProvider>
   )
 }
