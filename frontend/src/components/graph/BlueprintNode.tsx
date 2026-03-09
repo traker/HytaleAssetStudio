@@ -126,7 +126,7 @@ export const BlueprintNode = ({ data }: Props) => {
           <div style={{ padding: '2px 10px 3px', fontSize: 9, color: '#555', textTransform: 'uppercase', letterSpacing: 1 }}>
             Dépendances
           </div>
-          <div style={{ maxHeight: 130, overflowY: 'auto' }}>
+          <div style={{ maxHeight: 400, overflowY: 'auto' }}>
             {data.outgoing.map((dep, i) => {
               const depColor = getColorForGroup(dep.targetGroup)
               const edgeColor = getColorForEdgeType(dep.edgeLabel)

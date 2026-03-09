@@ -5,7 +5,7 @@ const NODE_WIDTH = 260
 const NODE_HEIGHT_BASE = 80   // header + label + path
 const NODE_HEIGHT_DEP_ROW = 26 // per outgoing dep row
 const NODE_HEIGHT_DEP_HEADER = 22 // "Dépendances" label
-const NODE_HEIGHT_MAX_DEPS = 130 // capped to maxHeight of scroll area
+const NODE_HEIGHT_MAX_DEPS = 400 // capped to maxHeight of scroll area
 
 function estimateNodeHeight(node: Node): number {
   const outgoing = (node.data as any)?.outgoing
@@ -18,11 +18,7 @@ export function layoutGraph(nodes: Node[], edges: Edge[], direction: 'TB' | 'LR'
   const dagreGraph = new dagre.graphlib.Graph()
   dagreGraph.setDefaultEdgeLabel(() => ({}))
 
-  // TB (interaction tree, legacy): generous vertical ranksep
-  // LR (items graph): wide ranksep for readability, moderate nodesep
-  const nodesep = direction === 'TB' ? 80 : 60
-  const ranksep = direction === 'TB' ? 100 : 150
-  dagreGraph.setGraph({ rankdir: direction, nodesep, ranksep })
+  dagreGraph.setGraph({ rankdir: direction, nodesep: 60, ranksep: 140 })
 
   for (const node of nodes) {
     const h = estimateNodeHeight(node)
