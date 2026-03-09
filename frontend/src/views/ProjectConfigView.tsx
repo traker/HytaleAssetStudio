@@ -28,17 +28,16 @@ export function ProjectConfigView(props: Props) {
     () => status.kind !== 'loading' && status.kind !== 'saving' && draftVanilla !== null,
     [status.kind, draftVanilla],
   )
+  const isBusy = status.kind === 'loading' || status.kind === 'saving' || status.kind === 'exporting'
 
   useEffect(() => {
     let cancelled = false
-
     async function load(): Promise<void> {
       setStatus({ kind: 'loading' })
       setError(null)
       try {
         const cfg = await hasApi.projectConfig(props.projectId)
         if (cancelled) return
-
         setConfig(cfg)
         setDraftVanilla(clone(cfg.vanilla))
         setDraftLayers(clone(cfg.layers ?? []))
@@ -49,11 +48,8 @@ export function ProjectConfigView(props: Props) {
         if (!cancelled) setStatus({ kind: 'idle' })
       }
     }
-
     load()
-    return () => {
-      cancelled = true
-    }
+    return () => { cancelled = true }
   }, [props.projectId])
 
   function updateLayer(index: number, patch: Partial<ProjectLayer>): void {
@@ -95,15 +91,10 @@ export function ProjectConfigView(props: Props) {
 
   async function save(): Promise<void> {
     if (!draftVanilla) return
-
     setStatus({ kind: 'saving' })
     setError(null)
-
     try {
-      await hasApi.projectPutLayers(props.projectId, {
-        vanilla: draftVanilla,
-        layers: draftLayers,
-      })
+      await hasApi.projectPutLayers(props.projectId, { vanilla: draftVanilla, layers: draftLayers })
       const cfg = await hasApi.projectConfig(props.projectId)
       setConfig(cfg)
       setDraftVanilla(clone(cfg.vanilla))
@@ -119,7 +110,6 @@ export function ProjectConfigView(props: Props) {
   async function exportZip(): Promise<void> {
     setStatus({ kind: 'exporting' })
     setError(null)
-
     try {
       const out = exportPath.trim()
       if (!out) {
@@ -137,120 +127,116 @@ export function ProjectConfigView(props: Props) {
   }
 
   return (
-    <div className="card" style={{ textAlign: 'left' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center' }}>
-        <div>
-          <h2 style={{ marginTop: 0, marginBottom: 6 }}>Project config</h2>
-          <p style={{ marginTop: 0, opacity: 0.8 }}>projectId: {props.projectId}</p>
-        </div>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button
-            onClick={props.onOpenGraphItems}
-            disabled={status.kind === 'loading' || status.kind === 'saving' || status.kind === 'exporting'}
-          >
-            Graphe Items
-          </button>
-          <button
-            onClick={props.onOpenModified}
-            disabled={status.kind === 'loading' || status.kind === 'saving' || status.kind === 'exporting'}
-          >
-            Modifiés
-          </button>
-          <button onClick={props.onBack} disabled={status.kind === 'loading' || status.kind === 'saving'}>
-            Back
-          </button>
-        </div>
+    <div className="page-content">
+
+      {/* ── Tool tiles ── */}
+      <div className="tool-grid">
+        <button className="tool-tile" onClick={props.onOpenGraphItems} disabled={isBusy}>
+          <span className="tool-tile-icon">🗂</span>
+          <span className="tool-tile-label">Items Graph</span>
+          <span className="tool-tile-desc">Browse and explore item assets</span>
+        </button>
+        <button className="tool-tile" disabled title="Open from an item node in the Items Graph">
+          <span className="tool-tile-icon">🔗</span>
+          <span className="tool-tile-label">Interactions</span>
+          <span className="tool-tile-desc">Open from an item in the Items Graph</span>
+        </button>
+        <button className="tool-tile" onClick={props.onOpenModified} disabled={isBusy}>
+          <span className="tool-tile-icon">📋</span>
+          <span className="tool-tile-label">Modified Assets</span>
+          <span className="tool-tile-desc">Overrides and pending changes</span>
+        </button>
       </div>
 
-      {error && <p style={{ color: 'salmon' }}>{error}</p>}
+      {/* ── Config card ── */}
+      <div className="card" style={{ marginBottom: 16 }}>
+        <p className="section-title" style={{ marginBottom: 16 }}>Project configuration — {props.projectId}</p>
 
-      {status.message && <p style={{ opacity: 0.8 }}>{status.message}</p>}
+        {error && <p className="error-msg">{error}</p>}
+        {status.message && <p className="success-msg">{status.message}</p>}
 
-      {!config || !draftVanilla ? (
-        <p>Loading…</p>
-      ) : (
-        <>
-          <h3>Vanilla</h3>
-          <div style={{ display: 'grid', gridTemplateColumns: '140px 1fr', gap: 8, alignItems: 'center' }}>
-            <label>sourceType</label>
-            <select
-              value={draftVanilla.sourceType}
-              onChange={(e) => setDraftVanilla({ ...draftVanilla, sourceType: e.target.value as PackSource['sourceType'] })}
-            >
-              <option value="folder">folder</option>
-              <option value="zip">zip</option>
-            </select>
+        {!config || !draftVanilla ? (
+          <p style={{ color: '#555', fontSize: 13 }}>{status.kind === 'loading' ? 'Loading…' : 'No config loaded.'}</p>
+        ) : (
+          <>
+            {/* Vanilla */}
+            <p className="section-title" style={{ marginTop: 8 }}>Vanilla pack</p>
+            <div className="config-grid">
+              <label>sourceType</label>
+              <select
+                value={draftVanilla.sourceType}
+                onChange={(e) => setDraftVanilla({ ...draftVanilla, sourceType: e.target.value as PackSource['sourceType'] })}
+              >
+                <option value="folder">folder</option>
+                <option value="zip">zip</option>
+              </select>
 
-            <label>path</label>
-            <input value={draftVanilla.path} onChange={(e) => setDraftVanilla({ ...draftVanilla, path: e.target.value })} />
-          </div>
+              <label>path</label>
+              <input value={draftVanilla.path} onChange={(e) => setDraftVanilla({ ...draftVanilla, path: e.target.value })} />
+            </div>
 
-          <h3 style={{ marginTop: 18 }}>Layers</h3>
-          {draftLayers.length === 0 ? (
-            <p>No layers.</p>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {draftLayers.map((layer, i) => (
-                <div key={`${layer.id}-${i}`} style={{ border: '1px solid #333', borderRadius: 8, padding: 10 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-                    <strong>{layer.id}</strong>
+            {/* Layers */}
+            <p className="section-title" style={{ marginTop: 20 }}>Layers</p>
+            {draftLayers.length === 0 ? (
+              <p style={{ color: '#555', fontSize: 12 }}>No layers.</p>
+            ) : (
+              draftLayers.map((layer, i) => (
+                <div key={`${layer.id}-${i}`} className="layer-card">
+                  <div className="layer-card-header">
+                    <span style={{ fontSize: 12, fontWeight: 700, color: '#bbb', fontFamily: 'ui-monospace, monospace' }}>
+                      {layer.id}
+                    </span>
                     <div style={{ display: 'flex', gap: 6 }}>
-                      <button onClick={() => moveLayer(i, -1)} disabled={i === 0}>
-                        Up
-                      </button>
-                      <button onClick={() => moveLayer(i, 1)} disabled={i === draftLayers.length - 1}>
-                        Down
-                      </button>
-                      <button onClick={() => removeLayer(i)}>Remove</button>
+                      <button className="btn btn-ghost" style={{ padding: '3px 8px' }} onClick={() => moveLayer(i, -1)} disabled={i === 0}>↑</button>
+                      <button className="btn btn-ghost" style={{ padding: '3px 8px' }} onClick={() => moveLayer(i, 1)} disabled={i === draftLayers.length - 1}>↓</button>
+                      <button className="btn btn-danger" style={{ padding: '3px 8px' }} onClick={() => removeLayer(i)}>Remove</button>
                     </div>
                   </div>
-
-                  <div style={{ display: 'grid', gridTemplateColumns: '140px 1fr', gap: 8, alignItems: 'center', marginTop: 10 }}>
+                  <div className="config-grid">
                     <label>enabled</label>
                     <input type="checkbox" checked={layer.enabled} onChange={(e) => updateLayer(i, { enabled: e.target.checked })} />
-
                     <label>displayName</label>
                     <input value={layer.displayName ?? ''} onChange={(e) => updateLayer(i, { displayName: e.target.value })} />
-
                     <label>sourceType</label>
                     <select value={layer.sourceType} onChange={(e) => updateLayer(i, { sourceType: e.target.value as ProjectLayer['sourceType'] })}>
                       <option value="folder">folder</option>
                       <option value="zip">zip</option>
                     </select>
-
                     <label>path</label>
                     <input value={layer.path} onChange={(e) => updateLayer(i, { path: e.target.value })} />
                   </div>
                 </div>
-              ))}
+              ))
+            )}
+
+            <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+              <button className="btn btn-secondary" onClick={addLayer} disabled={isBusy}>
+                + Add layer
+              </button>
+              <button className="btn btn-primary" onClick={save} disabled={!canSave}>
+                {status.kind === 'saving' ? 'Saving…' : 'Save'}
+              </button>
             </div>
-          )}
 
-          <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-            <button onClick={addLayer} disabled={status.kind === 'saving' || status.kind === 'loading'}>
-              Add layer
-            </button>
-            <button onClick={save} disabled={!canSave}>
-              {status.kind === 'saving' ? 'Saving…' : 'Save'}
-            </button>
-          </div>
-
-          <h3 style={{ marginTop: 18 }}>Export ZIP</h3>
-          <div style={{ display: 'grid', gridTemplateColumns: '140px 1fr', gap: 8, alignItems: 'center' }}>
-            <label>outputPath</label>
-            <input
-              value={exportPath}
-              onChange={(e) => setExportPath(e.target.value)}
-              placeholder="K:/hytale-asset-studio-workspace/exports/my-pack.zip"
-            />
-          </div>
-          <div style={{ marginTop: 10 }}>
-            <button onClick={exportZip} disabled={status.kind === 'exporting' || status.kind === 'saving' || status.kind === 'loading'}>
-              {status.kind === 'exporting' ? 'Exporting…' : 'Export'}
-            </button>
-          </div>
-        </>
-      )}
+            {/* Export */}
+            <p className="section-title" style={{ marginTop: 24 }}>Export ZIP</p>
+            <div className="config-grid" style={{ gridTemplateColumns: '120px 1fr' }}>
+              <label>outputPath</label>
+              <input
+                value={exportPath}
+                onChange={(e) => setExportPath(e.target.value)}
+                placeholder="K:/…/exports/my-pack.zip"
+              />
+            </div>
+            <div style={{ marginTop: 10 }}>
+              <button className="btn btn-secondary" onClick={exportZip} disabled={isBusy}>
+                {status.kind === 'exporting' ? 'Exporting…' : 'Export'}
+              </button>
+            </div>
+          </>
+        )}
+      </div>
     </div>
   )
 }
+
