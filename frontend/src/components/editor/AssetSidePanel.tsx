@@ -5,8 +5,9 @@ import Editor from '@monaco-editor/react'
 import { HasApiError, hasApi } from '../../api'
 import type { AssetGetResponse } from '../../api'
 import { InteractionVarsEditor, type InteractionVarsValue } from './InteractionVarsEditor'
+import { ItemFormEditor, looksLikeItem } from './ItemFormEditor'
 
-type Tab = 'json' | 'vars'
+type Tab = 'json' | 'form' | 'vars'
 
 type Props = {
   projectId: string
@@ -93,6 +94,11 @@ export function AssetSidePanel(props: Props) {
     return 'InteractionVars' in j
   }, [props.asset])
 
+  const hasForm = useMemo(() => {
+    if (!props.asset?.json) return false
+    return looksLikeItem(props.asset.json as Record<string, unknown>)
+  }, [props.asset])
+
   const currentVars = useMemo((): InteractionVarsValue => {
     try {
       const parsed = JSON.parse(draft) as Record<string, unknown>
@@ -101,6 +107,14 @@ export function AssetSidePanel(props: Props) {
     } catch { /* invalid JSON during editing */ }
     return {}
   }, [draft])
+
+  const currentFormJson = useMemo((): Record<string, unknown> => {
+    try { return JSON.parse(draft) as Record<string, unknown> } catch { return {} }
+  }, [draft])
+
+  function handleFormChange(updated: Record<string, unknown>) {
+    setDraft(JSON.stringify(updated, null, 2))
+  }
 
   function handleVarsChange(updated: InteractionVarsValue) {
     try {
@@ -235,7 +249,7 @@ export function AssetSidePanel(props: Props) {
 
       {/* ── Tabs ── */}
       <div style={{ display: 'flex', borderBottom: '1px solid #333', flexShrink: 0 }}>
-        {(['json', ...(hasVars ? ['vars'] : [])] as Tab[]).map((t) => (
+        {(['json', ...(hasForm ? ['form'] : []), ...(hasVars ? ['vars'] : [])] as Tab[]).map((t) => (
           <button
             key={t}
             onClick={() => setTab(t)}
@@ -253,7 +267,7 @@ export function AssetSidePanel(props: Props) {
               letterSpacing: '0.06em',
             }}
           >
-            {t === 'json' ? 'JSON' : 'Interaction Vars'}
+            {t === 'json' ? 'JSON' : t === 'form' ? 'Form' : 'Vars'}
           </button>
         ))}
       </div>
@@ -306,6 +320,14 @@ export function AssetSidePanel(props: Props) {
               />
             </div>
           </div>
+        )}
+
+        {props.asset && tab === 'form' && (
+          <ItemFormEditor
+            json={currentFormJson}
+            onChange={canEdit ? handleFormChange : () => {}}
+            readOnly={!canEdit}
+          />
         )}
 
         {props.asset && tab === 'vars' && (
