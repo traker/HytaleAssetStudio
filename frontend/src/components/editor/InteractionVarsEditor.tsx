@@ -153,11 +153,11 @@ function InlineInteractionEditor({
   const baseDamageEntries = Object.entries(bd) as [string, number][]
 
   function setBdEntry(stat: string, amount: number) {
-    const updated = { ...bd, [stat]: amount }
+    const updated: DamageStats = { ...(bd as DamageStats), [stat]: amount }
     set('DamageCalculator', { ...dc, BaseDamage: updated })
   }
   function removeBdEntry(stat: string) {
-    const updated = { ...bd }
+    const updated: DamageStats = { ...(bd as DamageStats) }
     delete updated[stat]
     set('DamageCalculator', { ...dc, BaseDamage: Object.keys(updated).length > 0 ? updated : undefined })
   }
@@ -165,7 +165,7 @@ function InlineInteractionEditor({
     // find a stat name not yet used
     const candidates = ['Physical', 'Fire', 'Ice', 'Lightning', 'Poison', 'Holy', 'Dark']
     const next = candidates.find((c) => !(c in bd)) ?? `Stat_${Date.now()}`
-    set('DamageCalculator', { ...dc, BaseDamage: { ...bd, [next]: 0 } })
+    set('DamageCalculator', { ...dc, BaseDamage: { ...(bd as DamageStats), [next]: 0 } })
   }
   function renameBdEntry(oldStat: string, newStat: string) {
     if (!newStat.trim() || newStat === oldStat) return
