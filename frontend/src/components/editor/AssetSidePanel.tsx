@@ -4,6 +4,9 @@ import Editor from '@monaco-editor/react'
 
 import { HasApiError, hasApi } from '../../api'
 import type { AssetGetResponse } from '../../api'
+import { InteractionVarsEditor, type InteractionVarsValue } from './InteractionVarsEditor'
+
+type Tab = 'json' | 'vars'
 
 type Props = {
   projectId: string
@@ -33,11 +36,13 @@ export function AssetSidePanel(props: Props) {
   const [saveStatus, setSaveStatus] = useState<{ kind: 'idle' | 'saving'; error?: string }>(
     { kind: 'idle' },
   )
+  const [tab, setTab] = useState<Tab>('json')
 
   useEffect(() => {
     setIsEditing(canEdit)
     setDraftError(null)
     setSaveStatus({ kind: 'idle' })
+    setTab('json')
     if (props.asset) setDraft(JSON.stringify(props.asset.json, null, 2))
     else setDraft('')
   }, [props.selectedNodeId, props.asset, canEdit])
@@ -78,6 +83,34 @@ export function AssetSidePanel(props: Props) {
     setDraftError(null)
     setSaveStatus({ kind: 'idle' })
     if (props.asset) setDraft(JSON.stringify(props.asset.json, null, 2))
+  }
+
+  // ── InteractionVars helpers ───────────────────────────────────────────────
+
+  const hasVars = useMemo(() => {
+    if (!props.asset?.json) return false
+    const j = props.asset.json as Record<string, unknown>
+    return 'InteractionVars' in j
+  }, [props.asset])
+
+  const currentVars = useMemo((): InteractionVarsValue => {
+    try {
+      const parsed = JSON.parse(draft) as Record<string, unknown>
+      const v = parsed['InteractionVars']
+      if (v && typeof v === 'object' && !Array.isArray(v)) return v as InteractionVarsValue
+    } catch { /* invalid JSON during editing */ }
+    return {}
+  }, [draft])
+
+  function handleVarsChange(updated: InteractionVarsValue) {
+    try {
+      const parsed = JSON.parse(draft) as Record<string, unknown>
+      const next = { ...parsed, InteractionVars: updated }
+      setDraft(JSON.stringify(next, null, 2))
+    } catch {
+      // draft is invalid JSON — write vars only
+      setDraft(JSON.stringify({ InteractionVars: updated }, null, 2))
+    }
   }
 
   return (
@@ -200,56 +233,94 @@ export function AssetSidePanel(props: Props) {
         </div>
       </div>
 
+      {/* ── Tabs ── */}
+      <div style={{ display: 'flex', borderBottom: '1px solid #333', flexShrink: 0 }}>
+        {(['json', ...(hasVars ? ['vars'] : [])] as Tab[]).map((t) => (
+          <button
+            key={t}
+            onClick={() => setTab(t)}
+            style={{
+              flex: 1,
+              padding: '6px 0',
+              background: 'transparent',
+              color: tab === t ? '#61dafb' : '#555',
+              border: 'none',
+              borderBottom: tab === t ? '2px solid #61dafb' : '2px solid transparent',
+              cursor: 'pointer',
+              fontSize: 11,
+              fontWeight: tab === t ? 700 : 400,
+              textTransform: 'uppercase',
+              letterSpacing: '0.06em',
+            }}
+          >
+            {t === 'json' ? 'JSON' : 'Interaction Vars'}
+          </button>
+        ))}
+      </div>
+
       <div style={{ padding: 12, overflow: 'auto', flex: 1 }}>
         {props.loading && <div style={{ color: '#ccc', fontStyle: 'italic' }}>Chargement...</div>}
         {props.error && <div style={{ color: '#FF6B6B' }}>{props.error}</div>}
         {draftError && <div style={{ color: '#FF6B6B', marginBottom: 8 }}>{draftError}</div>}
         {saveStatus.error && <div style={{ color: '#FF6B6B', marginBottom: 8 }}>{saveStatus.error}</div>}
 
-        {props.asset &&
-          (
+        {props.asset && tab === 'json' && (
+          <div
+            style={{
+              position: 'relative',
+              width: '100%',
+              minHeight: 320,
+              height: 420,
+              resize: 'vertical',
+              overflow: 'hidden',
+            }}
+          >
             <div
               style={{
-                position: 'relative',
-                width: '100%',
-                minHeight: 320,
-                height: 420,
-                resize: 'vertical',
+                position: 'absolute',
+                inset: 0,
+                background: '#1e1e1e',
+                border: '1px solid #333',
+                borderRadius: 6,
                 overflow: 'hidden',
               }}
             >
-              <div
-                style={{
-                  position: 'absolute',
-                  inset: 0,
-                  background: '#1e1e1e',
-                  border: '1px solid #333',
-                  borderRadius: 6,
-                  overflow: 'hidden',
+              <Editor
+                height="100%"
+                defaultLanguage="json"
+                theme="vs-dark"
+                value={draft}
+                onChange={(value: string | undefined) => setDraft(value ?? '')}
+                options={{
+                  minimap: { enabled: false },
+                  fontSize: 12,
+                  lineHeight: 16,
+                  wordWrap: 'on',
+                  scrollBeyondLastLine: false,
+                  automaticLayout: true,
+                  tabSize: 2,
+                  fontFamily: editorFontFamily,
+                  readOnly: !canEdit,
+                  domReadOnly: !canEdit,
                 }}
-              >
-                <Editor
-                  height="100%"
-                  defaultLanguage="json"
-                  theme="vs-dark"
-                  value={draft}
-                  onChange={(value: string | undefined) => setDraft(value ?? '')}
-                  options={{
-                    minimap: { enabled: false },
-                    fontSize: 12,
-                    lineHeight: 16,
-                    wordWrap: 'on',
-                    scrollBeyondLastLine: false,
-                    automaticLayout: true,
-                    tabSize: 2,
-                    fontFamily: editorFontFamily,
-                    readOnly: !canEdit,
-                    domReadOnly: !canEdit,
-                  }}
-                />
-              </div>
+              />
             </div>
-          )}
+          </div>
+        )}
+
+        {props.asset && tab === 'vars' && (
+          <div>
+            {!canEdit && (
+              <div style={{ fontSize: 11, color: '#888', fontStyle: 'italic', marginBottom: 8 }}>
+                Read-only — overrides uniquement disponibles pour les assets server.
+              </div>
+            )}
+            <InteractionVarsEditor
+              vars={currentVars}
+              onChange={canEdit ? handleVarsChange : () => {}}
+            />
+          </div>
+        )}
       </div>
     </div>
   )
