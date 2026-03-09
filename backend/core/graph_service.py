@@ -105,16 +105,26 @@ def build_focus_graph(cfg: ProjectConfig, root_key: str, depth: int | None) -> d
         p = vfs_path.replace("\\", "/").lower()
         if "/item/items/" in p:
             return "item"
-        if "/rootinteractions/" in p or "/interactions/" in p:
+        if "/rootinteractions/" in p:
+            return "rootinteraction"
+        if "/interactions/" in p:
             return "interaction"
         if "/effects/" in p:
             return "effect"
+        if "/projectiles/" in p:
+            return "projectile"
         if "/particles/" in p:
             return "particle"
-        if "/sounds/" in p:
+        if "/sounds/" in p or "/soundevents/" in p:
             return "sound"
         if "/models/" in p:
             return "model"
+        if "/npc/" in p or "/npcs/" in p:
+            return "npc"
+        if "/prefabs/" in p:
+            return "prefab"
+        if "/block/" in p or "/blocks/" in p:
+            return "block"
         return "json_data"
 
     def _group_for_common_path(vfs_path: str) -> str:

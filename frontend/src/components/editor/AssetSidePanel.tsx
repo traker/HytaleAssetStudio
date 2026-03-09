@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 
+import Editor from '@monaco-editor/react'
+
 import { HasApiError, hasApi } from '../../api'
 import type { AssetGetResponse } from '../../api'
 
@@ -17,6 +19,9 @@ type Props = {
 
 export function AssetSidePanel(props: Props) {
   const title = props.asset?.resolvedPath ?? props.selectedNodeId
+
+  const editorFontFamily =
+    'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace'
 
   const canEdit = useMemo(() => {
     return Boolean(props.asset) && props.selectedNodeId.startsWith('server:')
@@ -202,44 +207,49 @@ export function AssetSidePanel(props: Props) {
         {saveStatus.error && <div style={{ color: '#FF6B6B', marginBottom: 8 }}>{saveStatus.error}</div>}
 
         {props.asset &&
-          (isEditing ? (
-            <textarea
-              value={draft}
-              onChange={(e) => setDraft(e.target.value)}
-              spellCheck={false}
+          (
+            <div
               style={{
+                position: 'relative',
                 width: '100%',
                 minHeight: 320,
+                height: 420,
                 resize: 'vertical',
-                margin: 0,
-                padding: 10,
-                background: '#1e1e1e',
-                border: '1px solid #333',
-                borderRadius: 6,
-                color: '#fff',
-                fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
-                fontSize: 12,
-                lineHeight: 1.35,
-                outline: 'none',
-              }}
-            />
-          ) : (
-            <pre
-              style={{
-                margin: 0,
-                padding: 10,
-                background: '#1e1e1e',
-                border: '1px solid #333',
-                borderRadius: 6,
-                fontSize: 12,
-                lineHeight: 1.35,
-                whiteSpace: 'pre-wrap',
-                wordBreak: 'break-word',
+                overflow: 'hidden',
               }}
             >
-              {JSON.stringify(props.asset.json, null, 2)}
-            </pre>
-          ))}
+              <div
+                style={{
+                  position: 'absolute',
+                  inset: 0,
+                  background: '#1e1e1e',
+                  border: '1px solid #333',
+                  borderRadius: 6,
+                  overflow: 'hidden',
+                }}
+              >
+                <Editor
+                  height="100%"
+                  defaultLanguage="json"
+                  theme="vs-dark"
+                  value={draft}
+                  onChange={(value: string | undefined) => setDraft(value ?? '')}
+                  options={{
+                    minimap: { enabled: false },
+                    fontSize: 12,
+                    lineHeight: 16,
+                    wordWrap: 'on',
+                    scrollBeyondLastLine: false,
+                    automaticLayout: true,
+                    tabSize: 2,
+                    fontFamily: editorFontFamily,
+                    readOnly: !canEdit,
+                    domReadOnly: !canEdit,
+                  }}
+                />
+              </div>
+            </div>
+          )}
       </div>
     </div>
   )

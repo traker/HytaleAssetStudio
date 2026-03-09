@@ -10,6 +10,34 @@ from backend.core.project_service import load_project_config
 router = APIRouter(prefix="/api/v1", tags=["index", "graph"])
 
 
+def _group_for_server_path(vfs_path: str) -> str:
+    """Derive a UI group label from a VFS server path."""
+    p = vfs_path.replace("\\", "/").lower()
+    if "/item/items/" in p:
+        return "item"
+    if "/rootinteractions/" in p:
+        return "rootinteraction"
+    if "/interactions/" in p:
+        return "interaction"
+    if "/effects/" in p:
+        return "effect"
+    if "/projectiles/" in p:
+        return "projectile"
+    if "/particles/" in p:
+        return "particle"
+    if "/sounds/" in p or "/soundevents/" in p:
+        return "sound"
+    if "/models/" in p:
+        return "model"
+    if "/npc/" in p or "/npcs/" in p:
+        return "npc"
+    if "/prefabs/" in p:
+        return "prefab"
+    if "/block/" in p or "/blocks/" in p:
+        return "block"
+    return "json_data"
+
+
 @router.post("/projects/{projectId}/rebuild")
 def project_rebuild(projectId: str, settings: Settings = Depends(get_settings)) -> dict:
     cfg, _ = load_project_config(settings.workspace_root, projectId)
@@ -45,6 +73,7 @@ def project_search(
                 "kind": "server-json",
                 "display": server_id,
                 "origin": origin,
+                "group": _group_for_server_path(vfs_path),
             }
         )
         if len(results) >= limit:

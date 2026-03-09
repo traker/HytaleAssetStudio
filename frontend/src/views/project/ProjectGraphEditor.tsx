@@ -17,7 +17,9 @@ import { HasApiError, hasApi } from '../../api'
 import type { AssetGetResponse, ProjectGraphResponse, SearchResult } from '../../api'
 
 import { AssetSidePanel } from '../../components/editor/AssetSidePanel'
+import type { OutgoingDep } from '../../components/graph/BlueprintNode'
 import { BlueprintNode } from '../../components/graph/BlueprintNode'
+import { getColorForGroup, getColorForEdgeType } from '../../components/graph/colors'
 import { layoutGraph } from '../../components/graph/layoutDagre'
 
 type Props = {
@@ -39,7 +41,30 @@ const nodeTypes = {
   blueprint: BlueprintNode,
 }
 
-function toFlow(data: ProjectGraphResponse, rootId: string): { nodes: Node[]; edges: Edge[] } {
+// Relation types that are meaningful enough to show as edge labels on the graph.
+const SEMANTIC_EDGE_TYPES = new Set(['next', 'failed', 'replace', 'fork', 'blocked', 'collisionNext', 'groundNext'])
+
+function toFlow(
+  data: ProjectGraphResponse,
+  rootId: string,
+  onSelectNode: (sourceId: string, targetId: string) => void,
+): { nodes: Node[]; edges: Edge[] } {
+  // Build a quick lookup: id → { label, group }
+  const nodeInfoMap = new Map(data.nodes.map((n) => [n.id, { label: n.label, group: n.group ?? 'json_data' }]))
+
+  // Build outgoing deps per source node
+  const outgoingMap = new Map<string, OutgoingDep[]>()
+  for (const e of data.edges) {
+    if (!outgoingMap.has(e.from)) outgoingMap.set(e.from, [])
+    const target = nodeInfoMap.get(e.to)
+    outgoingMap.get(e.from)!.push({
+      edgeLabel: e.type,
+      targetId: e.to,
+      targetLabel: target?.label ?? e.to,
+      targetGroup: target?.group ?? 'json_data',
+    })
+  }
+
   const nodes: Node[] = data.nodes.map((n) => ({
     id: n.id,
     type: 'blueprint',
@@ -47,26 +72,31 @@ function toFlow(data: ProjectGraphResponse, rootId: string): { nodes: Node[]; ed
     data: {
       label: n.label,
       group: n.group ?? 'json_data',
+      path: n.path,
       isModified: n.state === 'local',
       isRoot: n.id === rootId,
-    },
-    style: {
-      borderRadius: 6,
-      boxShadow: '2px 2px 5px rgba(0,0,0,0.5)',
+      nodeId: n.id,
+      outgoing: outgoingMap.get(n.id) ?? [],
+      onSelectNode,
     },
   }))
 
-  const edges: Edge[] = data.edges.map((e) => ({
-    id: `${e.from}->${e.to}:${e.type}`,
-    source: e.from,
-    target: e.to,
-    type: 'smoothstep',
-    label: e.type,
-    animated: false,
-    style: { stroke: '#666', strokeWidth: 1.5 },
-    labelStyle: { fill: '#aaa', fontSize: 10, fontStyle: 'italic' },
-    labelShowBg: false,
-  }))
+  const edges: Edge[] = data.edges.map((e) => {
+    const color = getColorForEdgeType(e.type)
+    const showLabel = SEMANTIC_EDGE_TYPES.has(e.type)
+    return {
+      id: `${e.from}->${e.to}:${e.type}`,
+      source: e.from,
+      target: e.to,
+      type: 'smoothstep',
+      label: showLabel ? e.type : undefined,
+      animated: false,
+      style: { stroke: color, strokeWidth: 1.5 },
+      labelStyle: { fill: color, fontSize: 9, fontStyle: 'italic', fontWeight: 600 },
+      labelShowBg: false,
+      markerEnd: { type: 'arrowclosed' as const, color },
+    }
+  })
 
   return layoutGraph(nodes, edges, 'LR')
 }
@@ -90,6 +120,8 @@ export function ProjectGraphEditor(props: Props) {
   const [error, setError] = useState<string | null>(null)
 
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
+  const [activeHighlight, setActiveHighlight] = useState<{ edgeIds: Set<string>; nodeIds: Set<string> } | null>(null)
+  const baseEdgesRef = useRef<Edge[]>([])
   const [assetStatus, setAssetStatus] = useState<AssetStatus>({ kind: 'idle' })
   const [assetError, setAssetError] = useState<string | null>(null)
   const [asset, setAsset] = useState<AssetGetResponse | null>(null)
@@ -102,6 +134,33 @@ export function ProjectGraphEditor(props: Props) {
   const onNodesChange = useCallback((changes: NodeChange[]) => setNodes((prev) => applyNodeChanges(changes, prev)), [])
   const onEdgesChange = useCallback((changes: EdgeChange[]) => setEdges((prev) => applyEdgeChanges(changes, prev)), [])
 
+  // Sync isSelected + isConnected on nodes, and highlight edges
+  useEffect(() => {
+    setNodes((prev) =>
+      prev.map((n) => ({
+        ...n,
+        data: {
+          ...n.data,
+          isSelected: n.id === selectedNodeId,
+          isConnected: activeHighlight?.nodeIds.has(n.id) === true && n.id !== selectedNodeId,
+        },
+      }))
+    )
+    setEdges(
+      baseEdgesRef.current.map((e) =>
+        activeHighlight?.edgeIds.has(e.id)
+          ? {
+              ...e,
+              animated: true,
+              zIndex: 1000,
+              style: { ...(e.style as object), stroke: '#00D4FF', strokeDasharray: '6 3', strokeWidth: 2.5 },
+              markerEnd: { type: 'arrowclosed' as const, color: '#00D4FF' },
+            }
+          : e,
+      ),
+    )
+  }, [selectedNodeId, activeHighlight])
+
   const load = useCallback(async () => {
     if (!selected) return
 
@@ -110,12 +169,24 @@ export function ProjectGraphEditor(props: Props) {
     setNodes([])
     setEdges([])
     setSelectedNodeId(null)
+    setActiveHighlight(null)
     setAsset(null)
     setAssetError(null)
 
     try {
       const data = await hasApi.projectGraph(props.projectId, selected.assetKey, depth)
-      const flow = toFlow(data, selected.assetKey)
+      const onSelectNode = (sourceId: string, targetId: string) => {
+        setSelectedNodeId(targetId)
+        const matchingEdges = baseEdgesRef.current.filter(
+          (e) => e.source === sourceId && e.target === targetId,
+        )
+        setActiveHighlight({
+          edgeIds: new Set(matchingEdges.map((e) => e.id)),
+          nodeIds: new Set([targetId]),
+        })
+      }
+      const flow = toFlow(data, selected.assetKey, onSelectNode)
+      baseEdgesRef.current = flow.edges
       setNodes(flow.nodes)
       setEdges(flow.edges)
       setStatus({ kind: 'idle', message: `Loaded: ${data.nodes.length} nodes, ${data.edges.length} edges` })
@@ -207,7 +278,7 @@ export function ProjectGraphEditor(props: Props) {
       selectedNodeId &&
       selectedNode &&
       typeof (selectedNode.data as any)?.group === 'string' &&
-      (selectedNode.data as any).group === 'interaction',
+      ((selectedNode.data as any).group === 'interaction' || (selectedNode.data as any).group === 'rootinteraction'),
   )
 
   function handleSelect(r: SearchResult): void {
@@ -225,7 +296,21 @@ export function ProjectGraphEditor(props: Props) {
         nodeTypes={nodeTypes}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
-        onNodeClick={(_, n) => setSelectedNodeId(n.id)}
+        onNodeClick={(_, n) => {
+          setSelectedNodeId(n.id)
+          const connectedEdges = baseEdgesRef.current.filter(
+            (e) => e.source === n.id || e.target === n.id,
+          )
+          const neighborIds = new Set<string>()
+          connectedEdges.forEach((e) => {
+            if (e.source !== n.id) neighborIds.add(e.source)
+            if (e.target !== n.id) neighborIds.add(e.target)
+          })
+          setActiveHighlight({
+            edgeIds: new Set(connectedEdges.map((e) => e.id)),
+            nodeIds: neighborIds,
+          })
+        }}
         fitView
         fitViewOptions={{ padding: 0.2 }}
         minZoom={0.1}
@@ -285,19 +370,42 @@ export function ProjectGraphEditor(props: Props) {
                       key={r.assetKey}
                       onClick={() => handleSelect(r)}
                       style={{
-                        padding: '8px',
+                        padding: '6px 8px',
                         cursor: 'pointer',
                         color: selected?.assetKey === r.assetKey ? '#61dafb' : 'white',
                         borderBottom: '1px solid #333',
                         background: selected?.assetKey === r.assetKey ? '#111' : 'transparent',
                         fontSize: '12px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 6,
                       }}
                       onMouseEnter={(e) => (e.currentTarget.style.background = '#333')}
                       onMouseLeave={(e) =>
                         (e.currentTarget.style.background = selected?.assetKey === r.assetKey ? '#111' : 'transparent')
                       }
                     >
-                      {r.display}
+                      {r.group && (
+                        <span
+                          style={{
+                            display: 'inline-block',
+                            padding: '1px 5px',
+                            borderRadius: 3,
+                            fontSize: 10,
+                            fontWeight: 'bold',
+                            background: getColorForGroup(r.group),
+                            color: '#111',
+                            textTransform: 'uppercase',
+                            flexShrink: 0,
+                          }}
+                        >
+                          {r.group}
+                        </span>
+                      )}
+                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.display}</span>
+                      {r.origin === 'project' && (
+                        <span style={{ marginLeft: 'auto', fontSize: 10, color: '#FFB347', flexShrink: 0 }}>LOCAL</span>
+                      )}
                     </div>
                   ))}
                   {searchTerm.trim() && searchResults.length === 0 && (
@@ -367,7 +475,7 @@ export function ProjectGraphEditor(props: Props) {
           asset={asset}
           loading={assetStatus.kind === 'loading'}
           error={assetError}
-          onClose={() => setSelectedNodeId(null)}
+          onClose={() => { setSelectedNodeId(null); setActiveHighlight(null) }}
           onRefresh={() => setAssetReloadTick((t) => t + 1)}
           onOpenInteractions={
             props.onOpenInteractions

@@ -59,6 +59,7 @@ export type SearchResult = {
   kind: 'server-json'
   display: string
   origin: 'vanilla' | 'dependency' | 'project'
+  group?: string
 }
 
 export type ProjectSearchResponse = {
