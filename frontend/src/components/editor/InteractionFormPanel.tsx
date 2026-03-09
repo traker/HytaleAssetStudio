@@ -10,7 +10,7 @@
 
 import { useEffect, useState } from 'react'
 import { getColorForInteractionType } from '../graph/colors'
-import { getSchemaForType, type FieldDef, type FieldType } from '../graph/interactionSchemas'
+import { getSchemaForType, type FieldDef } from '../graph/interactionSchemas'
 
 type Tab = 'form' | 'raw'
 
@@ -469,7 +469,11 @@ export function InteractionFormPanel({
         {(['form', 'raw'] as Tab[]).map((t) => (
           <button
             key={t}
-            onClick={() => setTab(t)}
+            onClick={() => {
+              // Sync rawText from current draft when opening raw tab
+              if (t === 'raw') setRawText(JSON.stringify({ ...draft, Type: nodeType }, null, 2))
+              setTab(t)
+            }}
             style={{
               flex: 1,
               padding: '7px 0',
@@ -489,8 +493,8 @@ export function InteractionFormPanel({
         ))}
       </div>
 
-      {/* Content */}
-      <div style={{ flex: 1, overflowY: 'auto', padding: 12 }}>
+      {/* Content — key=nodeId forces remount of uncontrolled textareas on node change */}
+      <div key={nodeId} style={{ flex: 1, overflowY: 'auto', padding: 12 }}>
         {tab === 'form' ? (
           <>
             {isExternal ? (
@@ -500,7 +504,7 @@ export function InteractionFormPanel({
             ) : schema ? (
               <>
                 {schema.fields.map((field) =>
-                  renderField(field as FieldDef & { type: FieldType }, draft[field.key], handleFieldChange),
+                  renderField(field, draft[field.key], handleFieldChange),
                 )}
                 <ExtraFields
                   rawFields={draft}
