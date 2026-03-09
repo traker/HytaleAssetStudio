@@ -1,5 +1,22 @@
 # 📋 Session Recap — Hytale Asset Studio
 
+## 2026-03-XX — App shell redesign (home → project workflow)
+
+**Objectif** : refondre le design global de l'app (accueil → projet) pour qu'il soit cohérent avec la qualité des éditeurs.
+
+**Fait** :
+
+### Fichiers modifiés / créés
+- `frontend/src/index.css` — suppression du `display: flex; place-items: center` sur `body` qui centrait verticalement toute l'app
+- `frontend/src/App.css` — remplacement complet du CSS Vite par un thème dark studio complet : top bar, breadcrumb, tool tiles, project cards, classes `.btn`, `.card`, `.config-grid`, `.layer-card`, `.workspace-section`, `.studio-input`
+- `frontend/src/views/HomePage.tsx` — nouveau fichier : carte workspace (input + bouton Open) + grille de cartes projet (`.project-card` avec hover)
+- `frontend/src/App.tsx` — réécriture : AppShell avec top bar sticky (logo "H", titre, breadcrumb workspace→projet, nav tabs Config/Items/Interactions/Modified/← Projects) ; les vues full-screen (`graph-items`, `graph-interactions`) bypass le shell entièrement
+- `frontend/src/views/ProjectConfigView.tsx` — suppression des boutons de nav (maintenant dans la top bar) ; ajout grille de tool tiles en haut (Items Graph, Interactions, Modified) ; classes CSS `.config-grid`, `.layer-card`, `.btn`
+
+**Commit** : `4d43489`
+
+---
+
 ## 2026-03-05 — Séparation du repo + snapshot legacy
 
 **Décision** : isoler l’outil dans un repo dédié (`HytaleAssetStudio`) pour éviter de polluer le mono-repo Java/Gradle FineCraft.
