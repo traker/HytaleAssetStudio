@@ -30,12 +30,12 @@ export function AssetSidePanel(props: Props) {
   )
 
   useEffect(() => {
-    setIsEditing(false)
+    setIsEditing(canEdit)
     setDraftError(null)
     setSaveStatus({ kind: 'idle' })
     if (props.asset) setDraft(JSON.stringify(props.asset.json, null, 2))
     else setDraft('')
-  }, [props.selectedNodeId, props.asset])
+  }, [props.selectedNodeId, props.asset, canEdit])
 
   async function handleSave(): Promise<void> {
     if (!canEdit) return
@@ -61,7 +61,6 @@ export function AssetSidePanel(props: Props) {
         mode: 'override',
         json: parsed as Record<string, unknown>,
       })
-      setIsEditing(false)
       setSaveStatus({ kind: 'idle' })
       props.onRefresh?.()
     } catch (e) {
@@ -73,7 +72,6 @@ export function AssetSidePanel(props: Props) {
   function handleCancel(): void {
     setDraftError(null)
     setSaveStatus({ kind: 'idle' })
-    setIsEditing(false)
     if (props.asset) setDraft(JSON.stringify(props.asset.json, null, 2))
   }
 
@@ -123,25 +121,6 @@ export function AssetSidePanel(props: Props) {
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          {canEdit && !isEditing && (
-            <button
-              onClick={() => setIsEditing(true)}
-              disabled={props.loading || saveStatus.kind === 'saving'}
-              style={{
-                padding: '4px 8px',
-                background: '#333',
-                color: '#fff',
-                border: '1px solid #555',
-                borderRadius: 4,
-                cursor: !props.loading && saveStatus.kind !== 'saving' ? 'pointer' : 'not-allowed',
-                opacity: !props.loading && saveStatus.kind !== 'saving' ? 1 : 0.6,
-              }}
-              title="Editer en JSON (override)"
-            >
-              Edit
-            </button>
-          )}
-
           {canEdit && isEditing && (
             <>
               <button
