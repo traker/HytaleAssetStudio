@@ -123,35 +123,44 @@ function App() {
           projects={projects}
           onSelectProject={selectProject}
         />
-      ) : projectView === 'graph-items' ? (
-        <ProjectGraphItemsView
-          projectId={selectedProjectId}
-          onBack={() => setProjectView('config')}
-          onOpenInteractions={(root) => {
-            setInteractionRoot(root)
-            setProjectView('graph-interactions')
-          }}
-        />
-      ) : projectView === 'graph-interactions' ? (
-        <ProjectGraphInteractionsView
-          projectId={selectedProjectId}
-          root={interactionRoot}
-          onBack={() => setProjectView('graph-items')}
-        />
-      ) : projectView === 'modified' ? (
-        <div className="page-content">
-          <ProjectModifiedAssetsView
-            projectId={selectedProjectId}
-            onBack={() => setProjectView('config')}
-          />
-        </div>
       ) : (
-        <ProjectConfigView
-          projectId={selectedProjectId}
-          onBack={backToHome}
-          onOpenGraphItems={() => setProjectView('graph-items')}
-          onOpenModified={() => setProjectView('modified')}
-        />
+        <>
+          {/* Graph views stay mounted to preserve state — hidden via display:none when inactive */}
+          <div style={{ display: projectView === 'graph-items' ? 'flex' : 'none', flex: 1, minHeight: 0 }}>
+            <ProjectGraphItemsView
+              projectId={selectedProjectId}
+              onBack={() => setProjectView('config')}
+              onOpenInteractions={(root) => {
+                setInteractionRoot(root)
+                setProjectView('graph-interactions')
+              }}
+            />
+          </div>
+          <div style={{ display: projectView === 'graph-interactions' ? 'flex' : 'none', flex: 1, minHeight: 0 }}>
+            <ProjectGraphInteractionsView
+              projectId={selectedProjectId}
+              root={interactionRoot}
+              onBack={() => setProjectView('graph-items')}
+            />
+          </div>
+
+          {projectView === 'modified' && (
+            <div className="page-content">
+              <ProjectModifiedAssetsView
+                projectId={selectedProjectId}
+                onBack={() => setProjectView('config')}
+              />
+            </div>
+          )}
+          {projectView === 'config' && (
+            <ProjectConfigView
+              projectId={selectedProjectId}
+              onBack={backToHome}
+              onOpenGraphItems={() => setProjectView('graph-items')}
+              onOpenModified={() => setProjectView('modified')}
+            />
+          )}
+        </>
       )}
     </div>
   )
