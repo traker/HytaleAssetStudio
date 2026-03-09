@@ -29,6 +29,10 @@ _REL_KEY_TO_EDGE_TYPE: dict[str, str] = {
     "HitBlock": "child",
     "HitEntity": "child",
     "HitNothing": "child",
+    # Replace — fallback branch { Interactions: [...] }
+    "DefaultValue": "child",
+    # Chaining — { FlagName: interaction } dict
+    "Flags": "child",
 }
 
 
