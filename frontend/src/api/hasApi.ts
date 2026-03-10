@@ -100,4 +100,10 @@ export const hasApi = {
   projectModified(projectId: string): Promise<ModifiedAssetsResponse> {
     return httpJson(`${API_BASE}/projects/${encodeURIComponent(projectId)}/modified`)
   },
+
+  browseDialog(mode: 'folder' | 'file', filter?: 'zip'): Promise<{ path: string | null }> {
+    const params = new URLSearchParams({ mode })
+    if (filter) params.set('filter', filter)
+    return httpJson(`${API_BASE}/dialog/browse?${params.toString()}`)
+  },
 }

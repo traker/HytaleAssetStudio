@@ -1,11 +1,12 @@
-import { useRef } from 'react'
+import { useState } from 'react'
+import { hasApi } from '../../api'
 
 type PathInputProps = {
   value: string
   onChange: (v: string) => void
   placeholder?: string
-  /** 'folder' → directory picker, 'zip' → .zip file picker, 'any' → folder picker */
-  sourceType?: 'folder' | 'zip' | 'any'
+  /** 'folder' → directory picker, 'zip' → .zip file picker */
+  sourceType?: 'folder' | 'zip'
   disabled?: boolean
   className?: string
   style?: React.CSSProperties
@@ -13,49 +14,26 @@ type PathInputProps = {
 }
 
 /**
- * A text input with a "Browse…" button that opens the native file/folder picker.
- *
- * ⚠ Browser limitation: for security reasons, browsers do not expose the full
- * absolute path of a picked file or folder. Only the file/folder **name** is
- * pre-filled from the picker — the user must complete the rest of the path.
+ * Text input with a "Browse…" button that opens a native OS file/folder dialog
+ * via the local backend (tkinter). Returns the full absolute path.
+ * This component is for local use only — never expose the app to the internet.
  */
-export function PathInput({ value, onChange, placeholder, sourceType = 'any', disabled, className, style, onKeyDown }: PathInputProps) {
-  const hiddenRef = useRef<HTMLInputElement>(null)
+export function PathInput({ value, onChange, placeholder, sourceType = 'folder', disabled, className, style, onKeyDown }: PathInputProps) {
+  const [browsing, setBrowsing] = useState(false)
 
-  function handleBrowse(): void {
-    hiddenRef.current?.click()
-  }
-
-  function handlePicked(e: React.ChangeEvent<HTMLInputElement>): void {
-    const files = e.target.files
-    if (!files || files.length === 0) return
-
-    let hint = ''
-    if (sourceType === 'folder') {
-      // webkitRelativePath is like "FolderName/sub/file.json"
-      const rel = files[0].webkitRelativePath
-      hint = rel ? rel.split('/')[0] : files[0].name
-    } else {
-      hint = files[0].name
+  async function handleBrowse(): Promise<void> {
+    setBrowsing(true)
+    try {
+      const mode = sourceType === 'zip' ? 'file' : 'folder'
+      const filter = sourceType === 'zip' ? 'zip' : undefined
+      const res = await hasApi.browseDialog(mode, filter)
+      if (res.path) onChange(res.path)
+    } catch {
+      // dialog failed or cancelled — ignore
+    } finally {
+      setBrowsing(false)
     }
-
-    // Pre-fill only if the field is empty, otherwise append the hint at cursor
-    if (!value.trim()) {
-      onChange(hint)
-    } else {
-      // Replace just the last path segment with the picked name
-      const sep = value.includes('/') ? '/' : '\\'
-      const parts = value.replace(/[\\/]+$/, '').split(/[\\/]/)
-      parts[parts.length - 1] = hint
-      onChange(parts.join(sep))
-    }
-
-    // Reset so the same path can be picked again
-    e.target.value = ''
   }
-
-  const isFolder = sourceType === 'folder' || sourceType === 'any'
-  const isZip = sourceType === 'zip'
 
   return (
     <div style={{ display: 'flex', gap: 6, alignItems: 'center', ...style }}>
@@ -72,25 +50,12 @@ export function PathInput({ value, onChange, placeholder, sourceType = 'any', di
         type="button"
         className="btn btn-ghost"
         onClick={handleBrowse}
-        disabled={disabled}
-        title="Browse… (pre-fills the file/folder name only — complete the full path manually)"
+        disabled={disabled || browsing}
+        title={sourceType === 'zip' ? 'Browse for a .zip file' : 'Browse for a folder'}
         style={{ flexShrink: 0, padding: '5px 10px', fontSize: 11 }}
       >
-        Browse…
+        {browsing ? '…' : 'Browse…'}
       </button>
-
-      {/* Hidden native picker */}
-      <input
-        ref={hiddenRef}
-        type="file"
-        style={{ display: 'none' }}
-        // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-        // @ts-ignore — webkitdirectory is not in the standard TS types
-        webkitdirectory={isFolder ? '' : undefined}
-        multiple={isFolder}
-        accept={isZip ? '.zip' : undefined}
-        onChange={handlePicked}
-      />
     </div>
   )
 }
