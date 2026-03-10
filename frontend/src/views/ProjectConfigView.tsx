@@ -21,6 +21,7 @@ export function ProjectConfigView(props: Props) {
   const [draftVanilla, setDraftVanilla] = useState<PackSource | null>(null)
   const [draftLayers, setDraftLayers] = useState<ProjectLayer[]>([])
   const [draftManifest, setDraftManifest] = useState<ProjectManifest | null>(null)
+  const [manifestOpen, setManifestOpen] = useState(false)
 
   const [status, setStatus] = useState<Status>({ kind: 'idle' })
   const [manifestStatus, setManifestStatus] = useState<{ message?: string; error?: string }>({})
@@ -281,11 +282,22 @@ export function ProjectConfigView(props: Props) {
             </div>
 
             {/* Manifest */}
-            <p className="section-title" style={{ marginTop: 24 }}>Manifest</p>
-            {draftManifest && (
+            <button
+              onClick={() => setManifestOpen((v) => !v)}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 6,
+                marginTop: 24, marginBottom: 0,
+                background: 'none', border: 'none', cursor: 'pointer',
+                padding: 0, color: '#ccc', fontSize: 12, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase',
+              }}
+            >
+              <span style={{ fontSize: 10, color: '#555', transition: 'transform 0.15s', display: 'inline-block', transform: manifestOpen ? 'rotate(90deg)' : 'rotate(0deg)' }}>▶</span>
+              Manifest
+              {manifestStatus.message && <span style={{ fontSize: 11, color: '#4caf93', fontWeight: 400, textTransform: 'none', letterSpacing: 0 }}>{manifestStatus.message}</span>}
+              {manifestStatus.error && <span style={{ fontSize: 11, color: '#e06c75', fontWeight: 400, textTransform: 'none', letterSpacing: 0 }}>{manifestStatus.error}</span>}
+            </button>
+            {manifestOpen && draftManifest && (
               <>
-                {manifestStatus.error && <p className="error-msg">{manifestStatus.error}</p>}
-                {manifestStatus.message && <p className="success-msg">{manifestStatus.message}</p>}
                 <div className="config-grid" style={{ gridTemplateColumns: '140px 1fr' }}>
                   <label>Group *</label>
                   <input value={draftManifest.Group} onChange={(e) => patchManifest({ Group: e.target.value })} disabled={isBusy} />
