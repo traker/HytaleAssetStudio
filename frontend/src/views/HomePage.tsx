@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { HasApiError, hasApi } from '../api'
-import type { PackSource, ProjectInfo, WorkspaceOpenResponse } from '../api'
+import type { ProjectInfo, WorkspaceOpenResponse } from '../api'
 import { PathInput } from '../components/ui/PathInput'
 
 type Props = {
@@ -15,8 +15,6 @@ type Props = {
   onProjectCreated: (projectId: string) => void
 }
 
-const DEFAULT_VANILLA: PackSource = { sourceType: 'folder', path: '' }
-
 export function HomePage(props: Props) {
   const { workspaceRoot, onWorkspaceRootChange, onOpen, isBusy, error, workspace, projects, onSelectProject, onProjectCreated } = props
 
@@ -25,13 +23,10 @@ export function HomePage(props: Props) {
   const [createId, setCreateId] = useState('')
   const [createName, setCreateName] = useState('')
   const [createDir, setCreateDir] = useState('')
-  const [createVanilla, setCreateVanilla] = useState<PackSource>(DEFAULT_VANILLA)
   const [creating, setCreating] = useState(false)
   const [createError, setCreateError] = useState<string | null>(null)
 
   function openCreateForm(): void {
-    const defaults = workspace?.defaults?.vanilla ?? DEFAULT_VANILLA
-    setCreateVanilla({ ...defaults })
     setCreateId('')
     setCreateName('')
     setCreateDir('')
@@ -64,7 +59,7 @@ export function HomePage(props: Props) {
         projectId: id,
         displayName: createName.trim() || id,
         targetDir: dir,
-        vanilla: createVanilla,
+        vanilla: workspace.defaults?.vanilla ?? { sourceType: 'folder', path: '' },
       })
       setShowCreate(false)
       onProjectCreated(res.projectId)
@@ -143,25 +138,6 @@ export function HomePage(props: Props) {
                   onChange={setCreateDir}
                   placeholder={deriveDir('my-project')}
                   sourceType="folder"
-                  disabled={creating}
-                />
-
-                <label>Vanilla type</label>
-                <select
-                  className="studio-input"
-                  value={createVanilla.sourceType}
-                  onChange={(e) => setCreateVanilla({ ...createVanilla, sourceType: e.target.value as 'folder' | 'zip' })}
-                >
-                  <option value="folder">folder</option>
-                  <option value="zip">zip</option>
-                </select>
-
-                <label>Vanilla path</label>
-                <PathInput
-                  value={createVanilla.path}
-                  onChange={(v) => setCreateVanilla({ ...createVanilla, path: v })}
-                  placeholder="K:/path/to/Assets/Server"
-                  sourceType={createVanilla.sourceType === 'zip' ? 'zip' : 'folder'}
                   disabled={creating}
                 />
               </div>

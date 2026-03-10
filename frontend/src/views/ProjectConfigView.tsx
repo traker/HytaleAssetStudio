@@ -160,29 +160,8 @@ export function ProjectConfigView(props: Props) {
           <p style={{ color: '#555', fontSize: 13 }}>{status.kind === 'loading' ? 'Loading…' : 'No config loaded.'}</p>
         ) : (
           <>
-            {/* Vanilla */}
-            <p className="section-title" style={{ marginTop: 8 }}>Vanilla pack</p>
-            <div className="config-grid">
-              <label>sourceType</label>
-              <select
-                value={draftVanilla.sourceType}
-                onChange={(e) => setDraftVanilla({ ...draftVanilla, sourceType: e.target.value as PackSource['sourceType'] })}
-              >
-                <option value="folder">folder</option>
-                <option value="zip">zip</option>
-              </select>
-
-              <label>path</label>
-              <PathInput
-                value={draftVanilla.path}
-                onChange={(v) => setDraftVanilla({ ...draftVanilla, path: v })}
-                sourceType={draftVanilla.sourceType === 'zip' ? 'zip' : 'folder'}
-                disabled={isBusy}
-              />
-            </div>
-
             {/* Layers */}
-            <p className="section-title" style={{ marginTop: 20 }}>Layers</p>
+            <p className="section-title" style={{ marginTop: 8 }}>Layers</p>
             {draftLayers.length === 0 ? (
               <p style={{ color: '#555', fontSize: 12 }}>No layers.</p>
             ) : (
