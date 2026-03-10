@@ -110,6 +110,33 @@ export function ProjectConfigView(props: Props) {
     })
   }
 
+  function addDepEntry(field: 'Dependencies' | 'OptionalDependencies'): void {
+    setDraftManifest((prev) => {
+      if (!prev) return prev
+      const entries = Object.entries(prev[field] ?? {})
+      entries.push(['', '*'])
+      return { ...prev, [field]: Object.fromEntries(entries) }
+    })
+  }
+
+  function setDepEntry(field: 'Dependencies' | 'OptionalDependencies', index: number, key: string, value: string): void {
+    setDraftManifest((prev) => {
+      if (!prev) return prev
+      const entries = Object.entries(prev[field] ?? {})
+      entries[index] = [key, value]
+      return { ...prev, [field]: Object.fromEntries(entries) }
+    })
+  }
+
+  function removeDepEntry(field: 'Dependencies' | 'OptionalDependencies', index: number): void {
+    setDraftManifest((prev) => {
+      if (!prev) return prev
+      const entries = Object.entries(prev[field] ?? {})
+      entries.splice(index, 1)
+      return { ...prev, [field]: Object.fromEntries(entries) }
+    })
+  }
+
   async function saveManifest(): Promise<void> {
     if (!draftManifest) return
     setManifestStatus({})
@@ -300,6 +327,46 @@ export function ProjectConfigView(props: Props) {
                 ))}
                 <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
                   <button className="btn btn-secondary" onClick={addAuthor} disabled={isBusy}>+ Add author</button>
+                </div>
+
+                {(['Dependencies', 'OptionalDependencies'] as const).map((field) => {
+                  const entries = Object.entries(draftManifest[field] ?? {})
+                  const label = field === 'Dependencies' ? 'Dependencies' : 'Optional dependencies'
+                  const hint = field === 'Dependencies' ? 'required' : 'optional'
+                  return (
+                    <div key={field}>
+                      <p style={{ fontSize: 12, fontWeight: 600, color: '#aaa', marginTop: 14, marginBottom: 4 }}>
+                        {label}
+                        <span style={{ fontSize: 11, color: '#555', fontWeight: 400, marginLeft: 6 }}>Group:Name → version — pack {hint}</span>
+                      </p>
+                      {entries.length === 0 && (
+                        <p style={{ color: '#555', fontSize: 12 }}>None.</p>
+                      )}
+                      {entries.map(([key, val], i) => (
+                        <div key={i} style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 4 }}>
+                          <input
+                            style={{ flex: 2 }}
+                            value={key}
+                            placeholder="com.example:MyPack"
+                            onChange={(e) => setDepEntry(field, i, e.target.value, val)}
+                            disabled={isBusy}
+                          />
+                          <input
+                            style={{ flex: 1 }}
+                            value={val}
+                            placeholder="*"
+                            onChange={(e) => setDepEntry(field, i, key, e.target.value)}
+                            disabled={isBusy}
+                          />
+                          <button className="btn btn-danger" style={{ padding: '2px 8px' }} onClick={() => removeDepEntry(field, i)} disabled={isBusy}>✕</button>
+                        </div>
+                      ))}
+                      <button className="btn btn-secondary" style={{ marginTop: 4 }} onClick={() => addDepEntry(field)} disabled={isBusy}>+ Add</button>
+                    </div>
+                  )
+                })}
+
+                <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
                   <button className="btn btn-primary" onClick={saveManifest} disabled={isBusy}>Save manifest</button>
                 </div>
               </>

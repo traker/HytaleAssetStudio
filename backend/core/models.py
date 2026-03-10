@@ -158,6 +158,8 @@ class ProjectManifest(BaseModel):
     Authors: list[ProjectManifestAuthor] = Field(default_factory=list)
     Website: str = ""
     ServerVersion: str = "*"
+    Dependencies: dict[str, str] = Field(default_factory=dict)
+    OptionalDependencies: dict[str, str] = Field(default_factory=dict)
     DisabledByDefault: bool = False
     IncludesAssetPack: bool = True
 

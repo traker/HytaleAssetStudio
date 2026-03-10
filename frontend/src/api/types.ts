@@ -122,6 +122,8 @@ export type ProjectManifest = {
   Authors?: ProjectManifestAuthor[]
   Website?: string
   ServerVersion?: string
+  Dependencies?: Record<string, string>
+  OptionalDependencies?: Record<string, string>
   DisabledByDefault?: boolean
   IncludesAssetPack?: boolean
 }
