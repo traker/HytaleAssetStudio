@@ -300,7 +300,7 @@ export function ProjectConfigView(props: Props) {
                   <label>ServerVersion</label>
                   <input value={draftManifest.ServerVersion ?? '*'} onChange={(e) => patchManifest({ ServerVersion: e.target.value })} disabled={isBusy} />
                   <label>IncludesAssetPack</label>
-                  <input type="checkbox" checked={draftManifest.IncludesAssetPack ?? true} onChange={(e) => patchManifest({ IncludesAssetPack: e.target.checked })} disabled={isBusy} />
+                  <input type="checkbox" checked={draftManifest.IncludesAssetPack ?? false} onChange={(e) => patchManifest({ IncludesAssetPack: e.target.checked })} disabled={isBusy} />
                   <label>DisabledByDefault</label>
                   <input type="checkbox" checked={draftManifest.DisabledByDefault ?? false} onChange={(e) => patchManifest({ DisabledByDefault: e.target.checked })} disabled={isBusy} />
                 </div>

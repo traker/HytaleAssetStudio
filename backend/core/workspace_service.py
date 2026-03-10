@@ -157,7 +157,7 @@ def create_project(workspace_root: Path, req: ProjectCreateRequest) -> ProjectCr
         "Website": "",
         "ServerVersion": "*",
         "DisabledByDefault": False,
-        "IncludesAssetPack": True,
+        "IncludesAssetPack": False,
     }
     write_json(project_root / "manifest.json", manifest_data)
 

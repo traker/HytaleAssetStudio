@@ -161,7 +161,7 @@ class ProjectManifest(BaseModel):
     Dependencies: dict[str, str] = Field(default_factory=dict)
     OptionalDependencies: dict[str, str] = Field(default_factory=dict)
     DisabledByDefault: bool = False
-    IncludesAssetPack: bool = True
+    IncludesAssetPack: bool = False
 
 
 class ManifestPutRequest(BaseModel):
