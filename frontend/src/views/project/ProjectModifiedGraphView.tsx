@@ -186,6 +186,20 @@ export function ProjectModifiedGraphView(props: Props) {
     setRebuildTick((t) => t + 1)
   }, [handleSelectNode])
 
+  // ── Soft graph refresh after a save (keeps current selection) ────────────
+  const softReloadGraph = useCallback(async () => {
+    try {
+      const resp = await hasApi.projectGraphModified(props.projectId, depth)
+      rawNodesRef.current = resp.nodes
+      rawEdgesRef.current = resp.edges
+      modifiedIdSetRef.current = new Set(resp.modifiedIds ?? [])
+      expandedNodeIdsRef.current = new Set(resp.modifiedIds ?? [])
+      rebuildFlow()
+    } catch {
+      // ignore — the side panel will show the error if needed
+    }
+  }, [props.projectId, depth, rebuildFlow])
+
   // ── Full reload on mount / projectId / depth change ───────────────────────
   useEffect(() => {
     let cancelled = false
@@ -446,7 +460,7 @@ export function ProjectModifiedGraphView(props: Props) {
             setSelectedNodeId(null)
             setActiveHighlight(null)
           }}
-          onRefresh={() => setAssetReloadTick((t) => t + 1)}
+          onRefresh={() => { setAssetReloadTick((t) => t + 1); void softReloadGraph() }}
           onOpenInteractions={
             props.onOpenInteractions
               ? () => {
