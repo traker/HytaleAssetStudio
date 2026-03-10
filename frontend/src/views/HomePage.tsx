@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { HasApiError, hasApi } from '../api'
 import type { PackSource, ProjectInfo, WorkspaceOpenResponse } from '../api'
+import { PathInput } from '../components/ui/PathInput'
 
 type Props = {
   workspaceRoot: string
@@ -83,11 +84,13 @@ export function HomePage(props: Props) {
         </h2>
         <label className="studio-label">Workspace root path</label>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 4 }}>
-          <input
-            className="studio-input"
+          <PathInput
             value={workspaceRoot}
-            onChange={(e) => onWorkspaceRootChange(e.target.value)}
+            onChange={onWorkspaceRootChange}
             placeholder="K:/hytale-asset-studio-workspace"
+            sourceType="folder"
+            disabled={isBusy}
+            style={{ flex: 1 }}
             onKeyDown={(e) => e.key === 'Enter' && !isBusy && onOpen()}
           />
           <button
@@ -135,11 +138,12 @@ export function HomePage(props: Props) {
                 />
 
                 <label>Directory *</label>
-                <input
-                  className="studio-input"
+                <PathInput
                   value={createDir}
-                  onChange={(e) => setCreateDir(e.target.value)}
+                  onChange={setCreateDir}
                   placeholder={deriveDir('my-project')}
+                  sourceType="folder"
+                  disabled={creating}
                 />
 
                 <label>Vanilla type</label>
@@ -153,11 +157,12 @@ export function HomePage(props: Props) {
                 </select>
 
                 <label>Vanilla path</label>
-                <input
-                  className="studio-input"
+                <PathInput
                   value={createVanilla.path}
-                  onChange={(e) => setCreateVanilla({ ...createVanilla, path: e.target.value })}
+                  onChange={(v) => setCreateVanilla({ ...createVanilla, path: v })}
                   placeholder="K:/path/to/Assets/Server"
+                  sourceType={createVanilla.sourceType === 'zip' ? 'zip' : 'folder'}
+                  disabled={creating}
                 />
               </div>
 

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { HasApiError, hasApi } from '../api'
 import type { PackSource, ProjectConfig, ProjectLayer } from '../api'
+import { PathInput } from '../components/ui/PathInput'
 
 type Props = {
   projectId: string
@@ -172,7 +173,12 @@ export function ProjectConfigView(props: Props) {
               </select>
 
               <label>path</label>
-              <input value={draftVanilla.path} onChange={(e) => setDraftVanilla({ ...draftVanilla, path: e.target.value })} />
+              <PathInput
+                value={draftVanilla.path}
+                onChange={(v) => setDraftVanilla({ ...draftVanilla, path: v })}
+                sourceType={draftVanilla.sourceType === 'zip' ? 'zip' : 'folder'}
+                disabled={isBusy}
+              />
             </div>
 
             {/* Layers */}
@@ -203,7 +209,12 @@ export function ProjectConfigView(props: Props) {
                       <option value="zip">zip</option>
                     </select>
                     <label>path</label>
-                    <input value={layer.path} onChange={(e) => updateLayer(i, { path: e.target.value })} />
+                    <PathInput
+                      value={layer.path}
+                      onChange={(v) => updateLayer(i, { path: v })}
+                      sourceType={layer.sourceType === 'zip' ? 'zip' : 'folder'}
+                      disabled={isBusy}
+                    />
                   </div>
                 </div>
               ))
@@ -222,10 +233,12 @@ export function ProjectConfigView(props: Props) {
             <p className="section-title" style={{ marginTop: 24 }}>Export ZIP</p>
             <div className="config-grid" style={{ gridTemplateColumns: '120px 1fr' }}>
               <label>outputPath</label>
-              <input
+              <PathInput
                 value={exportPath}
-                onChange={(e) => setExportPath(e.target.value)}
+                onChange={setExportPath}
                 placeholder="K:/…/exports/my-pack.zip"
+                sourceType="zip"
+                disabled={isBusy}
               />
             </div>
             <div style={{ marginTop: 10 }}>
