@@ -150,8 +150,7 @@ export type ModifiedAssetEntry = {
   assetKey: string | null
   size: number
   mtimeMs: number
-  origin: 'project'
-}
+  origin: 'project'  isNew: boolean}
 
 export type ModifiedAssetsResponse = {
   projectId: string

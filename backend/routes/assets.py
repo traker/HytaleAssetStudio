@@ -21,10 +21,20 @@ def get_modified_assets(projectId: str, settings: Settings = Depends(get_setting
     index = ensure_index(cfg.project.id, cfg)
 
     from pathlib import Path
+    from backend.core.index_service import build_mounts
 
     root = Path(cfg.project.assetsWritePath)
     if not root.exists():
         raise http_error(404, "PROJECT_NOT_FOUND", "Project assetsWritePath not found", {"path": str(root)})
+
+    # Build a set of all vfs_paths that exist in non-project mounts.
+    # A project file whose vfs_path is NOT in this set is a brand-new asset.
+    non_project_paths: set[str] = set()
+    for mount in build_mounts(cfg):
+        if mount.origin == "project":
+            continue
+        for rel in mount.list_files():
+            non_project_paths.add(rel.replace("\\", "/").lstrip("/"))
 
     entries: list[ModifiedAssetEntry] = []
 
@@ -51,6 +61,7 @@ def get_modified_assets(projectId: str, settings: Settings = Depends(get_setting
                     assetKey=asset_key,
                     size=st.st_size,
                     mtimeMs=int(st.st_mtime * 1000),
+                    isNew=rel not in non_project_paths,
                 )
             )
 

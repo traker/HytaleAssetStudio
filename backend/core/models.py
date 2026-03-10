@@ -176,6 +176,7 @@ class ModifiedAssetEntry(BaseModel):
     size: int
     mtimeMs: int
     origin: Literal["project"] = "project"
+    isNew: bool = False
 
 
 class ModifiedAssetsResponse(BaseModel):

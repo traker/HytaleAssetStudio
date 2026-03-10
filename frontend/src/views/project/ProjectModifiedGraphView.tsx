@@ -51,6 +51,8 @@ export function ProjectModifiedGraphView(props: Props) {
     : undefined
 
   const jsonCount = entries.filter((e) => e.kind === 'server-json' && e.assetKey).length
+  const newCount = entries.filter((e) => e.kind === 'server-json' && e.isNew).length
+  const overrideCount = entries.filter((e) => e.kind === 'server-json' && !e.isNew).length
 
   return (
     <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
@@ -79,7 +81,13 @@ export function ProjectModifiedGraphView(props: Props) {
               ? 'Loading…'
               : error
               ? <span style={{ color: '#e06c75' }}>{error}</span>
-              : `${jsonCount} server JSON · ${entries.length - jsonCount} common`}
+              : <>
+                  <span style={{ color: '#7ec87e' }}>{newCount} new</span>
+                  {' · '}
+                  <span style={{ color: '#7a7aaa' }}>{overrideCount} override</span>
+                  {entries.length - jsonCount > 0 && <> · {entries.length - jsonCount} common</>}
+                </>
+            }
           </div>
         </div>
 
@@ -139,7 +147,21 @@ export function ProjectModifiedGraphView(props: Props) {
                 >
                   {e.vfsPath}
                 </div>
-                <div style={{ fontSize: 10, color: '#3a3a55', marginTop: 1 }}>
+                <div
+                  style={{
+                    fontSize: 10,
+                    color: '#3a3a55',
+                    marginTop: 1,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 5,
+                  }}
+                >
+                  {e.isNew
+                    ? <span style={{ color: '#7ec87e', fontWeight: 700, letterSpacing: '0.05em' }}>NEW</span>
+                    : <span style={{ color: '#7a7aaa', fontWeight: 600, letterSpacing: '0.05em' }}>OVERRIDE</span>
+                  }
+                  <span style={{ color: '#3a3a55' }}>·</span>
                   {e.kind === 'server-json' ? 'Server JSON' : 'Common'} · {(e.size / 1024).toFixed(1)} KB
                 </div>
               </div>
