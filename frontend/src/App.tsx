@@ -7,7 +7,7 @@ import { HomePage } from './views/HomePage'
 import { ProjectConfigView } from './views/ProjectConfigView'
 import { ProjectGraphItemsView } from './views/project/ProjectGraphItemsView'
 import { ProjectGraphInteractionsView } from './views/project/ProjectGraphInteractionsView'
-import { ProjectModifiedAssetsView } from './views/project/ProjectModifiedAssetsView'
+import { ProjectModifiedGraphView } from './views/project/ProjectModifiedGraphView'
 
 type ProjectView = 'config' | 'graph-items' | 'graph-interactions' | 'modified'
 type GraphRoot = { assetKey: string; display: string }
@@ -155,15 +155,16 @@ function App() {
               onBack={() => setProjectView('graph-items')}
             />
           </div>
-
-          {projectView === 'modified' && (
-            <div className="page-content">
-              <ProjectModifiedAssetsView
-                projectId={selectedProjectId}
-                onBack={() => setProjectView('config')}
-              />
-            </div>
-          )}
+          <div style={{ display: projectView === 'modified' ? 'flex' : 'none', flex: 1, minHeight: 0 }}>
+            <ProjectModifiedGraphView
+              projectId={selectedProjectId}
+              onBack={() => setProjectView('config')}
+              onOpenInteractions={(root) => {
+                setInteractionRoot(root)
+                setProjectView('graph-interactions')
+              }}
+            />
+          </div>
           {projectView === 'config' && (
             <ProjectConfigView
               projectId={selectedProjectId}
