@@ -104,6 +104,11 @@ export function ProjectModifiedGraphView(props: Props) {
 
   const [nodes, setNodes] = useState<Node[]>([])
   const [edges, setEdges] = useState<Edge[]>([])
+  // Plain (un-highlighted) edges — source of truth for re-applying highlight
+  const baseEdgesRef = useRef<Edge[]>([])
+  // Incremented on each rebuildFlow to re-trigger the highlight useEffect
+  const [rebuildTick, setRebuildTick] = useState(0)
+
   const onNodesChange = useCallback(
     (changes: NodeChange[]) => setNodes((n) => applyNodeChanges(changes, n)),
     [],
@@ -126,17 +131,60 @@ export function ProjectModifiedGraphView(props: Props) {
     nodeIds: Set<string>
   } | null>(null)
 
+  // ── Sync isSelected + isConnected on nodes, animate highlighted edges ─────
+  useEffect(() => {
+    setNodes((prev) =>
+      prev.map((n) => ({
+        ...n,
+        data: {
+          ...n.data,
+          isSelected: n.id === selectedNodeId,
+          isConnected: activeHighlight?.nodeIds.has(n.id) === true && n.id !== selectedNodeId,
+        },
+      })),
+    )
+    setEdges(
+      baseEdgesRef.current.map((e) =>
+        activeHighlight?.edgeIds.has(e.id)
+          ? {
+              ...e,
+              animated: true,
+              zIndex: 1000,
+              style: { ...(e.style as object), stroke: '#00D4FF', strokeDasharray: '6 3', strokeWidth: 2.5 },
+              markerEnd: { type: 'arrowclosed' as const, color: '#00D4FF' },
+            }
+          : e,
+      ),
+    )
+  // rebuildTick ensures this re-runs after an expand merges new edges into baseEdgesRef
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedNodeId, activeHighlight, rebuildTick])
+
+  // dep-ref click from inside a BlueprintNode
+  const handleSelectNode = useCallback((sourceId: string, targetId: string) => {
+    setSelectedNodeId(targetId)
+    const matchingEdges = baseEdgesRef.current.filter(
+      (e) => e.source === sourceId && e.target === targetId,
+    )
+    setActiveHighlight({
+      edgeIds: new Set(matchingEdges.map((e) => e.id)),
+      nodeIds: new Set([targetId]),
+    })
+  }, [])
+
   // Rebuild ReactFlow display from accumulated raw data
   const rebuildFlow = useCallback(() => {
     const { nodes: fn, edges: fe } = toFlow(
       rawNodesRef.current,
       rawEdgesRef.current,
       modifiedIdSetRef.current,
-      (_, targetId) => setSelectedNodeId(targetId),
+      handleSelectNode,
     )
+    baseEdgesRef.current = fe
     setNodes(fn)
     setEdges(fe)
-  }, [])
+    setRebuildTick((t) => t + 1)
+  }, [handleSelectNode])
 
   // ── Full reload on mount / projectId / depth change ───────────────────────
   useEffect(() => {
@@ -244,24 +292,6 @@ export function ProjectModifiedGraphView(props: Props) {
   }, [props.projectId, selectedNodeId, assetReloadTick])
 
   // ── Apply dim highlight to non-connected edges/nodes ──────────────────────
-  const displayNodes = activeHighlight
-    ? nodes.map((n) => ({
-        ...n,
-        data: { ...n.data, isConnected: activeHighlight.nodeIds.has(n.id) },
-      }))
-    : nodes
-
-  const displayEdges = activeHighlight
-    ? edges.map((e) => ({
-        ...e,
-        style: {
-          ...e.style,
-          opacity: activeHighlight.edgeIds.has(e.id) ? 1 : 0.08,
-          strokeWidth: activeHighlight.edgeIds.has(e.id) ? 2.5 : 1,
-        },
-      }))
-    : edges
-
   const selectedNode = selectedNodeId
     ? nodes.find((n) => n.id === selectedNodeId) ?? null
     : null
@@ -277,14 +307,14 @@ export function ProjectModifiedGraphView(props: Props) {
   return (
     <div style={{ flex: 1, position: 'relative', overflow: 'hidden', background: '#1e1e1e' }}>
       <ReactFlow
-        nodes={displayNodes}
-        edges={displayEdges}
+        nodes={nodes}
+        edges={edges}
         nodeTypes={nodeTypes}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         onNodeClick={(_, n) => {
           setSelectedNodeId(n.id)
-          const connectedEdges = edges.filter(
+          const connectedEdges = baseEdgesRef.current.filter(
             (e) => e.source === n.id || e.target === n.id,
           )
           const neighborIds = new Set<string>()
@@ -294,7 +324,7 @@ export function ProjectModifiedGraphView(props: Props) {
           })
           setActiveHighlight({
             edgeIds: new Set(connectedEdges.map((e) => e.id)),
-            nodeIds: new Set([n.id, ...neighborIds]),
+            nodeIds: neighborIds,
           })
           void expandNode(n.id)
         }}
