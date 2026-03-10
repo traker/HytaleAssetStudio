@@ -108,6 +108,24 @@ export type AssetPutResponse = {
 export type ExportZipRequest = { outputPath: string }
 export type ExportZipResponse = { ok: true; outputPath: string }
 
+export type ProjectManifestAuthor = {
+  Name: string
+  Email?: string
+  Url?: string
+}
+
+export type ProjectManifest = {
+  Group: string
+  Name: string
+  Version: string
+  Description?: string
+  Authors?: ProjectManifestAuthor[]
+  Website?: string
+  ServerVersion?: string
+  DisabledByDefault?: boolean
+  IncludesAssetPack?: boolean
+}
+
 export type ProjectCreateRequest = {
   projectId: string
   displayName: string

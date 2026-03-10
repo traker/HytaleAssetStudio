@@ -58,6 +58,15 @@ def _validate_manifest(project_root: Path) -> dict:
             {"path": str(manifest_path), "Group": group, "Name": name},
         )
 
+    version = manifest.get("Version")
+    if not isinstance(version, str) or not version.strip():
+        raise http_error(
+            422,
+            "MANIFEST_INVALID",
+            "manifest.json must contain a non-empty string field Version",
+            {"path": str(manifest_path), "Version": version},
+        )
+
     return manifest
 
 

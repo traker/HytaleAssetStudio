@@ -148,8 +148,18 @@ def create_project(workspace_root: Path, req: ProjectCreateRequest) -> ProjectCr
     (project_root / "Common").mkdir(parents=True, exist_ok=True)
     (project_root / "Server").mkdir(parents=True, exist_ok=True)
 
-    manifest = req.manifest or {"Group": req.projectId, "Name": req.displayName}
-    write_json(project_root / "manifest.json", manifest)
+    manifest_data = req.manifest or {
+        "Group": req.projectId,
+        "Name": req.displayName,
+        "Version": "1.0.0",
+        "Description": "",
+        "Authors": [],
+        "Website": "",
+        "ServerVersion": "*",
+        "DisabledByDefault": False,
+        "IncludesAssetPack": True,
+    }
+    write_json(project_root / "manifest.json", manifest_data)
 
     cfg = ProjectConfig(
         project=ProjectConfigProject(

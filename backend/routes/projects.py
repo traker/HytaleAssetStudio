@@ -1,8 +1,12 @@
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
 from fastapi import APIRouter, Depends
 
 from backend.core.config import Settings, get_settings
+from backend.core.errors import http_error
 from backend.core.export_service import export_project_zip
 from backend.core.index_service import rebuild_project_index
 from backend.core.models import (
@@ -10,13 +14,16 @@ from backend.core.models import (
     ExportZipResponse,
     ImportPackRequest,
     ImportPackResponse,
+    ManifestPutRequest,
     OkResponse,
     ProjectCreateRequest,
     ProjectCreateResponse,
     ProjectLayersPutRequest,
+    ProjectManifest,
     ProjectOpenRequest,
     ProjectOpenResponse,
 )
+from backend.core.io import write_json
 from backend.core.project_service import load_project_config, save_project_config
 from backend.core.workspace_service import create_project, import_pack, open_project
 
@@ -72,3 +79,29 @@ def project_export_zip(projectId: str, req: ExportZipRequest, settings: Settings
     cfg, _ = load_project_config(settings.workspace_root, projectId)
     result = export_project_zip(cfg, req.outputPath)
     return ExportZipResponse(**result)
+
+
+@router.get("/projects/{projectId}/manifest")
+def project_get_manifest(projectId: str, settings: Settings = Depends(get_settings)) -> dict:
+    cfg, _ = load_project_config(settings.workspace_root, projectId)
+    manifest_path = Path(cfg.project.assetsWritePath) / "manifest.json"
+    if not manifest_path.exists():
+        # Return a default manifest seeded from project metadata
+        return ProjectManifest(Group=cfg.project.id, Name=cfg.project.displayName).dict()
+    try:
+        return json.loads(manifest_path.read_text(encoding="utf-8"))
+    except Exception as e:
+        raise http_error(422, "MANIFEST_INVALID", "manifest.json is not valid JSON", {"error": str(e)})
+
+
+@router.put("/projects/{projectId}/manifest", response_model=OkResponse)
+def project_put_manifest(
+    projectId: str,
+    req: ManifestPutRequest,
+    settings: Settings = Depends(get_settings),
+) -> OkResponse:
+    cfg, _ = load_project_config(settings.workspace_root, projectId)
+    manifest_path = Path(cfg.project.assetsWritePath) / "manifest.json"
+    from backend.core.pydantic_compat import model_dump
+    write_json(manifest_path, model_dump(req.manifest))
+    return OkResponse(ok=True)

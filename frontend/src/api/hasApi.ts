@@ -12,6 +12,7 @@ import type {
   ProjectCreateResponse,
   ProjectGraphResponse,
   ProjectLayersPutRequest,
+  ProjectManifest,
   ProjectSearchResponse,
   InteractionTreeResponse,
   WorkspaceOpenRequest,
@@ -99,6 +100,17 @@ export const hasApi = {
 
   projectModified(projectId: string): Promise<ModifiedAssetsResponse> {
     return httpJson(`${API_BASE}/projects/${encodeURIComponent(projectId)}/modified`)
+  },
+
+  projectGetManifest(projectId: string): Promise<ProjectManifest> {
+    return httpJson(`${API_BASE}/projects/${encodeURIComponent(projectId)}/manifest`)
+  },
+
+  projectPutManifest(projectId: string, manifest: ProjectManifest): Promise<OkResponse> {
+    return httpJson(`${API_BASE}/projects/${encodeURIComponent(projectId)}/manifest`, {
+      method: 'PUT',
+      body: JSON.stringify({ manifest }),
+    })
   },
 
   browseDialog(mode: 'folder' | 'file', filter?: 'zip'): Promise<{ path: string | null }> {

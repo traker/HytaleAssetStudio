@@ -144,6 +144,28 @@ class ExportZipResponse(BaseModel):
     outputPath: str
 
 
+class ProjectManifestAuthor(BaseModel):
+    Name: str
+    Email: str = ""
+    Url: str = ""
+
+
+class ProjectManifest(BaseModel):
+    Group: str = ""
+    Name: str = ""
+    Version: str = "1.0.0"
+    Description: str = ""
+    Authors: list[ProjectManifestAuthor] = Field(default_factory=list)
+    Website: str = ""
+    ServerVersion: str = "*"
+    DisabledByDefault: bool = False
+    IncludesAssetPack: bool = True
+
+
+class ManifestPutRequest(BaseModel):
+    manifest: ProjectManifest
+
+
 class ModifiedAssetEntry(BaseModel):
     kind: Literal["server-json", "common-resource"]
     vfsPath: str

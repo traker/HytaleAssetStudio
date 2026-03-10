@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { HasApiError, hasApi } from '../api'
-import type { PackSource, ProjectConfig, ProjectLayer } from '../api'
+import type { PackSource, ProjectConfig, ProjectLayer, ProjectManifest, ProjectManifestAuthor } from '../api'
 import { PathInput } from '../components/ui/PathInput'
 
 type Props = {
@@ -20,8 +20,10 @@ export function ProjectConfigView(props: Props) {
   const [config, setConfig] = useState<ProjectConfig | null>(null)
   const [draftVanilla, setDraftVanilla] = useState<PackSource | null>(null)
   const [draftLayers, setDraftLayers] = useState<ProjectLayer[]>([])
+  const [draftManifest, setDraftManifest] = useState<ProjectManifest | null>(null)
 
   const [status, setStatus] = useState<Status>({ kind: 'idle' })
+  const [manifestStatus, setManifestStatus] = useState<{ message?: string; error?: string }>({})
   const [error, setError] = useState<string | null>(null)
 
   const [exportPath, setExportPath] = useState('')
@@ -37,11 +39,15 @@ export function ProjectConfigView(props: Props) {
       setStatus({ kind: 'loading' })
       setError(null)
       try {
-        const cfg = await hasApi.projectConfig(props.projectId)
+        const [cfg, mfst] = await Promise.all([
+          hasApi.projectConfig(props.projectId),
+          hasApi.projectGetManifest(props.projectId),
+        ])
         if (cancelled) return
         setConfig(cfg)
         setDraftVanilla(clone(cfg.vanilla))
         setDraftLayers(clone(cfg.layers ?? []))
+        setDraftManifest(clone(mfst))
       } catch (e) {
         if (cancelled) return
         setError(e instanceof HasApiError ? e.message : 'Unexpected error')
@@ -75,6 +81,45 @@ export function ProjectConfigView(props: Props) {
 
   function removeLayer(index: number): void {
     setDraftLayers((prev) => prev.filter((_, i) => i !== index))
+  }
+
+  function patchManifest(patch: Partial<ProjectManifest>): void {
+    setDraftManifest((prev) => prev ? { ...prev, ...patch } : prev)
+  }
+
+  function updateAuthor(index: number, patch: Partial<ProjectManifestAuthor>): void {
+    setDraftManifest((prev) => {
+      if (!prev) return prev
+      const authors = [...(prev.Authors ?? [])]
+      authors[index] = { ...authors[index], ...patch }
+      return { ...prev, Authors: authors }
+    })
+  }
+
+  function addAuthor(): void {
+    setDraftManifest((prev) => {
+      if (!prev) return prev
+      return { ...prev, Authors: [...(prev.Authors ?? []), { Name: '', Email: '', Url: '' }] }
+    })
+  }
+
+  function removeAuthor(index: number): void {
+    setDraftManifest((prev) => {
+      if (!prev) return prev
+      return { ...prev, Authors: (prev.Authors ?? []).filter((_, i) => i !== index) }
+    })
+  }
+
+  async function saveManifest(): Promise<void> {
+    if (!draftManifest) return
+    setManifestStatus({})
+    try {
+      await hasApi.projectPutManifest(props.projectId, draftManifest)
+      setManifestStatus({ message: 'Manifest saved' })
+      setTimeout(() => setManifestStatus({}), 1500)
+    } catch (e) {
+      setManifestStatus({ error: e instanceof HasApiError ? e.message : 'Failed to save manifest' })
+    }
   }
 
   function addLayer(): void {
@@ -207,6 +252,58 @@ export function ProjectConfigView(props: Props) {
                 {status.kind === 'saving' ? 'Saving…' : 'Save'}
               </button>
             </div>
+
+            {/* Manifest */}
+            <p className="section-title" style={{ marginTop: 24 }}>Manifest</p>
+            {draftManifest && (
+              <>
+                {manifestStatus.error && <p className="error-msg">{manifestStatus.error}</p>}
+                {manifestStatus.message && <p className="success-msg">{manifestStatus.message}</p>}
+                <div className="config-grid" style={{ gridTemplateColumns: '140px 1fr' }}>
+                  <label>Group *</label>
+                  <input value={draftManifest.Group} onChange={(e) => patchManifest({ Group: e.target.value })} disabled={isBusy} />
+                  <label>Name *</label>
+                  <input value={draftManifest.Name} onChange={(e) => patchManifest({ Name: e.target.value })} disabled={isBusy} />
+                  <label>Version *</label>
+                  <input value={draftManifest.Version} onChange={(e) => patchManifest({ Version: e.target.value })} disabled={isBusy} />
+                  <label>Description</label>
+                  <input value={draftManifest.Description ?? ''} onChange={(e) => patchManifest({ Description: e.target.value })} disabled={isBusy} />
+                  <label>Website</label>
+                  <input value={draftManifest.Website ?? ''} onChange={(e) => patchManifest({ Website: e.target.value })} disabled={isBusy} />
+                  <label>ServerVersion</label>
+                  <input value={draftManifest.ServerVersion ?? '*'} onChange={(e) => patchManifest({ ServerVersion: e.target.value })} disabled={isBusy} />
+                  <label>IncludesAssetPack</label>
+                  <input type="checkbox" checked={draftManifest.IncludesAssetPack ?? true} onChange={(e) => patchManifest({ IncludesAssetPack: e.target.checked })} disabled={isBusy} />
+                  <label>DisabledByDefault</label>
+                  <input type="checkbox" checked={draftManifest.DisabledByDefault ?? false} onChange={(e) => patchManifest({ DisabledByDefault: e.target.checked })} disabled={isBusy} />
+                </div>
+
+                <p style={{ fontSize: 12, fontWeight: 600, color: '#aaa', marginTop: 14, marginBottom: 6 }}>Authors</p>
+                {(draftManifest.Authors ?? []).length === 0 && (
+                  <p style={{ color: '#555', fontSize: 12 }}>No authors.</p>
+                )}
+                {(draftManifest.Authors ?? []).map((author, i) => (
+                  <div key={i} className="layer-card" style={{ marginBottom: 6 }}>
+                    <div className="layer-card-header">
+                      <span style={{ fontSize: 12, color: '#888' }}>Author {i + 1}</span>
+                      <button className="btn btn-danger" style={{ padding: '2px 8px' }} onClick={() => removeAuthor(i)} disabled={isBusy}>Remove</button>
+                    </div>
+                    <div className="config-grid" style={{ gridTemplateColumns: '80px 1fr' }}>
+                      <label>Name *</label>
+                      <input value={author.Name} onChange={(e) => updateAuthor(i, { Name: e.target.value })} disabled={isBusy} />
+                      <label>Email</label>
+                      <input value={author.Email ?? ''} onChange={(e) => updateAuthor(i, { Email: e.target.value })} disabled={isBusy} />
+                      <label>Url</label>
+                      <input value={author.Url ?? ''} onChange={(e) => updateAuthor(i, { Url: e.target.value })} disabled={isBusy} />
+                    </div>
+                  </div>
+                ))}
+                <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                  <button className="btn btn-secondary" onClick={addAuthor} disabled={isBusy}>+ Add author</button>
+                  <button className="btn btn-primary" onClick={saveManifest} disabled={isBusy}>Save manifest</button>
+                </div>
+              </>
+            )}
 
             {/* Export */}
             <p className="section-title" style={{ marginTop: 24 }}>Export ZIP</p>
