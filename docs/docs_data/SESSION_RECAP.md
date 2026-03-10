@@ -1,5 +1,22 @@
 # 📋 Session Recap — Hytale Asset Studio
 
+## 2026-06-XX — Manifest editor dans ProjectConfigView
+
+**Objectif** : export ZIP avec un manifest Hytale complet (9 champs + Authors).
+
+**Fait** :
+- `backend/core/models.py` — ajout `ProjectManifestAuthor`, `ProjectManifest`, `ManifestPutRequest`
+- `backend/core/workspace_service.py` — `create_project` écrit un manifest complet par défaut (9 champs)
+- `backend/routes/projects.py` — `GET /projects/{id}/manifest` + `PUT /projects/{id}/manifest`
+- `backend/core/export_service.py` — validation `Version` ajoutée à `_validate_manifest`
+- `frontend/src/api/types.ts` — types `ProjectManifestAuthor` + `ProjectManifest`
+- `frontend/src/api/hasApi.ts` — `projectGetManifest` + `projectPutManifest`
+- `frontend/src/views/ProjectConfigView.tsx` — section Manifest (Group, Name, Version, Description, Website, ServerVersion, IncludesAssetPack, DisabledByDefault, Authors avec add/remove)
+
+**Commit** : `57fc287`
+
+---
+
 ## 2026-03-XX — App shell redesign (home → project workflow)
 
 **Objectif** : refondre le design global de l'app (accueil → projet) pour qu'il soit cohérent avec la qualité des éditeurs.

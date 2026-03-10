@@ -288,7 +288,7 @@ export function ProjectConfigView(props: Props) {
                 display: 'flex', alignItems: 'center', gap: 6,
                 marginTop: 24, marginBottom: 0,
                 background: 'none', border: 'none', cursor: 'pointer',
-                padding: 0, color: '#ccc', fontSize: 12, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase',
+                padding: 0, color: '#ccc', fontSize: 22, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase',
               }}
             >
               <span style={{ fontSize: 10, color: '#555', transition: 'transform 0.15s', display: 'inline-block', transform: manifestOpen ? 'rotate(90deg)' : 'rotate(0deg)' }}>▶</span>

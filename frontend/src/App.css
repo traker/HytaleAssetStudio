@@ -9,7 +9,9 @@
   flex-direction: column;
   height: 100vh;
   overflow: hidden;
-  background: #0e0e16;
+  background:
+    linear-gradient(rgba(14, 14, 22, 0.78), rgba(14, 14, 22, 0.78)),
+    url('./assets/Background/bg.jpg') center / cover no-repeat fixed;
   color: #ddd;
 }
 
@@ -174,7 +176,7 @@
 /* ── Workspace card ─────────────────────────────────────────── */
 
 .workspace-section {
-  background: #12121e;
+  background: rgba(14, 14, 22, 0.68);
   border: 1px solid #25253a;
   border-radius: 10px;
   padding: 24px;
@@ -216,7 +218,7 @@
 }
 
 .project-card {
-  background: #12121e;
+  background: rgba(14, 14, 22, 0.68);
   border: 1px solid #25253a;
   border-radius: 8px;
   padding: 16px 18px;
@@ -246,7 +248,7 @@
 }
 
 .tool-tile {
-  background: #12121e;
+  background: rgba(14, 14, 22, 0.68);
   border: 1px solid #25253a;
   border-radius: 8px;
   padding: 18px 20px;
@@ -258,9 +260,10 @@
   text-align: left;
   font-family: inherit;
   color: inherit;
+  backdrop-filter: blur(4px);
 }
 
-.tool-tile:hover:not(:disabled) { border-color: #61dafb55; background: #161626; }
+.tool-tile:hover:not(:disabled) { border-color: #61dafb55; background: rgba(22, 22, 38, 0.80); }
 .tool-tile:disabled { cursor: not-allowed; opacity: 0.4; }
 .tool-tile-icon { font-size: 22px; line-height: 1; margin-bottom: 2px; }
 .tool-tile-label { font-size: 13px; font-weight: 700; color: #ddd; }
@@ -300,7 +303,7 @@
 .config-grid input[type="checkbox"] { width: 14px; height: 14px; accent-color: #61dafb; }
 
 .layer-card {
-  background: #161626;
+  background: rgba(22, 22, 38, 0.60);
   border: 1px solid #25253a;
   border-radius: 6px;
   padding: 12px 14px;
@@ -319,7 +322,7 @@
 
 .error-msg { color: #FF6B6B; font-size: 12px; margin-top: 8px; }
 .success-msg { color: #55EFC4; font-size: 12px; margin-top: 8px; }
-.card { background: #12121e; border: 1px solid #25253a; border-radius: 8px; padding: 20px; }
+.card { background: rgba(14, 14, 22, 0.72); border: 1px solid #25253a; border-radius: 8px; padding: 20px; backdrop-filter: blur(6px); }
 
 /* ── Full-screen editor passthrough ─────────────────────────── */
 
