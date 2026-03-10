@@ -95,7 +95,8 @@ class ProjectOpenResponse(BaseModel):
 class AssetPutRequest(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
     payload: dict = Field(..., alias="json")
-    mode: Literal["override"] = "override"
+    mode: Literal["override", "copy"] = "override"
+    newId: str | None = None
 
 
 class AssetPutResponse(BaseModel):

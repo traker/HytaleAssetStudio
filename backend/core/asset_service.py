@@ -76,6 +76,42 @@ def read_server_json(cfg: ProjectConfig, asset_key: str) -> dict:
     }
 
 
+def write_server_json_copy(cfg: ProjectConfig, asset_key: str, new_id: str, payload_json: dict) -> dict:
+    """Write a new asset derived from an existing one, using a different ID (stem)."""
+    if not new_id or not _ID_CANDIDATE.match(new_id):
+        raise http_error(422, "ID_INVALID", "newId must be a valid server asset ID (alphanumeric + underscore)", {"newId": new_id})
+
+    resolved = resolve_server_json(cfg, asset_key)
+
+    if not resolved.vfs_path.lower().startswith("server/"):
+        raise http_error(500, "RESOLVE_INVALID", "Resolved path is not under Server/", {"path": resolved.vfs_path})
+
+    # Same directory as the source, but new filename
+    source_path = Path(resolved.vfs_path)
+    new_vfs_path = (source_path.parent / f"{new_id}.json").as_posix()
+
+    project_root = Path(cfg.project.assetsWritePath)
+    dst = (project_root / new_vfs_path).resolve()
+
+    try:
+        dst.relative_to(project_root.resolve())
+    except Exception:
+        raise http_error(422, "PATH_INVALID", "Resolved path escapes project root", {"path": str(dst)})
+
+    if not isinstance(payload_json, dict):
+        raise http_error(422, "PAYLOAD_INVALID", "json must be an object", {})
+
+    write_json(dst, payload_json)
+    rebuild_project_index(cfg.project.id, cfg)
+
+    return {
+        "ok": True,
+        "assetKey": f"server:{new_id}",
+        "resolvedPath": new_vfs_path,
+        "origin": "project",
+    }
+
+
 def write_server_json_override(cfg: ProjectConfig, asset_key: str, payload_json: dict) -> dict:
     resolved = resolve_server_json(cfg, asset_key)
 

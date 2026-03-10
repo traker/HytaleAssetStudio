@@ -39,11 +39,18 @@ export function AssetSidePanel(props: Props) {
   )
   const [tab, setTab] = useState<Tab>('json')
 
+  const [isSaveAsOpen, setIsSaveAsOpen] = useState(false)
+  const [newIdDraft, setNewIdDraft] = useState('')
+  const [saveAsStatus, setSaveAsStatus] = useState<{ kind: 'idle' | 'saving'; error?: string; success?: string }>({ kind: 'idle' })
+
   useEffect(() => {
     setIsEditing(canEdit)
     setDraftError(null)
     setSaveStatus({ kind: 'idle' })
     setTab('json')
+    setIsSaveAsOpen(false)
+    setNewIdDraft('')
+    setSaveAsStatus({ kind: 'idle' })
     if (props.asset) setDraft(JSON.stringify(props.asset.json, null, 2))
     else setDraft('')
   }, [props.selectedNodeId, props.asset, canEdit])
@@ -84,6 +91,43 @@ export function AssetSidePanel(props: Props) {
     setDraftError(null)
     setSaveStatus({ kind: 'idle' })
     if (props.asset) setDraft(JSON.stringify(props.asset.json, null, 2))
+  }
+
+  async function handleSaveAs(): Promise<void> {
+    const id = newIdDraft.trim()
+    if (!id) {
+      setSaveAsStatus({ kind: 'idle', error: 'ID requis' })
+      return
+    }
+    if (!/^[A-Za-z0-9_]+$/.test(id)) {
+      setSaveAsStatus({ kind: 'idle', error: 'ID: lettres, chiffres et _ seulement' })
+      return
+    }
+    let parsed: unknown
+    try {
+      parsed = JSON.parse(draft)
+    } catch {
+      setSaveAsStatus({ kind: 'idle', error: 'JSON invalide' })
+      return
+    }
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      setSaveAsStatus({ kind: 'idle', error: 'Le JSON doit être un objet' })
+      return
+    }
+    setSaveAsStatus({ kind: 'saving' })
+    try {
+      const resp = await hasApi.assetPut(props.projectId, props.selectedNodeId, {
+        mode: 'copy',
+        json: parsed as Record<string, unknown>,
+        newId: id,
+      })
+      setSaveAsStatus({ kind: 'idle', success: `Créé : ${resp.assetKey}` })
+      setNewIdDraft('')
+      props.onRefresh?.()
+    } catch (e) {
+      const msg = e instanceof HasApiError ? e.message : 'Unexpected error'
+      setSaveAsStatus({ kind: 'idle', error: msg })
+    }
   }
 
   // ── InteractionVars helpers ───────────────────────────────────────────────
@@ -193,6 +237,22 @@ export function AssetSidePanel(props: Props) {
               </button>
 
               <button
+                onClick={() => { setIsSaveAsOpen((v) => !v); setSaveAsStatus({ kind: 'idle' }) }}
+                disabled={saveStatus.kind === 'saving'}
+                style={{
+                  padding: '4px 8px',
+                  background: isSaveAsOpen ? '#2a3a2a' : '#1e2e1e',
+                  color: '#7ec87e',
+                  border: '1px solid #3a5a3a',
+                  borderRadius: 4,
+                  cursor: 'pointer',
+                }}
+                title="Créer une copie avec un nouvel ID"
+              >
+                Save as…
+              </button>
+
+              <button
                 onClick={handleCancel}
                 disabled={saveStatus.kind === 'saving'}
                 style={{
@@ -246,6 +306,62 @@ export function AssetSidePanel(props: Props) {
           </button>
         </div>
       </div>
+
+      {/* ── Save as panel ── */}
+      {isSaveAsOpen && canEdit && (
+        <div
+          style={{
+            padding: '8px 12px',
+            borderBottom: '1px solid #2a3a2a',
+            background: 'rgba(20, 35, 20, 0.95)',
+            flexShrink: 0,
+          }}
+        >
+          <div style={{ fontSize: 11, color: '#7ec87e', fontWeight: 700, marginBottom: 6, letterSpacing: '0.05em', textTransform: 'uppercase' }}>
+            Save as — new asset
+          </div>
+          <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+            <span style={{ fontSize: 11, color: '#555', whiteSpace: 'nowrap' }}>server:</span>
+            <input
+              value={newIdDraft}
+              onChange={(e) => { setNewIdDraft(e.target.value); setSaveAsStatus({ kind: 'idle' }) }}
+              onKeyDown={(e) => { if (e.key === 'Enter') void handleSaveAs() }}
+              placeholder="Nouveau_ID_Asset"
+              autoFocus
+              style={{
+                flex: 1,
+                padding: '4px 7px',
+                background: '#1a2a1a',
+                color: '#aee8ae',
+                border: '1px solid #3a5a3a',
+                borderRadius: 4,
+                fontSize: 12,
+                fontFamily: 'ui-monospace, monospace',
+              }}
+            />
+            <button
+              onClick={() => void handleSaveAs()}
+              disabled={saveAsStatus.kind === 'saving'}
+              style={{
+                padding: '4px 10px',
+                background: '#3a6a3a',
+                color: '#fff',
+                border: 'none',
+                borderRadius: 4,
+                cursor: saveAsStatus.kind !== 'saving' ? 'pointer' : 'not-allowed',
+                fontSize: 12,
+              }}
+            >
+              {saveAsStatus.kind === 'saving' ? 'Creating…' : 'Create'}
+            </button>
+          </div>
+          {saveAsStatus.error && <div style={{ fontSize: 11, color: '#e06c75', marginTop: 4 }}>{saveAsStatus.error}</div>}
+          {saveAsStatus.success && <div style={{ fontSize: 11, color: '#7ec87e', marginTop: 4 }}>{saveAsStatus.success}</div>}
+          <div style={{ fontSize: 10, color: '#3a4a3a', marginTop: 5 }}>
+            Writes the current JSON as a new file in the same Server subfolder with this ID as filename.
+          </div>
+        </div>
+      )}
 
       {/* ── Tabs ── */}
       <div style={{ display: 'flex', borderBottom: '1px solid #333', flexShrink: 0 }}>

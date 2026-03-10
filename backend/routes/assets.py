@@ -3,7 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import Response
 
-from backend.core.asset_service import read_server_json, resolve_common_resource, write_server_json_override
+from backend.core.asset_service import read_server_json, resolve_common_resource, write_server_json_copy, write_server_json_override
 from backend.core.config import Settings, get_settings
 from backend.core.errors import http_error
 from backend.core.index_service import ensure_index
@@ -98,6 +98,11 @@ def put_asset(
     if body is None:
         # FastAPI can pass None if body is missing.
         raise http_error(422, "BODY_MISSING", "Missing request body")
+    if body.mode == "copy":
+        if not body.newId:
+            raise http_error(422, "NEWID_MISSING", "newId is required for mode=copy", {})
+        result = write_server_json_copy(cfg, key, body.newId, body.payload)
+        return AssetPutResponse(**result)
     if body.mode != "override":
         raise http_error(422, "MODE_INVALID", "Unsupported mode", {"mode": body.mode})
     result = write_server_json_override(cfg, key, body.payload)

@@ -95,7 +95,8 @@ export type AssetGetResponse = {
 
 export type AssetPutRequest = {
   json: Record<string, unknown>
-  mode: 'override'
+  mode: 'override' | 'copy'
+  newId?: string
 }
 
 export type AssetPutResponse = {
