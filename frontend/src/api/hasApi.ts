@@ -74,6 +74,12 @@ export const hasApi = {
     )
   },
 
+  projectGraphModified(projectId: string, depth = 1): Promise<ProjectGraphResponse> {
+    return httpJson(
+      `${API_BASE}/projects/${encodeURIComponent(projectId)}/graph-modified${qs({ depth })}`,
+    )
+  },
+
   projectInteractionTree(projectId: string, root: string): Promise<InteractionTreeResponse> {
     return httpJson(
       `${API_BASE}/projects/${encodeURIComponent(projectId)}/interaction/tree${qs({ root })}`,

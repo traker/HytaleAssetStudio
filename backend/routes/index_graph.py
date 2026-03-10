@@ -3,7 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, Query
 
 from backend.core.config import Settings, get_settings
-from backend.core.graph_service import build_focus_graph
+from backend.core.graph_service import build_focus_graph, build_modified_graph
 from backend.core.index_service import ensure_index, rebuild_project_index
 from backend.core.project_service import load_project_config
 
@@ -95,3 +95,14 @@ def project_graph(
     ensure_index(projectId, cfg)
 
     return build_focus_graph(cfg, root, depth)
+
+
+@router.get("/projects/{projectId}/graph-modified")
+def project_graph_modified(
+    projectId: str,
+    depth: int = Query(default=1, ge=0, le=6),
+    settings: Settings = Depends(get_settings),
+) -> dict:
+    cfg, _ = load_project_config(settings.workspace_root, projectId)
+    ensure_index(projectId, cfg)
+    return build_modified_graph(cfg, depth)

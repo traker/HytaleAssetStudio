@@ -84,6 +84,8 @@ export type GraphEdge = {
 export type ProjectGraphResponse = {
   nodes: GraphNode[]
   edges: GraphEdge[]
+  /** IDs of the roots (only present in /graph-modified response) */
+  modifiedIds?: string[]
 }
 
 export type AssetGetResponse = {
@@ -150,7 +152,9 @@ export type ModifiedAssetEntry = {
   assetKey: string | null
   size: number
   mtimeMs: number
-  origin: 'project'  isNew: boolean}
+  origin: 'project'
+  isNew: boolean
+}
 
 export type ModifiedAssetsResponse = {
   projectId: string
