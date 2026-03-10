@@ -8,6 +8,8 @@ import type {
   ModifiedAssetsResponse,
   OkResponse,
   ProjectConfig,
+  ProjectCreateRequest,
+  ProjectCreateResponse,
   ProjectGraphResponse,
   ProjectLayersPutRequest,
   ProjectSearchResponse,
@@ -39,6 +41,13 @@ export const hasApi = {
 
   workspaceProjects(workspaceId: string): Promise<WorkspaceProjectsResponse> {
     return httpJson(`${API_BASE}/workspace/${encodeURIComponent(workspaceId)}/projects`)
+  },
+
+  workspaceCreateProject(workspaceId: string, req: ProjectCreateRequest): Promise<ProjectCreateResponse> {
+    return httpJson(`${API_BASE}/workspace/${encodeURIComponent(workspaceId)}/projects/create`, {
+      method: 'POST',
+      body: JSON.stringify(req),
+    })
   },
 
   projectConfig(projectId: string): Promise<ProjectConfig> {

@@ -43,6 +43,17 @@ function App() {
     setProjectView('config')
   }
 
+  async function refreshAndSelect(projectId: string): Promise<void> {
+    if (!workspace) return
+    try {
+      const resp = await hasApi.workspaceProjects(workspace.workspaceId)
+      setProjects(resp.projects)
+    } catch {
+      // best-effort refresh
+    }
+    selectProject(projectId)
+  }
+
   function backToHome(): void {
     setSelectedProjectId(null)
     setProjectView('config')
@@ -122,6 +133,7 @@ function App() {
           workspace={workspace}
           projects={projects}
           onSelectProject={selectProject}
+          onProjectCreated={refreshAndSelect}
         />
       ) : (
         <>

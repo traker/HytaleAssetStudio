@@ -1,4 +1,6 @@
-import type { ProjectInfo, WorkspaceOpenResponse } from '../api'
+import { useState } from 'react'
+import { HasApiError, hasApi } from '../api'
+import type { PackSource, ProjectInfo, WorkspaceOpenResponse } from '../api'
 
 type Props = {
   workspaceRoot: string
@@ -9,10 +11,68 @@ type Props = {
   workspace: WorkspaceOpenResponse | null
   projects: ProjectInfo[]
   onSelectProject: (id: string) => void
+  onProjectCreated: (projectId: string) => void
 }
 
+const DEFAULT_VANILLA: PackSource = { sourceType: 'folder', path: '' }
+
 export function HomePage(props: Props) {
-  const { workspaceRoot, onWorkspaceRootChange, onOpen, isBusy, error, workspace, projects, onSelectProject } = props
+  const { workspaceRoot, onWorkspaceRootChange, onOpen, isBusy, error, workspace, projects, onSelectProject, onProjectCreated } = props
+
+  // ── New project form state ──
+  const [showCreate, setShowCreate] = useState(false)
+  const [createId, setCreateId] = useState('')
+  const [createName, setCreateName] = useState('')
+  const [createDir, setCreateDir] = useState('')
+  const [createVanilla, setCreateVanilla] = useState<PackSource>(DEFAULT_VANILLA)
+  const [creating, setCreating] = useState(false)
+  const [createError, setCreateError] = useState<string | null>(null)
+
+  function openCreateForm(): void {
+    const defaults = workspace?.defaults?.vanilla ?? DEFAULT_VANILLA
+    setCreateVanilla({ ...defaults })
+    setCreateId('')
+    setCreateName('')
+    setCreateDir('')
+    setCreateError(null)
+    setShowCreate(true)
+  }
+
+  function deriveDir(id: string): string {
+    if (!workspace) return id
+    const base = workspace.projectsDir.replace(/[\/\\]$/, '')
+    return id ? `${base}/${id}` : base
+  }
+
+  function handleIdChange(v: string): void {
+    setCreateId(v)
+    // Auto-fill dir only while it hasn't been manually edited
+    setCreateDir(deriveDir(v))
+  }
+
+  async function handleCreate(): Promise<void> {
+    if (!workspace) return
+    const id = createId.trim()
+    const dir = createDir.trim()
+    if (!id || !dir) { setCreateError('Project ID and directory are required'); return }
+
+    setCreating(true)
+    setCreateError(null)
+    try {
+      const res = await hasApi.workspaceCreateProject(workspace.workspaceId, {
+        projectId: id,
+        displayName: createName.trim() || id,
+        targetDir: dir,
+        vanilla: createVanilla,
+      })
+      setShowCreate(false)
+      onProjectCreated(res.projectId)
+    } catch (e) {
+      setCreateError(e instanceof HasApiError ? e.message : 'Unexpected error')
+    } finally {
+      setCreating(false)
+    }
+  }
 
   return (
     <div className="page-content">
@@ -45,8 +105,76 @@ export function HomePage(props: Props) {
       {/* ── Projects list ── */}
       {workspace && (
         <div>
-          <p className="section-title">Projects</p>
-          {projects.length === 0 ? (
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+            <p className="section-title" style={{ marginBottom: 0 }}>Projects</p>
+            <button className="btn btn-secondary" onClick={openCreateForm} style={{ fontSize: 11 }}>
+              + New project
+            </button>
+          </div>
+
+          {/* ── New project form ── */}
+          {showCreate && (
+            <div className="card" style={{ marginBottom: 16 }}>
+              <p className="section-title" style={{ marginBottom: 14 }}>Create new project</p>
+              <div className="config-grid" style={{ gridTemplateColumns: '120px 1fr', marginBottom: 12 }}>
+                <label>Project ID *</label>
+                <input
+                  className="studio-input"
+                  value={createId}
+                  onChange={(e) => handleIdChange(e.target.value)}
+                  placeholder="my-project"
+                  autoFocus
+                />
+
+                <label>Display name</label>
+                <input
+                  className="studio-input"
+                  value={createName}
+                  onChange={(e) => setCreateName(e.target.value)}
+                  placeholder="My Project"
+                />
+
+                <label>Directory *</label>
+                <input
+                  className="studio-input"
+                  value={createDir}
+                  onChange={(e) => setCreateDir(e.target.value)}
+                  placeholder={deriveDir('my-project')}
+                />
+
+                <label>Vanilla type</label>
+                <select
+                  className="studio-input"
+                  value={createVanilla.sourceType}
+                  onChange={(e) => setCreateVanilla({ ...createVanilla, sourceType: e.target.value as 'folder' | 'zip' })}
+                >
+                  <option value="folder">folder</option>
+                  <option value="zip">zip</option>
+                </select>
+
+                <label>Vanilla path</label>
+                <input
+                  className="studio-input"
+                  value={createVanilla.path}
+                  onChange={(e) => setCreateVanilla({ ...createVanilla, path: e.target.value })}
+                  placeholder="K:/path/to/Assets/Server"
+                />
+              </div>
+
+              {createError && <p className="error-msg">{createError}</p>}
+
+              <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+                <button className="btn btn-primary" onClick={handleCreate} disabled={creating || !createId.trim() || !createDir.trim()}>
+                  {creating ? 'Creating…' : 'Create'}
+                </button>
+                <button className="btn btn-ghost" onClick={() => setShowCreate(false)} disabled={creating}>
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
+
+          {projects.length === 0 && !showCreate ? (
             <p style={{ color: '#555', fontSize: 13 }}>No projects found in this workspace.</p>
           ) : (
             <div className="project-grid">

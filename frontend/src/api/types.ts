@@ -108,6 +108,21 @@ export type AssetPutResponse = {
 export type ExportZipRequest = { outputPath: string }
 export type ExportZipResponse = { ok: true; outputPath: string }
 
+export type ProjectCreateRequest = {
+  projectId: string
+  displayName: string
+  targetDir: string
+  vanilla: PackSource
+  manifest?: Record<string, unknown> | null
+}
+
+export type ProjectCreateResponse = {
+  projectId: string
+  rootPath: string
+  assetsWritePath: string
+  configPath: string
+}
+
 export type ModifiedAssetEntry = {
   kind: 'server-json' | 'common-resource'
   vfsPath: string
