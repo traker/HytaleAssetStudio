@@ -162,14 +162,23 @@ export function HomePage(props: Props) {
               {projects.map((p) => (
                 <button
                   key={p.projectId}
-                  className="project-card"
-                  onClick={() => onSelectProject(p.projectId)}
+                  className={`project-card${p.status === 'invalid' ? ' project-card-invalid' : ''}`}
+                  onClick={() => p.status === 'ready' && onSelectProject(p.projectId)}
+                  disabled={p.status !== 'ready'}
+                  title={p.status === 'invalid' ? (p.errorMessage ?? 'Invalid project configuration') : undefined}
                 >
-                  <span className="project-card-id">{p.projectId}</span>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                    <span className="project-card-id">{p.projectId}</span>
+                    {p.status === 'invalid' && <span className="project-card-badge">INVALID</span>}
+                  </div>
                   {p.displayName && (
                     <span className="project-card-name">{p.displayName}</span>
                   )}
-                  <span className="project-card-arrow">Open →</span>
+                  {p.status === 'invalid' ? (
+                    <span className="project-card-error">{p.errorMessage ?? 'Project config is invalid'}</span>
+                  ) : (
+                    <span className="project-card-arrow">Open →</span>
+                  )}
                 </button>
               ))}
             </div>

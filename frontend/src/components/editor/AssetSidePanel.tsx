@@ -28,7 +28,7 @@ export function AssetSidePanel(props: Props) {
     'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace'
 
   const canEdit = useMemo(() => {
-    return Boolean(props.asset) && props.selectedNodeId.startsWith('server:')
+    return Boolean(props.asset) && (props.selectedNodeId.startsWith('server:') || props.selectedNodeId.startsWith('server-path:'))
   }, [props.asset, props.selectedNodeId])
 
   const [isEditing, setIsEditing] = useState(false)

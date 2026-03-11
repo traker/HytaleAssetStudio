@@ -18,6 +18,12 @@ export class HasApiError extends Error {
   }
 }
 
+let activeWorkspaceId: string | null = null
+
+export function setApiWorkspaceId(workspaceId: string | null): void {
+  activeWorkspaceId = workspaceId
+}
+
 async function readJsonSafe(res: Response): Promise<unknown> {
   const text = await res.text()
   if (!text) return undefined
@@ -33,6 +39,7 @@ export async function httpJson<T>(input: RequestInfo | URL, init?: RequestInit):
     ...init,
     headers: {
       'Content-Type': 'application/json',
+      ...(activeWorkspaceId ? { 'X-HAS-Workspace-Id': activeWorkspaceId } : {}),
       ...(init?.headers ?? {}),
     },
   })

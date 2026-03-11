@@ -84,22 +84,35 @@ def build_focus_graph(cfg: ProjectConfig, root_key: str, depth: int | None) -> d
     mounts = build_mounts(cfg)
     mounts_by_id = {m.mount_id: m for m in mounts}
 
-    if not root_key.startswith("server:"):
-        raise http_error(422, "ROOT_INVALID", "Only server:* is supported for now", {"root": root_key})
-
-    root_id = root_key.split(":", 1)[1]
-    if root_id not in index.server_id_to_all_paths:
-        raise http_error(404, "ASSET_NOT_FOUND", "Server asset not found", {"id": root_id})
-    paths = index.server_id_to_all_paths[root_id]
-    if len(paths) != 1:
-        raise http_error(409, "ID_AMBIGUOUS", "Server ID resolves to multiple JSON paths", {"id": root_id, "paths": paths})
-
-    root_path = paths[0]
+    if root_key.startswith("server-path:"):
+        root_path = root_key.split(":", 1)[1].strip().replace("\\", "/").lstrip("/")
+        if root_path not in index.effective_mount_by_vfs_path:
+            raise http_error(404, "ASSET_NOT_FOUND", "Server asset path not found", {"path": root_path})
+        if not root_path.lower().startswith("server/") or not root_path.lower().endswith(".json"):
+            raise http_error(422, "ROOT_INVALID", "server-path root must target a Server/*.json asset", {"root": root_key})
+        root_id = Path(root_path).stem
+    elif root_key.startswith("server:"):
+        root_id = root_key.split(":", 1)[1]
+        if root_id not in index.server_id_to_all_paths:
+            raise http_error(404, "ASSET_NOT_FOUND", "Server asset not found", {"id": root_id})
+        paths = index.server_id_to_all_paths[root_id]
+        if len(paths) != 1:
+            raise http_error(409, "ID_AMBIGUOUS", "Server ID resolves to multiple JSON paths", {"id": root_id, "paths": paths})
+        root_path = paths[0]
+    else:
+        raise http_error(422, "ROOT_INVALID", "Only server:* and server-path:* are supported for now", {"root": root_key})
 
     unique_ids = set(index.server_id_to_path.keys())
 
     def node_key_for_id(server_id: str) -> str:
         return f"server:{server_id}"
+
+    def node_key_for_path(vfs_path: str) -> str:
+        stem = Path(vfs_path).stem
+        paths = index.server_id_to_all_paths.get(stem, [])
+        if len(paths) == 1 and paths[0] == vfs_path:
+            return node_key_for_id(stem)
+        return f"server-path:{vfs_path}"
 
     def _group_for_server_path(vfs_path: str) -> str:
         p = vfs_path.replace("\\", "/").lower()
@@ -157,19 +170,18 @@ def build_focus_graph(cfg: ProjectConfig, root_key: str, depth: int | None) -> d
     nodes: dict[str, dict] = {}
     edges: set[tuple[str, str, str]] = set()
 
-    def ensure_node(server_id: str) -> None:
-        vfs_path = index.server_id_to_path.get(server_id)
-        if not vfs_path:
-            return
+    def ensure_node(vfs_path: str) -> None:
         origin = index.origin_by_server_path.get(vfs_path, "vanilla")
         state = "vanilla"
         if origin == "project":
             state = "local"
         group = _group_for_server_path(vfs_path)
-        nodes[node_key_for_id(server_id)] = {
-            "id": node_key_for_id(server_id),
-            "label": server_id,
-            "title": server_id,
+        node_id = node_key_for_path(vfs_path)
+        label = Path(vfs_path).stem
+        nodes[node_id] = {
+            "id": node_id,
+            "label": label,
+            "title": label,
             "group": group,
             "path": vfs_path,
             "state": state,
@@ -194,18 +206,14 @@ def build_focus_graph(cfg: ProjectConfig, root_key: str, depth: int | None) -> d
 
     # BFS by depth
     max_depth = depth if depth is not None else 2
-    queue = deque([(root_id, 0)])
-    seen = {root_id}
+    queue = deque([(root_path, 0)])
+    seen = {root_path}
 
     while queue:
-        current_id, d = queue.popleft()
-        ensure_node(current_id)
+        current_path, d = queue.popleft()
+        ensure_node(current_path)
 
         if max_depth is not None and d >= max_depth:
-            continue
-
-        current_path = index.server_id_to_path.get(current_id)
-        if not current_path:
             continue
 
         mount_id = index.effective_mount_by_vfs_path.get(current_path)
@@ -222,10 +230,11 @@ def build_focus_graph(cfg: ProjectConfig, root_key: str, depth: int | None) -> d
                 for ref in refs:
                     if ref not in unique_ids:
                         continue
-                    edges.add((node_key_for_id(current_id), node_key_for_id(ref), lbl))
-                    if ref not in seen:
-                        seen.add(ref)
-                        queue.append((ref, d + 1))
+                    child_path = index.server_id_to_path[ref]
+                    edges.add((node_key_for_path(current_path), node_key_for_id(ref), lbl))
+                    if child_path not in seen:
+                        seen.add(child_path)
+                        queue.append((child_path, d + 1))
         else:
             for s in _iter_strings(data):
                 s = s.strip()
@@ -234,17 +243,18 @@ def build_focus_graph(cfg: ProjectConfig, root_key: str, depth: int | None) -> d
                 common_key = _try_common_asset_key(s)
                 if common_key:
                     ensure_common_node(common_key)
-                    edges.add((node_key_for_id(current_id), common_key, "resource"))
+                    edges.add((node_key_for_path(current_path), common_key, "resource"))
                     continue
 
                 if not _ID_CANDIDATE.match(s):
                     continue
                 if s not in unique_ids:
                     continue
-                edges.add((node_key_for_id(current_id), node_key_for_id(s), "ref"))
-                if s not in seen:
-                    seen.add(s)
-                    queue.append((s, d + 1))
+                child_path = index.server_id_to_path[s]
+                edges.add((node_key_for_path(current_path), node_key_for_id(s), "ref"))
+                if child_path not in seen:
+                    seen.add(child_path)
+                    queue.append((child_path, d + 1))
 
     return {
         "nodes": list(nodes.values()),

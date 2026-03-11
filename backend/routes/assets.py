@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Header, Query
 from fastapi.responses import Response
 
 from backend.core.asset_service import read_server_json, resolve_common_resource, write_server_json_copy, write_server_json_override
@@ -9,13 +9,19 @@ from backend.core.errors import http_error
 from backend.core.index_service import ensure_index
 from backend.core.models import AssetPutRequest, AssetPutResponse, ModifiedAssetEntry, ModifiedAssetsResponse
 from backend.core.project_service import load_project_config
+from backend.core.workspace_service import resolve_workspace_root
 
 router = APIRouter(prefix="/api/v1", tags=["assets"])
 
 
 @router.get("/projects/{projectId}/modified", response_model=ModifiedAssetsResponse)
-def get_modified_assets(projectId: str, settings: Settings = Depends(get_settings)) -> ModifiedAssetsResponse:
-    cfg, _ = load_project_config(settings.workspace_root, projectId)
+def get_modified_assets(
+    projectId: str,
+    settings: Settings = Depends(get_settings),
+    workspaceId: str | None = Header(default=None, alias="X-HAS-Workspace-Id"),
+) -> ModifiedAssetsResponse:
+    workspace_root = resolve_workspace_root(settings, workspaceId)
+    cfg, _ = load_project_config(workspace_root, projectId)
 
     # Ensure we have an index; used only to detect ambiguous server IDs.
     index = ensure_index(cfg.project.id, cfg)
@@ -93,8 +99,10 @@ def get_asset(
     projectId: str,
     key: str = Query(..., description="assetKey, ex: server:Weapon_Sword_Iron"),
     settings: Settings = Depends(get_settings),
+    workspaceId: str | None = Header(default=None, alias="X-HAS-Workspace-Id"),
 ) -> dict:
-    cfg, _ = load_project_config(settings.workspace_root, projectId)
+    workspace_root = resolve_workspace_root(settings, workspaceId)
+    cfg, _ = load_project_config(workspace_root, projectId)
     return read_server_json(cfg, key)
 
 
@@ -104,8 +112,10 @@ def put_asset(
     key: str = Query(..., description="assetKey, ex: server:Weapon_Sword_Iron"),
     body: AssetPutRequest | None = None,
     settings: Settings = Depends(get_settings),
+    workspaceId: str | None = Header(default=None, alias="X-HAS-Workspace-Id"),
 ) -> AssetPutResponse:
-    cfg, _ = load_project_config(settings.workspace_root, projectId)
+    workspace_root = resolve_workspace_root(settings, workspaceId)
+    cfg, _ = load_project_config(workspace_root, projectId)
     if body is None:
         # FastAPI can pass None if body is missing.
         raise http_error(422, "BODY_MISSING", "Missing request body")
@@ -125,8 +135,10 @@ def get_resource(
     projectId: str,
     key: str = Query(..., description="assetKey, ex: common:Icons/...png"),
     settings: Settings = Depends(get_settings),
+    workspaceId: str | None = Header(default=None, alias="X-HAS-Workspace-Id"),
 ) -> Response:
-    cfg, _ = load_project_config(settings.workspace_root, projectId)
+    workspace_root = resolve_workspace_root(settings, workspaceId)
+    cfg, _ = load_project_config(workspace_root, projectId)
     resolved = resolve_common_resource(cfg, key)
 
     data = resolved.mount.read_bytes(resolved.vfs_path)

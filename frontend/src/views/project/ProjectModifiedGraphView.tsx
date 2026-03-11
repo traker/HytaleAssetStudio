@@ -16,8 +16,9 @@ import '@xyflow/react/dist/style.css'
 import { HasApiError, hasApi } from '../../api'
 import type { AssetGetResponse, GraphEdge as RawEdge, GraphNode as RawNode } from '../../api'
 import { AssetSidePanel } from '../../components/editor/AssetSidePanel'
-import type { OutgoingDep } from '../../components/graph/BlueprintNode'
 import { BlueprintNode } from '../../components/graph/BlueprintNode'
+import type { BlueprintNodeData, OutgoingDep } from '../../components/graph/blueprintTypes'
+import { getBlueprintNodeDisplay, isInteractionBlueprintGroup } from '../../components/graph/blueprintTypes'
 import { getColorForEdgeType } from '../../components/graph/colors'
 import { layoutGraph } from '../../components/graph/layoutDagre'
 
@@ -53,7 +54,7 @@ function toFlow(
     outgoingMap.set(e.from, list)
   }
 
-  const nodes: Node[] = rawNodes.map((n) => ({
+  const nodes: Array<Node<BlueprintNodeData>> = rawNodes.map((n) => ({
     id: n.id,
     type: 'blueprint',
     position: { x: 0, y: 0 },
@@ -102,7 +103,7 @@ export function ProjectModifiedGraphView(props: Props) {
   const modifiedIdSetRef = useRef<Set<string>>(new Set())
   const expandedNodeIdsRef = useRef<Set<string>>(new Set())
 
-  const [nodes, setNodes] = useState<Node[]>([])
+  const [nodes, setNodes] = useState<Array<Node<BlueprintNodeData>>>([])
   const [edges, setEdges] = useState<Edge[]>([])
   // Plain (un-highlighted) edges — source of truth for re-applying highlight
   const baseEdgesRef = useRef<Edge[]>([])
@@ -110,7 +111,7 @@ export function ProjectModifiedGraphView(props: Props) {
   const [rebuildTick, setRebuildTick] = useState(0)
 
   const onNodesChange = useCallback(
-    (changes: NodeChange[]) => setNodes((n) => applyNodeChanges(changes, n)),
+    (changes: NodeChange[]) => setNodes((n) => applyNodeChanges(changes, n) as Array<Node<BlueprintNodeData>>),
     [],
   )
   const onEdgesChange = useCallback(
@@ -195,8 +196,9 @@ export function ProjectModifiedGraphView(props: Props) {
       modifiedIdSetRef.current = new Set(resp.modifiedIds ?? [])
       expandedNodeIdsRef.current = new Set(resp.modifiedIds ?? [])
       rebuildFlow()
-    } catch {
-      // ignore — the side panel will show the error if needed
+      setError(null)
+    } catch (e) {
+      setError(e instanceof HasApiError ? e.message : 'Failed to refresh modified graph')
     }
   }, [props.projectId, depth, rebuildFlow])
 
@@ -242,7 +244,6 @@ export function ProjectModifiedGraphView(props: Props) {
     async (nodeId: string) => {
       if (expandedNodeIdsRef.current.has(nodeId)) return
       if (!nodeId.startsWith('server:')) return
-      expandedNodeIdsRef.current.add(nodeId)
       setExpandLoading(true)
       try {
         const resp = await hasApi.projectGraph(props.projectId, nodeId, 1)
@@ -264,9 +265,12 @@ export function ProjectModifiedGraphView(props: Props) {
             changed = true
           }
         }
+        expandedNodeIdsRef.current.add(nodeId)
         if (changed) rebuildFlow()
-      } catch {
-        // silently ignore expand errors
+        setError(null)
+      } catch (e) {
+        expandedNodeIdsRef.current.delete(nodeId)
+        setError(e instanceof HasApiError ? e.message : 'Failed to expand node')
       } finally {
         setExpandLoading(false)
       }
@@ -312,9 +316,7 @@ export function ProjectModifiedGraphView(props: Props) {
   const canOpenInteractions = Boolean(
     selectedNodeId &&
       selectedNode &&
-      typeof (selectedNode.data as any)?.group === 'string' &&
-      ((selectedNode.data as any).group === 'interaction' ||
-        (selectedNode.data as any).group === 'rootinteraction'),
+      isInteractionBlueprintGroup(selectedNode.data.group),
   )
 
   // ── Render ─────────────────────────────────────────────────────────────────
@@ -467,7 +469,7 @@ export function ProjectModifiedGraphView(props: Props) {
                   if (!canOpenInteractions || !selectedNodeId || !selectedNode) return
                   props.onOpenInteractions?.({
                     assetKey: selectedNodeId,
-                    display: String((selectedNode.data as any)?.label ?? selectedNodeId),
+                    display: getBlueprintNodeDisplay(selectedNode.data, selectedNodeId),
                   })
                 }
               : undefined

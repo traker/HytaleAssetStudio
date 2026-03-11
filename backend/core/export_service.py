@@ -17,9 +17,10 @@ def _is_under_root(path: Path, root: Path) -> bool:
 
 
 def _iter_project_files(project_root: Path) -> list[Path]:
-    # Export everything that belongs to the pack, but skip studio metadata.
-    # Keep this intentionally minimal for MVP.
-    skip_names = {"has.project.json"}
+    # Export only pack-relevant files. This explicit whitelist prevents studio
+    # metadata and caches from leaking into distributable archives.
+    allowed_root_files = {"manifest.json"}
+    allowed_root_dirs = {"Common", "Server"}
 
     files: list[Path] = []
     if not project_root.exists():
@@ -28,7 +29,11 @@ def _iter_project_files(project_root: Path) -> list[Path]:
     for p in project_root.rglob("*"):
         if not p.is_file():
             continue
-        if p.name in skip_names:
+        rel_parts = p.relative_to(project_root).parts
+        if len(rel_parts) == 1:
+            if rel_parts[0] not in allowed_root_files:
+                continue
+        elif rel_parts[0] not in allowed_root_dirs:
             continue
         files.append(p)
 

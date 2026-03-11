@@ -200,7 +200,9 @@ function InteractionTreeEditorInner(props: Props) {
 
   const selectedData = selectedNode?.data as (InteractionNodeData & { rawFields?: Record<string, unknown> }) | undefined
   const selectedIsExternal = Boolean(selectedData?.isExternal)
-  const selectedIsServerAsset = Boolean(selectedNodeId?.startsWith('server:') && selectedIsExternal)
+  const selectedIsServerAsset = Boolean(
+    selectedIsExternal && selectedNodeId && (selectedNodeId.startsWith('server:') || selectedNodeId.startsWith('server-path:')),
+  )
 
   useEffect(() => {
     if (!selectedIsServerAsset || !selectedNodeId) {

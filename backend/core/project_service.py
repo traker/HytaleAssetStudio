@@ -1,10 +1,14 @@
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 
 from backend.core.errors import http_error
 from backend.core.io import read_json, write_json
 from backend.core.models import ProjectConfig
+
+
+logger = logging.getLogger("uvicorn.error")
 
 
 def find_project_config_path(workspace_root: Path, project_id: str) -> Path:
@@ -18,7 +22,11 @@ def find_project_config_path(workspace_root: Path, project_id: str) -> Path:
             pid = (cfg.get("project") or {}).get("id")
             if pid == project_id:
                 return cfg_path
-        except Exception:
+        except Exception as exc:
+            logger.warning(
+                "project lookup skipped invalid config",
+                extra={"path": str(cfg_path), "projectId": project_id, "error": str(exc)},
+            )
             continue
 
     raise http_error(404, "PROJECT_NOT_FOUND", "Project not found", {"projectId": project_id})

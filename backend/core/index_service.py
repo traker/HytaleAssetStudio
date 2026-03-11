@@ -10,7 +10,7 @@ from pathlib import Path
 from backend.core.errors import http_error
 from backend.core.io import read_json, write_json
 from backend.core.models import ProjectConfig
-from backend.core.state import PROJECT_INDEX, ProjectIndexState
+from backend.core.state import PROJECT_INDEX, PROJECT_INDEX_FINGERPRINT, ProjectIndexState
 from backend.core.vfs import Mount, mount_from_source
 
 
@@ -26,8 +26,43 @@ def _index_cache_path(cfg: ProjectConfig) -> Path:
     return project_root / ".studio_cache" / "index.json"
 
 
+def _iter_project_signature_files(project_root: Path) -> list[Path]:
+    files: list[Path] = []
+
+    manifest_path = project_root / "manifest.json"
+    if manifest_path.is_file():
+        files.append(manifest_path)
+
+    for top_dir in (project_root / "Common", project_root / "Server"):
+        if not top_dir.exists():
+            continue
+        for path in top_dir.rglob("*"):
+            if path.is_file():
+                files.append(path)
+
+    return sorted(files)
+
+
+def _project_content_signature(cfg: ProjectConfig) -> dict[str, object]:
+    project_root = Path(cfg.project.assetsWritePath)
+    if not project_root.exists():
+        return {"exists": False, "files": []}
+
+    entries: list[dict[str, object]] = []
+    for path in _iter_project_signature_files(project_root):
+        stat = path.stat()
+        entries.append(
+            {
+                "path": str(path.relative_to(project_root)).replace("\\", "/"),
+                "size": stat.st_size,
+                "mtimeNs": stat.st_mtime_ns,
+            }
+        )
+
+    return {"exists": True, "files": entries}
+
+
 def _index_fingerprint(cfg: ProjectConfig) -> str:
-    # MVP: fingerprint is based on project config only (does not detect external file changes).
     from backend.core.pydantic_compat import model_dump
 
     data = {
@@ -35,22 +70,23 @@ def _index_fingerprint(cfg: ProjectConfig) -> str:
         "assetsWritePath": cfg.project.assetsWritePath,
         "vanilla": model_dump(cfg.vanilla),
         "layers": [model_dump(l) for l in cfg.layers],
+        "projectContent": _project_content_signature(cfg),
     }
     raw = json.dumps(data, sort_keys=True, ensure_ascii=False).encode("utf-8")
     return hashlib.sha1(raw).hexdigest()
 
 
-def _save_index_cache(cfg: ProjectConfig, state: ProjectIndexState) -> None:
+def _save_index_cache(cfg: ProjectConfig, state: ProjectIndexState, fingerprint: str) -> None:
     path = _index_cache_path(cfg)
     payload = {
         "schemaVersion": _INDEX_CACHE_SCHEMA_VERSION,
-        "fingerprint": _index_fingerprint(cfg),
+        "fingerprint": fingerprint,
         "state": asdict(state),
     }
     write_json(path, payload)
 
 
-def _load_index_cache(cfg: ProjectConfig) -> ProjectIndexState | None:
+def _load_index_cache(cfg: ProjectConfig, fingerprint: str) -> ProjectIndexState | None:
     path = _index_cache_path(cfg)
     if not path.exists():
         return None
@@ -68,7 +104,7 @@ def _load_index_cache(cfg: ProjectConfig) -> ProjectIndexState | None:
         )
         return None
 
-    if payload.get("fingerprint") != _index_fingerprint(cfg):
+    if payload.get("fingerprint") != fingerprint:
         logger.info("index_cache fingerprint mismatch; rebuilding", extra={"path": str(path)})
         return None
 
@@ -123,6 +159,7 @@ def build_mounts(cfg: ProjectConfig) -> list[Mount]:
 
 
 def rebuild_project_index(project_id: str, cfg: ProjectConfig) -> ProjectIndexState:
+    fingerprint = _index_fingerprint(cfg)
     mounts = build_mounts(cfg)
 
     # Build effective VFS mapping with shadowing by vfs path.
@@ -168,10 +205,11 @@ def rebuild_project_index(project_id: str, cfg: ProjectConfig) -> ProjectIndexSt
     )
 
     PROJECT_INDEX[project_id] = state
+    PROJECT_INDEX_FINGERPRINT[project_id] = fingerprint
 
     # Best-effort disk cache (does not break runtime if it fails)
     try:
-        _save_index_cache(cfg, state)
+        _save_index_cache(cfg, state, fingerprint)
         logger.info(
             "index_cache saved",
             extra={
@@ -188,14 +226,23 @@ def rebuild_project_index(project_id: str, cfg: ProjectConfig) -> ProjectIndexSt
 
 
 def ensure_index(project_id: str, cfg: ProjectConfig) -> ProjectIndexState:
+    fingerprint = _index_fingerprint(cfg)
+
     # Prefer in-memory
     if project_id in PROJECT_INDEX:
-        logger.debug("index_cache hit (memory)", extra={"projectId": project_id})
-        return PROJECT_INDEX[project_id]
+        cached_fingerprint = PROJECT_INDEX_FINGERPRINT.get(project_id)
+        if cached_fingerprint == fingerprint:
+            logger.debug("index_cache hit (memory)", extra={"projectId": project_id})
+            return PROJECT_INDEX[project_id]
 
-    cached = _load_index_cache(cfg)
+        logger.info("index_cache memory fingerprint mismatch; rebuilding", extra={"projectId": project_id})
+        PROJECT_INDEX.pop(project_id, None)
+        PROJECT_INDEX_FINGERPRINT.pop(project_id, None)
+
+    cached = _load_index_cache(cfg, fingerprint)
     if cached is not None:
         PROJECT_INDEX[project_id] = cached
+        PROJECT_INDEX_FINGERPRINT[project_id] = fingerprint
         logger.info(
             "index_cache hit (disk)",
             extra={

@@ -1,8 +1,12 @@
 from __future__ import annotations
 
 import hashlib
+import logging
 import re
 from pathlib import Path
+
+from fastapi import HTTPException
+from pydantic import ValidationError
 
 from backend.core.config import Settings
 from backend.core.errors import http_error
@@ -17,6 +21,7 @@ from backend.core.models import (
     ProjectCreateResponse,
     ProjectInfo,
     ProjectLayer,
+    ProjectManifest,
     ProjectOpenRequest,
     ProjectOpenResponse,
     WorkspaceDefaults,
@@ -25,7 +30,12 @@ from backend.core.models import (
 )
 from backend.core.project_service import load_project_config, save_project_config
 from backend.core.index_service import rebuild_project_index
+from backend.core.pydantic_compat import model_dump
+from backend.core.state import WORKSPACE_ROOT_BY_ID
 from backend.core.vfs import mount_from_source, read_json_from_mount
+
+
+logger = logging.getLogger("uvicorn.error")
 
 
 def _workspace_id_for_root(root: Path) -> str:
@@ -50,6 +60,103 @@ def _slugify(value: str) -> str:
     s = _SLUG_RE.sub("-", s)
     s = s.strip("-")
     return s
+
+
+def _default_project_manifest(project_id: str, display_name: str) -> dict:
+    return {
+        "Group": project_id,
+        "Name": display_name,
+        "Version": "1.0.0",
+        "Description": "",
+        "Authors": [],
+        "Website": "",
+        "ServerVersion": "*",
+        "DisabledByDefault": False,
+        "IncludesAssetPack": False,
+    }
+
+
+def _normalize_import_manifest(pack_mount) -> dict | None:
+    if not pack_mount.exists("manifest.json"):
+        return None
+
+    try:
+        manifest = read_json_from_mount(pack_mount, "manifest.json")
+    except HTTPException as exc:
+        raise http_error(
+            422,
+            "MANIFEST_INVALID",
+            "Imported pack manifest.json is invalid",
+            {"source": str(pack_mount.root), "detail": exc.detail},
+        )
+
+    if not isinstance(manifest, dict):
+        raise http_error(
+            422,
+            "MANIFEST_INVALID",
+            "Imported pack manifest.json must contain an object at the root",
+            {"source": str(pack_mount.root)},
+        )
+
+    try:
+        normalized = ProjectManifest(**manifest)
+    except ValidationError as exc:
+        raise http_error(
+            422,
+            "MANIFEST_INVALID",
+            "Imported pack manifest.json does not match the expected schema",
+            {"source": str(pack_mount.root), "error": str(exc)},
+        )
+
+    return model_dump(normalized)
+
+
+def _project_creation_conflicts(project_root: Path) -> list[str]:
+    conflicts: list[str] = []
+
+    if project_root.exists() and any(project_root.iterdir()):
+        conflicts.append(str(project_root))
+
+    for reserved in (
+        project_root / "Common",
+        project_root / "Server",
+        project_root / "manifest.json",
+        _project_config_path(project_root),
+    ):
+        if reserved.exists() and str(reserved) not in conflicts:
+            conflicts.append(str(reserved))
+
+    return conflicts
+
+
+def _cleanup_created_paths(created_paths: list[Path]) -> None:
+    for path in reversed(created_paths):
+        try:
+            if path.is_file():
+                path.unlink()
+            elif path.is_dir():
+                path.rmdir()
+        except FileNotFoundError:
+            continue
+        except OSError:
+            logger.warning("project create cleanup skipped path", extra={"path": str(path)})
+
+
+def register_workspace_root(root: Path) -> str:
+    workspace_id = _workspace_id_for_root(root)
+    WORKSPACE_ROOT_BY_ID[workspace_id] = str(root)
+    return workspace_id
+
+
+def resolve_workspace_root(settings: Settings, workspace_id: str | None) -> Path:
+    if not workspace_id:
+        return settings.workspace_root
+
+    root = WORKSPACE_ROOT_BY_ID.get(workspace_id)
+    if root is None:
+        raise http_error(404, "WORKSPACE_NOT_FOUND", "Unknown workspaceId. Open the workspace first.", {"workspaceId": workspace_id})
+
+    return Path(root)
 
 
 def _load_workspace_defaults(settings: Settings) -> WorkspaceDefaults:
@@ -95,12 +202,14 @@ def open_workspace(settings: Settings, req: WorkspaceOpenRequest) -> WorkspaceOp
                     "rootPath": str(root),
                     "projectsDir": str(projects_dir),
                 },
-                "defaults": defaults_model.dict(),
+                "defaults": model_dump(defaults_model),
             },
         )
 
+    workspace_id = register_workspace_root(root)
+
     return WorkspaceOpenResponse(
-        workspaceId=_workspace_id_for_root(root),
+        workspaceId=workspace_id,
         rootPath=str(root),
         projectsDir=str(projects_dir),
         defaults=defaults_model,
@@ -116,50 +225,54 @@ def list_projects(workspace_root: Path) -> list[ProjectInfo]:
     for cfg_path in projects_dir.rglob("has.project.json"):
         try:
             cfg = read_json(cfg_path)
-            project = cfg.get("project") or {}
-            project_id = project.get("id") or cfg_path.parent.name
+            parsed = ProjectConfig(**cfg)
             result.append(
                 ProjectInfo(
-                    projectId=project_id,
-                    displayName=project.get("displayName"),
-                    rootPath=project.get("rootPath", str(cfg_path.parent)),
-                    assetsWritePath=project.get("assetsWritePath", project.get("rootPath", str(cfg_path.parent))),
+                    projectId=parsed.project.id,
+                    displayName=parsed.project.displayName,
+                    rootPath=parsed.project.rootPath,
+                    assetsWritePath=parsed.project.assetsWritePath,
+                    status="ready",
                 )
             )
-        except Exception:
-            continue
+        except Exception as exc:
+            logger.warning("project listing found invalid config", extra={"path": str(cfg_path), "error": str(exc)})
+            result.append(
+                ProjectInfo(
+                    projectId=cfg_path.parent.name,
+                    displayName=None,
+                    rootPath=str(cfg_path.parent),
+                    assetsWritePath=str(cfg_path.parent),
+                    status="invalid",
+                    errorMessage=str(exc),
+                )
+            )
 
-    # Deduplicate by projectId (keep first)
-    seen: set[str] = set()
-    deduped: list[ProjectInfo] = []
+    # Deduplicate by projectId, preferring ready entries over invalid ones.
+    by_project_id: dict[str, ProjectInfo] = {}
     for p in result:
-        if p.projectId in seen:
+        existing = by_project_id.get(p.projectId)
+        if existing is None:
+            by_project_id[p.projectId] = p
             continue
-        seen.add(p.projectId)
-        deduped.append(p)
-    return sorted(deduped, key=lambda p: p.projectId)
+        if existing.status == "invalid" and p.status == "ready":
+            by_project_id[p.projectId] = p
+
+    return sorted(by_project_id.values(), key=lambda p: (p.status != "ready", p.projectId))
 
 
 def create_project(workspace_root: Path, req: ProjectCreateRequest) -> ProjectCreateResponse:
     project_root = Path(req.targetDir)
-    project_root.mkdir(parents=True, exist_ok=True)
+    manifest_data = dict(req.manifest) if req.manifest is not None else _default_project_manifest(req.projectId, req.displayName)
 
-    # Ensure pack-like layout exists (empty is OK for now).
-    (project_root / "Common").mkdir(parents=True, exist_ok=True)
-    (project_root / "Server").mkdir(parents=True, exist_ok=True)
-
-    manifest_data = req.manifest or {
-        "Group": req.projectId,
-        "Name": req.displayName,
-        "Version": "1.0.0",
-        "Description": "",
-        "Authors": [],
-        "Website": "",
-        "ServerVersion": "*",
-        "DisabledByDefault": False,
-        "IncludesAssetPack": False,
-    }
-    write_json(project_root / "manifest.json", manifest_data)
+    conflicts = _project_creation_conflicts(project_root)
+    if conflicts:
+        raise http_error(
+            409,
+            "PROJECT_EXISTS",
+            "Project targetDir already exists or contains reserved project files",
+            {"targetDir": str(project_root), "conflicts": conflicts},
+        )
 
     cfg = ProjectConfig(
         project=ProjectConfigProject(
@@ -173,10 +286,34 @@ def create_project(workspace_root: Path, req: ProjectCreateRequest) -> ProjectCr
     )
 
     cfg_path = _project_config_path(project_root)
-    if cfg_path.exists():
-        raise http_error(409, "PROJECT_EXISTS", "Project already exists at targetDir", {"targetDir": str(project_root)})
+    created_paths: list[Path] = []
 
-    write_json(cfg_path, cfg.dict())
+    try:
+        project_root.parent.mkdir(parents=True, exist_ok=True)
+
+        if not project_root.exists():
+            project_root.mkdir(exist_ok=False)
+            created_paths.append(project_root)
+
+        common_dir = project_root / "Common"
+        server_dir = project_root / "Server"
+        common_dir.mkdir(exist_ok=False)
+        created_paths.append(common_dir)
+        server_dir.mkdir(exist_ok=False)
+        created_paths.append(server_dir)
+
+        manifest_path = project_root / "manifest.json"
+        write_json(manifest_path, manifest_data)
+        created_paths.append(manifest_path)
+
+        write_json(cfg_path, model_dump(cfg))
+        created_paths.append(cfg_path)
+    except HTTPException:
+        _cleanup_created_paths(created_paths)
+        raise
+    except Exception as e:
+        _cleanup_created_paths(created_paths)
+        raise http_error(500, "PROJECT_CREATE_FAILED", "Failed to create project", {"targetDir": str(project_root), "error": str(e)})
 
     return ProjectCreateResponse(
         projectId=req.projectId,
@@ -210,12 +347,7 @@ def import_pack(settings: Settings, req: ImportPackRequest) -> ImportPackRespons
         path=req.pack.path,
     )
 
-    manifest: dict | None = None
-    if pack_mount.exists("manifest.json"):
-        try:
-            manifest = read_json_from_mount(pack_mount, "manifest.json")
-        except Exception:
-            manifest = None
+    manifest = _normalize_import_manifest(pack_mount)
 
     display_name = (req.newProject.displayName or "").strip()
     project_id = (req.newProject.projectId or "").strip()
@@ -250,7 +382,7 @@ def import_pack(settings: Settings, req: ImportPackRequest) -> ImportPackRespons
                 displayName=display_name,
                 targetDir=str(target_dir),
                 vanilla=workspace_defaults.vanilla,
-                manifest={"Group": project_id, "Name": display_name},
+                manifest=manifest or {"Group": project_id, "Name": display_name},
             ),
         )
 

@@ -39,6 +39,8 @@ class ProjectInfo(BaseModel):
     displayName: str | None = None
     rootPath: str
     assetsWritePath: str
+    status: Literal["ready", "invalid"] = "ready"
+    errorMessage: str | None = None
 
 
 class WorkspaceProjectsResponse(BaseModel):

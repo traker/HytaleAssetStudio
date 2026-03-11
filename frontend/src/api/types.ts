@@ -21,6 +21,8 @@ export type ProjectInfo = {
   displayName?: string | null
   rootPath: string
   assetsWritePath: string
+  status: 'ready' | 'invalid'
+  errorMessage?: string | null
 }
 
 export type WorkspaceProjectsResponse = {
@@ -60,6 +62,10 @@ export type SearchResult = {
   display: string
   origin: 'vanilla' | 'dependency' | 'project'
   group?: string
+  path?: string
+  ambiguous?: boolean
+  ambiguousId?: string
+  candidatePaths?: string[]
 }
 
 export type ProjectSearchResponse = {

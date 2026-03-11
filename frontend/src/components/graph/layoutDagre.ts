@@ -7,14 +7,24 @@ const NODE_HEIGHT_DEP_ROW = 26 // per outgoing dep row
 const NODE_HEIGHT_DEP_HEADER = 22 // "Dépendances" label
 const NODE_HEIGHT_MAX_DEPS = 400 // capped to maxHeight of scroll area
 
+function getOutgoingCount(node: Node): number {
+  const data = node.data
+  if (!data || typeof data !== 'object' || !('outgoing' in data)) {
+    return 0
+  }
+
+  const outgoing = data.outgoing
+  return Array.isArray(outgoing) ? outgoing.length : 0
+}
+
 function estimateNodeHeight(node: Node): number {
-  const outgoing = (node.data as any)?.outgoing
-  if (!outgoing || outgoing.length === 0) return NODE_HEIGHT_BASE
-  const visibleRows = Math.min(outgoing.length, Math.floor(NODE_HEIGHT_MAX_DEPS / NODE_HEIGHT_DEP_ROW))
+  const outgoingCount = getOutgoingCount(node)
+  if (outgoingCount === 0) return NODE_HEIGHT_BASE
+  const visibleRows = Math.min(outgoingCount, Math.floor(NODE_HEIGHT_MAX_DEPS / NODE_HEIGHT_DEP_ROW))
   return NODE_HEIGHT_BASE + NODE_HEIGHT_DEP_HEADER + visibleRows * NODE_HEIGHT_DEP_ROW + 8
 }
 
-export function layoutGraph(nodes: Node[], edges: Edge[], direction: 'TB' | 'LR' = 'LR'): { nodes: Node[]; edges: Edge[] } {
+export function layoutGraph<TNode extends Node>(nodes: TNode[], edges: Edge[], direction: 'TB' | 'LR' = 'LR'): { nodes: TNode[]; edges: Edge[] } {
   const dagreGraph = new dagre.graphlib.Graph()
   dagreGraph.setDefaultEdgeLabel(() => ({}))
 

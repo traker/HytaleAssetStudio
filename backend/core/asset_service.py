@@ -28,23 +28,31 @@ class ResolvedServerJson:
 
 
 def resolve_server_json(cfg: ProjectConfig, asset_key: str) -> ResolvedServerJson:
-    if not asset_key.startswith("server:"):
-        raise http_error(422, "KEY_INVALID", "Only server:* is supported", {"key": asset_key})
-
-    server_id = asset_key.split(":", 1)[1].strip()
-    if not server_id or not _ID_CANDIDATE.match(server_id):
-        raise http_error(422, "ID_INVALID", "Invalid server id", {"id": server_id})
-
     # Ensure index present (memory or disk cache or rebuild)
     index = ensure_index(cfg.project.id, cfg)
 
-    paths = index.server_id_to_all_paths.get(server_id)
-    if not paths:
-        raise http_error(404, "ASSET_NOT_FOUND", "Server asset not found", {"id": server_id})
-    if len(paths) != 1:
-        raise http_error(409, "ID_AMBIGUOUS", "Server ID resolves to multiple JSON paths", {"id": server_id, "paths": paths})
+    if asset_key.startswith("server-path:"):
+        vfs_path = asset_key.split(":", 1)[1].strip().replace("\\", "/").lstrip("/")
+        if not vfs_path.lower().startswith("server/") or not vfs_path.lower().endswith(".json"):
+            raise http_error(422, "PATH_INVALID", "server-path must target a Server/*.json asset", {"path": vfs_path})
+        if vfs_path not in index.effective_mount_by_vfs_path:
+            raise http_error(404, "ASSET_NOT_FOUND", "Server asset path not found", {"path": vfs_path})
+        server_id = Path(vfs_path).stem
+    elif asset_key.startswith("server:"):
+        server_id = asset_key.split(":", 1)[1].strip()
+        if not server_id or not _ID_CANDIDATE.match(server_id):
+            raise http_error(422, "ID_INVALID", "Invalid server id", {"id": server_id})
 
-    vfs_path = paths[0]
+        paths = index.server_id_to_all_paths.get(server_id)
+        if not paths:
+            raise http_error(404, "ASSET_NOT_FOUND", "Server asset not found", {"id": server_id})
+        if len(paths) != 1:
+            raise http_error(409, "ID_AMBIGUOUS", "Server ID resolves to multiple JSON paths", {"id": server_id, "paths": paths})
+
+        vfs_path = paths[0]
+    else:
+        raise http_error(422, "KEY_INVALID", "Only server:* and server-path:* are supported", {"key": asset_key})
+
     _ensure_no_parent_segments(vfs_path)
 
     mount_id = index.effective_mount_by_vfs_path.get(vfs_path)
@@ -82,6 +90,7 @@ def write_server_json_copy(cfg: ProjectConfig, asset_key: str, new_id: str, payl
         raise http_error(422, "ID_INVALID", "newId must be a valid server asset ID (alphanumeric + underscore)", {"newId": new_id})
 
     resolved = resolve_server_json(cfg, asset_key)
+    index = ensure_index(cfg.project.id, cfg)
 
     if not resolved.vfs_path.lower().startswith("server/"):
         raise http_error(500, "RESOLVE_INVALID", "Resolved path is not under Server/", {"path": resolved.vfs_path})
@@ -97,6 +106,22 @@ def write_server_json_copy(cfg: ProjectConfig, asset_key: str, new_id: str, payl
         dst.relative_to(project_root.resolve())
     except Exception:
         raise http_error(422, "PATH_INVALID", "Resolved path escapes project root", {"path": str(dst)})
+
+    if new_id in index.server_id_to_all_paths:
+        raise http_error(
+            409,
+            "ID_CONFLICT",
+            "newId already exists in the effective asset graph",
+            {"newId": new_id, "paths": index.server_id_to_all_paths[new_id]},
+        )
+
+    if new_vfs_path in index.effective_mount_by_vfs_path or dst.exists():
+        raise http_error(
+            409,
+            "PATH_CONFLICT",
+            "Target asset path already exists",
+            {"newId": new_id, "path": new_vfs_path},
+        )
 
     if not isinstance(payload_json, dict):
         raise http_error(422, "PAYLOAD_INVALID", "json must be an object", {})

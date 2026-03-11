@@ -1,26 +1,7 @@
 import { Handle, Position } from '@xyflow/react'
 
 import { getColorForGroup, getColorForEdgeType } from './colors'
-
-export type OutgoingDep = {
-  edgeLabel: string
-  targetId: string
-  targetLabel: string
-  targetGroup: string
-}
-
-export type BlueprintNodeData = {
-  label: string
-  group: string
-  path?: string
-  isModified?: boolean
-  isRoot?: boolean
-  isSelected?: boolean
-  isConnected?: boolean
-  outgoing?: OutgoingDep[]
-  nodeId?: string
-  onSelectNode?: (sourceId: string, targetId: string) => void
-}
+import type { BlueprintNodeData } from './blueprintTypes'
 
 type Props = {
   data: BlueprintNodeData

@@ -234,9 +234,29 @@
 }
 
 .project-card:hover { border-color: #61dafb55; transform: translateY(-1px); }
+.project-card:disabled { cursor: not-allowed; opacity: 1; transform: none; }
+.project-card-invalid { border-color: #5a2a2a; background: rgba(30, 14, 18, 0.78); }
+.project-card-invalid:hover { border-color: #7a3838; transform: none; }
 .project-card-id { font-size: 13px; font-weight: 700; color: #ccc; font-family: 'ui-monospace', monospace; }
 .project-card-name { font-size: 11px; color: #555; }
 .project-card-arrow { margin-top: 10px; font-size: 11px; color: #61dafb; font-weight: 700; }
+.project-card-badge {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: #ff9a9a;
+  border: 1px solid #7a3838;
+  border-radius: 999px;
+  padding: 2px 6px;
+  flex-shrink: 0;
+}
+.project-card-error {
+  margin-top: 10px;
+  font-size: 11px;
+  color: #d17c7c;
+  line-height: 1.4;
+  word-break: break-word;
+}
 
 /* ── Tool tiles (project dashboard) ─────────────────────────── */
 

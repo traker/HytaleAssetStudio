@@ -17,8 +17,9 @@ import { HasApiError, hasApi } from '../../api'
 import type { AssetGetResponse, ProjectGraphResponse, SearchResult } from '../../api'
 
 import { AssetSidePanel } from '../../components/editor/AssetSidePanel'
-import type { OutgoingDep } from '../../components/graph/BlueprintNode'
 import { BlueprintNode } from '../../components/graph/BlueprintNode'
+import type { BlueprintNodeData, OutgoingDep } from '../../components/graph/blueprintTypes'
+import { getBlueprintNodeDisplay, isInteractionBlueprintGroup } from '../../components/graph/blueprintTypes'
 import { getColorForGroup, getColorForEdgeType } from '../../components/graph/colors'
 import { layoutGraph } from '../../components/graph/layoutDagre'
 
@@ -48,7 +49,7 @@ function toFlow(
   data: ProjectGraphResponse,
   rootId: string,
   onSelectNode: (sourceId: string, targetId: string) => void,
-): { nodes: Node[]; edges: Edge[] } {
+): { nodes: Node<BlueprintNodeData>[]; edges: Edge[] } {
   // Build a quick lookup: id → { label, group }
   const nodeInfoMap = new Map(data.nodes.map((n) => [n.id, { label: n.label, group: n.group ?? 'json_data' }]))
 
@@ -65,7 +66,7 @@ function toFlow(
     })
   }
 
-  const nodes: Node[] = data.nodes.map((n) => ({
+  const nodes: Node<BlueprintNodeData>[] = data.nodes.map((n) => ({
     id: n.id,
     type: 'blueprint',
     position: { x: 0, y: 0 },
@@ -113,7 +114,7 @@ export function ProjectGraphEditor(props: Props) {
   const [searchResults, setSearchResults] = useState<SearchResult[]>([])
   const searchSeq = useRef(0)
 
-  const [nodes, setNodes] = useState<Node[]>([])
+  const [nodes, setNodes] = useState<Array<Node<BlueprintNodeData>>>([])
   const [edges, setEdges] = useState<Edge[]>([])
 
   const [status, setStatus] = useState<Status>({ kind: 'idle' })
@@ -131,7 +132,10 @@ export function ProjectGraphEditor(props: Props) {
   const searchEnabled = props.searchEnabled ?? true
   const canLoad = useMemo(() => status.kind !== 'loading' && selected !== null, [status.kind, selected])
 
-  const onNodesChange = useCallback((changes: NodeChange[]) => setNodes((prev) => applyNodeChanges(changes, prev)), [])
+  const onNodesChange = useCallback(
+    (changes: NodeChange[]) => setNodes((prev) => applyNodeChanges(changes, prev) as Array<Node<BlueprintNodeData>>),
+    [],
+  )
   const onEdgesChange = useCallback((changes: EdgeChange[]) => setEdges((prev) => applyEdgeChanges(changes, prev)), [])
 
   // Sync isSelected + isConnected on nodes, and highlight edges
@@ -277,8 +281,7 @@ export function ProjectGraphEditor(props: Props) {
     props.onOpenInteractions &&
       selectedNodeId &&
       selectedNode &&
-      typeof (selectedNode.data as any)?.group === 'string' &&
-      ((selectedNode.data as any).group === 'interaction' || (selectedNode.data as any).group === 'rootinteraction'),
+      isInteractionBlueprintGroup(selectedNode.data.group),
   )
 
   function handleSelect(r: SearchResult): void {
@@ -402,7 +405,17 @@ export function ProjectGraphEditor(props: Props) {
                           {r.group}
                         </span>
                       )}
-                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.display}</span>
+                      <div style={{ minWidth: 0, display: 'flex', flexDirection: 'column', gap: 1 }}>
+                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.display}</span>
+                        {r.path && (
+                          <span style={{ fontSize: 10, color: '#777', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {r.path}
+                          </span>
+                        )}
+                      </div>
+                      {r.ambiguous && (
+                        <span style={{ fontSize: 10, color: '#ffb347', flexShrink: 0 }}>AMBIG</span>
+                      )}
                       {r.origin === 'project' && (
                         <span style={{ marginLeft: 'auto', fontSize: 10, color: '#FFB347', flexShrink: 0 }}>LOCAL</span>
                       )}
@@ -483,7 +496,7 @@ export function ProjectGraphEditor(props: Props) {
                   if (!canOpenInteractionEditor || !selectedNodeId || !selectedNode) return
                   props.onOpenInteractions?.({
                     assetKey: selectedNodeId,
-                    display: String((selectedNode.data as any)?.label ?? selectedNodeId),
+                    display: getBlueprintNodeDisplay(selectedNode.data, selectedNodeId),
                   })
                 }
               : undefined

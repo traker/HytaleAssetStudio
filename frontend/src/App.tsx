@@ -48,8 +48,9 @@ function App() {
     try {
       const resp = await hasApi.workspaceProjects(workspace.workspaceId)
       setProjects(resp.projects)
-    } catch {
-      // best-effort refresh
+      setError(null)
+    } catch (e) {
+      setError(e instanceof HasApiError ? e.message : 'Project list refresh failed')
     }
     selectProject(projectId)
   }

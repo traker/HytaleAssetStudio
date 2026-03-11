@@ -1,5 +1,274 @@
 # 📋 Session Recap — Hytale Asset Studio
 
+## 2026-03-11 — Cloture technique de STABILSTAGE1
+
+**Objectif** : fermer les derniers reliquats techniques du plan de stabilisation avant changement de sujet.
+
+**Fait** :
+- `backend/tests/test_collision_resolution.py`
+	- ajout d'un test qui verifie qu'une ouverture `server:<id>` ambiguë renvoie une erreur structuree `ID_AMBIGUOUS` avec les chemins candidats
+- `backend/tests/test_asset_service.py`
+	- ajout d'un test qui verifie qu'un `override` met a jour l'index effectif immediatement et bascule l'origine en `project`
+- `STABILSTAGE1_TRACKING.md`
+	- cloture des tests restants backend
+	- lot 3 marque termine cote technique
+	- avertissement bundle explicitement reporte avec justification
+
+**Verification** :
+- `python -m unittest discover -s backend/tests -p "test_*.py"` → 20 tests OK
+- `npm --prefix frontend run build` → build OK, warning chunk >500 kB confirme
+
+**Decision** :
+- l'optimisation bundle est reportee hors STABILSTAGE1
+- raison: warning connu, probablement tire en partie par Monaco charge dans le panneau editeur, mais non bloquant pour la stabilisation fonctionnelle
+
+**Reste** :
+- une verification UX manuelle des erreurs visibles reste souhaitable, mais il n'y a plus de reliquat technique backend bloquant sur ce stage
+
+## 2026-03-11 — Projets invalides visibles dans l'accueil
+
+**Objectif** : ne plus cacher les projets invalides dans la liste du workspace, mais les afficher avec un statut degrade non ouvrable.
+
+**Fait** :
+- `backend/core/models.py`
+	- `ProjectInfo` expose maintenant `status` (`ready|invalid`) et `errorMessage`
+- `backend/core/workspace_service.py`
+	- `list_projects(...)` parse les configs valides via `ProjectConfig`
+	- en cas de config invalide, retourne une entree `invalid` au lieu de la cacher
+	- deduplication qui prefere une entree `ready` a une entree `invalid` si collision d'identifiant
+- `backend/tests/test_workspace_service.py`
+	- test que la liste de projets inclut bien une entree invalide avec statut et message
+- `frontend/src/api/types.ts`
+	- alignement du type `ProjectInfo`
+- `frontend/src/views/HomePage.tsx`
+	- affichage des projets invalides comme cartes desactivees avec badge `INVALID` et message d'erreur
+- `frontend/src/App.css`
+	- style degrade pour les cartes invalides
+
+**Verification** :
+- `python -m unittest discover -s backend/tests -p "test_*.py"`
+- `npm --prefix frontend run build`
+
+**Note** : les projets invalides restent volontairement non ouvrables ; l'objectif est la visibilite et le diagnostic, pas l'ouverture d'un etat casse.
+
+## 2026-03-11 — Typage frontend des graphes renforce
+
+**Objectif** : supprimer les `as any` fragiles dans les zones critiques des vues graphe et stabiliser le contrat de donnees des noeuds.
+
+**Fait** :
+- `frontend/src/components/graph/blueprintTypes.ts`
+	- nouveau module partage pour `BlueprintNodeData`, `OutgoingDep` et helpers de navigation
+- `frontend/src/components/graph/BlueprintNode.tsx`
+	- reutilise le type partage au lieu de redefinir localement les structures
+- `frontend/src/components/graph/layoutDagre.ts`
+	- layout genericise pour conserver le type exact des noeuds React Flow
+- `frontend/src/views/project/ProjectGraphEditor.tsx`
+	- `Node<BlueprintNodeData>` utilise dans les zones de navigation/selection
+	- suppression des `as any` pour l'ouverture de l'editeur d'interactions
+- `frontend/src/views/project/ProjectModifiedGraphView.tsx`
+	- meme durcissement de typage sur la navigation et l'ouverture des interactions
+
+**Verification** :
+- recherche frontend sur `as any`
+- `npm --prefix frontend run build`
+
+**Note** : ce passage cible les zones critiques liees aux graphes blueprint ; d'autres composants frontend pourront etre raffines plus tard si besoin.
+
+## 2026-03-11 — Normalisation de la serialisation Pydantic
+
+**Objectif** : eliminer les derniers appels directs a `.dict()` et garder un seul chemin de serialisation compatible Pydantic v1/v2.
+
+**Fait** :
+- `backend/core/workspace_service.py`
+	- remplacement de `defaults_model.dict()` par `model_dump(defaults_model)`
+- `backend/routes/projects.py`
+	- remplacement du `ProjectManifest(...).dict()` par `model_dump(...)`
+
+**Verification** :
+- recherche globale backend sur `.dict()`
+- `python -m compileall backend`
+- `python -m unittest discover -s backend/tests -p "test_*.py"`
+
+## 2026-03-11 — Erreurs utiles visibles (passe partielle)
+
+**Objectif** : supprimer les silences les plus nuisibles cote backend et frontend, sans encore refondre toute l'UX d'erreur.
+
+**Fait** :
+- `backend/core/project_service.py`
+	- les configs projet invalides sautees lors de la recherche d'un projet sont maintenant logguees via `uvicorn.error`
+- `frontend/src/App.tsx`
+	- l'echec de refresh de la liste projet apres creation n'est plus silencieux
+- `frontend/src/views/project/ProjectModifiedGraphView.tsx`
+	- les echecs de refresh du graphe modifie et d'expansion d'un noeud remontent maintenant dans l'etat d'erreur UI
+	- un echec d'expansion ne marque plus le noeud comme deja developpe, ce qui permet de retenter
+
+**Verification** :
+- `python -m compileall backend`
+- `python -m unittest discover -s backend/tests -p "test_*.py"`
+- `npm --prefix frontend run build`
+
+**Reste a faire sur ce bloc** : si souhaite, exposer les projets invalides dans l'UI avec un statut degrade au lieu de simples logs backend.
+
+## 2026-03-11 — Gestion explicite des collisions d'IDs + build frontend
+
+**Objectif** : ne plus faire disparaitre les assets ambigus de la recherche et permettre une selection explicite par chemin.
+
+**Fait** :
+- `backend/routes/index_graph.py`
+	- la recherche renvoie maintenant les IDs ambigus sous forme d'entrees distinctes par chemin candidat
+	- ajout d'un etat `ambiguous` et des `candidatePaths` dans les resultats de recherche
+- `backend/core/asset_service.py`
+	- `resolve_server_json(...)` supporte maintenant `server-path:*` en plus de `server:*`
+- `backend/core/graph_service.py`
+	- `build_focus_graph(...)` accepte `server-path:*` comme racine explicite
+	- les noeuds roots/ambigus peuvent etre identifies par chemin exact
+- `backend/core/interaction_tree_service.py`
+	- support de `server-path:*` pour charger une racine d'interaction explicite
+- `frontend/src/api/types.ts`
+	- enrichissement du type `SearchResult` avec `path`, `ambiguous`, `ambiguousId`, `candidatePaths`
+- `frontend/src/views/project/ProjectGraphEditor.tsx`
+	- affichage du chemin candidat et d'un badge `AMBIG` dans la liste de recherche
+- `frontend/src/components/editor/AssetSidePanel.tsx`
+	- edition autorisee aussi pour `server-path:*`
+- `frontend/src/views/project/InteractionTreeEditor.tsx`
+	- chargement des assets externes compatible avec `server-path:*`
+- `backend/tests/test_collision_resolution.py`
+	- test de recherche sur IDs ambigus
+	- test de lecture asset via `server-path:*`
+	- test de graphe avec racine `server-path:*`
+
+**Verification** :
+- `python -m compileall backend`
+- `python -m unittest discover -s backend/tests -p "test_*.py"`
+- `npm --prefix frontend run build`
+
+**Limite restante** : la desambiguïsation explicite marche a l'entree utilisateur, mais les references ambiguës rencontrees pendant la traversée interne du graphe restent ignorees tant qu'aucun choix explicite n'est fourni.
+
+## 2026-03-11 — Cache d'index plus fiable + tests backend
+
+**Objectif** : eviter qu'un index memoire ou disque reste stale apres une modification des fichiers du projet.
+
+**Fait** :
+- `backend/core/state.py`
+	- ajout de `PROJECT_INDEX_FINGERPRINT` pour suivre le fingerprint du cache memoire
+- `backend/core/index_service.py`
+	- fingerprint etendu avec une signature du contenu projet: `manifest.json`, `Common/**`, `Server/**`
+	- invalidation du cache memoire si le fingerprint a change
+	- invalidation du cache disque si le fingerprint ne correspond plus
+	- conservation d'un compromis volontaire: la signature cible le projet actif, pas l'ensemble des gros packs externes
+- `backend/tests/test_index_service.py`
+	- test d'invalidation du cache memoire apres modification des fichiers projet
+	- test d'invalidation du cache disque apres modification des fichiers projet
+
+**Verification** :
+- `python -m compileall backend`
+- `python -m unittest discover -s backend/tests -p "test_*.py"`
+
+**Limite restante** : le fingerprint ne suit pas finement les changements de vanilla/dependances lourdes pour eviter un cout de calcul trop eleve sur chaque lecture.
+
+## 2026-03-11 — Preservation du manifest a l'import + tests backend
+
+**Objectif** : ne plus perdre silencieusement les metadonnees du manifest lors d'un import de pack.
+
+**Fait** :
+- `backend/core/workspace_service.py`
+	- ajout d'une normalisation explicite du manifest importe via `ProjectManifest`
+	- si `manifest.json` existe et est valide, les champs connus sont preserves dans le projet cree
+	- si `manifest.json` est invalide ou ne respecte pas le schema attendu, l'import echoue explicitement avec `MANIFEST_INVALID`
+	- si le pack n'a pas de manifest, l'import garde le comportement de manifest minimal par defaut
+- `backend/tests/test_import_pack.py`
+	- test de preservation des champs principaux d'un manifest complet
+	- test de rejet d'un manifest JSON invalide
+	- test de fallback sans manifest
+
+**Verification** :
+- `python -m compileall backend`
+- `python -m unittest discover -s backend/tests -p "test_*.py"`
+
+**Limite restante** : seules les cles connues du modele `ProjectManifest` sont preservees ; les cles supplementaires non modelisees sont ignorees.
+
+## 2026-03-11 — Save as securise contre les collisions + tests backend
+
+**Objectif** : empecher `mode=copy` d'ecraser silencieusement un asset existant ou de creer une collision surprise.
+
+**Fait** :
+- `backend/core/asset_service.py`
+	- `write_server_json_copy(...)` verifie maintenant l'index effectif avant ecriture
+	- refus d'un `newId` deja present dans la VFS effective avec erreur `ID_CONFLICT`
+	- refus d'un chemin cible deja existant avec erreur `PATH_CONFLICT`
+- `backend/tests/test_asset_service.py`
+	- test de copie reussie
+	- test de rejet si `newId` existe deja dans le graphe effectif
+	- test de rejet si le fichier cible existe deja dans le projet
+
+**Verification** :
+- `python -m compileall backend`
+- `python -m unittest discover -s backend/tests -p "test_*.py"`
+
+**Decision** : la politique est volontairement stricte ; une collision existante dans vanilla/dependances est refusee aussi pour eviter un `Save as` qui introduirait du shadowing implicite difficile a comprendre.
+
+## 2026-03-11 — Export ZIP en whitelist pack-only + tests backend
+
+**Objectif** : empecher l'export d'embarquer des fichiers internes studio ou hors format pack.
+
+**Fait** :
+- `backend/core/export_service.py`
+	- remplacement de la logique blacklist par une whitelist explicite
+	- export limite a `manifest.json`, `Common/**` et `Server/**`
+	- exclusion implicite des fichiers internes type `.studio_cache`, `has.project.json`, fichiers debug hors whitelist
+- `backend/tests/test_export_service.py`
+	- test d'echec sans manifest valide
+	- test de whitelist avec exclusion des fichiers studio
+	- test de retention exclusive des chemins pack autorises
+
+**Verification** :
+- `python -m compileall backend`
+- `python -m unittest discover -s backend/tests -p "test_*.py"`
+
+**Limite restante** : si le format pack distribue doit inclure a l'avenir d'autres fichiers racine legitimes, ils devront etre ajoutes explicitement a la whitelist.
+
+## 2026-03-11 — Creation de projet atomique + tests backend
+
+**Objectif** : empecher toute creation partielle ou ecrasement lors d'un `create_project`.
+
+**Fait** :
+- `backend/core/workspace_service.py`
+	- prevalidation du `targetDir` avant ecriture
+	- refus d'un dossier cible deja occupe par des elements reserves du projet
+	- rollback minimal des chemins crees si une ecriture echoue en cours de creation
+	- remplacement du `cfg.dict()` local par `model_dump(cfg)` dans ce flux
+- `backend/tests/test_workspace_service.py`
+	- test de creation reussie
+	- test de conflit sans ecrasement
+	- test de rollback sur echec d'ecriture
+
+**Verification** :
+- `python -m compileall backend`
+- `python -m unittest discover -s backend/tests -p "test_*.py"`
+
+**Limite restante** : si les dossiers parents du `targetDir` n'existent pas, ils peuvent etre crees avant l'ecriture du projet lui-meme ; en revanche aucun contenu projet partiel n'est conserve apres echec.
+
+## 2026-03-11 — Workspace backend reel via contexte API
+
+**Objectif** : ne plus ignorer le workspace ouvert par l'utilisateur sur les routes backend.
+
+**Fait** :
+- `backend/core/state.py` — ajout d'un registre memoire `workspaceId -> rootPath`
+- `backend/core/workspace_service.py` — enregistrement du workspace a l'ouverture + helper de resolution `resolve_workspace_root(...)`
+- `backend/routes/workspace.py` — listing des projets base sur le `workspaceId` resolu
+- `backend/routes/projects.py` — create/import utilisent le vrai workspace ; routes projet resolvent `X-HAS-Workspace-Id`
+- `backend/routes/index_graph.py` — graph/search/rebuild resolvent `X-HAS-Workspace-Id`
+- `backend/routes/assets.py` — asset/modified/resource resolvent `X-HAS-Workspace-Id`
+- `backend/routes/interactions.py` + `backend/core/interaction_tree_service.py` — interaction tree resolu sur le bon workspace
+- `frontend/src/api/http.ts` — propagation automatique du header `X-HAS-Workspace-Id`
+- `frontend/src/api/hasApi.ts` — `workspaceOpen()` enregistre le workspace actif pour les appels suivants
+
+**Verification** :
+- `python -m compileall backend`
+- `npm --prefix frontend run build`
+
+**Limite restante** : le registre workspace est en memoire ; apres redemarrage backend, le frontend doit re-ouvrir le workspace pour rehydrater le contexte.
+
 ## 2026-06-XX — Manifest editor dans ProjectConfigView
 
 **Objectif** : export ZIP avec un manifest Hytale complet (9 champs + Authors).

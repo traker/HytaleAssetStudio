@@ -27,3 +27,9 @@ class ProjectIndexState:
 
 # In-memory cache (MVP)
 PROJECT_INDEX: dict[str, ProjectIndexState] = {}
+PROJECT_INDEX_FINGERPRINT: dict[str, str] = {}
+
+# In-memory workspace registry used to resolve the workspace the user opened.
+# This avoids falling back silently to HAS_WORKSPACE_ROOT for subsequent
+# workspace/project-scoped requests.
+WORKSPACE_ROOT_BY_ID: dict[str, str] = {}

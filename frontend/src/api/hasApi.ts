@@ -1,4 +1,4 @@
-import { httpJson } from './http'
+import { httpJson, setApiWorkspaceId } from './http'
 import type {
   AssetGetResponse,
   AssetPutRequest,
@@ -33,11 +33,13 @@ function qs(params: Record<string, string | number | boolean | undefined>): stri
 }
 
 export const hasApi = {
-  workspaceOpen(req: WorkspaceOpenRequest): Promise<WorkspaceOpenResponse> {
-    return httpJson(`${API_BASE}/workspace/open`, {
+  async workspaceOpen(req: WorkspaceOpenRequest): Promise<WorkspaceOpenResponse> {
+    const response = await httpJson<WorkspaceOpenResponse>(`${API_BASE}/workspace/open`, {
       method: 'POST',
       body: JSON.stringify(req),
     })
+    setApiWorkspaceId(response.workspaceId)
+    return response
   },
 
   workspaceProjects(workspaceId: string): Promise<WorkspaceProjectsResponse> {
