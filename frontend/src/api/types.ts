@@ -79,6 +79,8 @@ export type GraphNode = {
   group?: string
   path?: string
   state: 'vanilla' | 'local'
+  isModifiedRoot?: boolean
+  modificationKind?: 'override' | 'new'
 }
 
 export type GraphEdge = {
@@ -160,6 +162,7 @@ export type ModifiedAssetEntry = {
   mtimeMs: number
   origin: 'project'
   isNew: boolean
+  modificationKind: 'override' | 'new'
 }
 
 export type ModifiedAssetsResponse = {

@@ -7,9 +7,11 @@ from pathlib import Path
 from fastapi import HTTPException
 
 from backend.core.asset_service import write_server_json_copy, write_server_json_override
+from backend.core.graph_service import build_modified_graph
 from backend.core.index_service import ensure_index
 from backend.core.io import write_json
 from backend.core.models import PackSource, ProjectConfig, ProjectConfigProject
+from backend.routes.assets import _list_modified_entries
 from backend.core.state import PROJECT_INDEX, PROJECT_INDEX_FINGERPRINT
 
 
@@ -102,6 +104,87 @@ class AssetCopyTests(unittest.TestCase):
             updated_index = ensure_index(cfg.project.id, cfg)
             self.assertEqual(updated_index.origin_by_server_path["Server/Items/Sword.json"], "project")
             self.assertEqual(updated_index.effective_mount_by_vfs_path["Server/Items/Sword.json"], "project")
+
+    def test_build_modified_graph_includes_unreferenced_new_copy_root(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            project_root, vanilla_root = self.setup_pack_roots(tmp)
+            cfg = self.make_config(project_root, vanilla_root)
+
+            write_json(vanilla_root / "Server" / "Items" / "Sword.json", {"Id": "Sword", "Value": 1})
+
+            write_server_json_copy(cfg, "server:Sword", "Sword_Copy", {"Id": "Sword", "Value": 2})
+
+            graph = build_modified_graph(cfg, 0)
+            node_ids = {node["id"] for node in graph["nodes"]}
+
+            self.assertIn("server:Sword_Copy", node_ids)
+            self.assertIn("server:Sword_Copy", graph["modifiedIds"])
+
+    def test_build_modified_graph_marks_new_and_override_roots(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            project_root, vanilla_root = self.setup_pack_roots(tmp)
+            cfg = self.make_config(project_root, vanilla_root)
+
+            write_json(vanilla_root / "Server" / "Items" / "Sword.json", {"Id": "Sword", "Value": 1})
+            write_json(vanilla_root / "Server" / "Items" / "Shield.json", {"Id": "Shield", "Value": 5})
+
+            write_server_json_override(cfg, "server:Sword", {"Id": "Sword", "Value": 99})
+            write_server_json_copy(cfg, "server:Shield", "Shield_Copy", {"Id": "Shield", "Value": 6})
+
+            graph = build_modified_graph(cfg, 0)
+            nodes = {node["id"]: node for node in graph["nodes"]}
+
+            self.assertEqual(nodes["server:Sword"]["modificationKind"], "override")
+            self.assertEqual(nodes["server:Shield_Copy"]["modificationKind"], "new")
+
+    def test_same_server_id_in_different_project_path_is_still_override(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            vanilla_root = root / "vanilla"
+            project_root = root / "project"
+            (vanilla_root / "Common").mkdir(parents=True)
+            (vanilla_root / "Server" / "Item" / "Items" / "Weapon" / "Sword").mkdir(parents=True)
+            (project_root / "Common").mkdir(parents=True)
+            (project_root / "Server" / "Item" / "Interactions" / "Weapons" / "Sword" / "Attacks" / "Primary").mkdir(parents=True)
+            cfg = self.make_config(project_root, vanilla_root)
+
+            write_json(
+                vanilla_root / "Server" / "Item" / "Items" / "Weapon" / "Sword" / "Weapon_Sword_Test.json",
+                {"Id": "Weapon_Sword_Test", "Value": 1},
+            )
+            write_json(
+                project_root / "Server" / "Item" / "Interactions" / "Weapons" / "Sword" / "Attacks" / "Primary" / "Weapon_Sword_Test.json",
+                {"Id": "Weapon_Sword_Test", "Value": 2},
+            )
+
+            entries = {entry.vfsPath: entry for entry in _list_modified_entries(cfg)}
+            graph = build_modified_graph(cfg, 0)
+            node = next(
+                item for item in graph["nodes"]
+                if item["path"] == "Server/Item/Interactions/Weapons/Sword/Attacks/Primary/Weapon_Sword_Test.json"
+            )
+
+            self.assertEqual(
+                entries["Server/Item/Interactions/Weapons/Sword/Attacks/Primary/Weapon_Sword_Test.json"].modificationKind,
+                "override",
+            )
+            self.assertEqual(node["modificationKind"], "override")
+
+    def test_list_modified_entries_uses_server_path_and_marks_copy_vs_override(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            project_root, vanilla_root = self.setup_pack_roots(tmp)
+            cfg = self.make_config(project_root, vanilla_root)
+
+            write_json(vanilla_root / "Server" / "Items" / "Sword.json", {"Id": "Sword", "Value": 1})
+            write_server_json_override(cfg, "server:Sword", {"Id": "Sword", "Value": 99})
+            write_server_json_copy(cfg, "server:Sword", "Sword_Copy", {"Id": "Sword", "Value": 2})
+
+            entries = {entry.vfsPath: entry for entry in _list_modified_entries(cfg)}
+
+            self.assertEqual(entries["Server/Items/Sword.json"].assetKey, "server-path:Server/Items/Sword.json")
+            self.assertEqual(entries["Server/Items/Sword.json"].modificationKind, "override")
+            self.assertEqual(entries["Server/Items/Sword_Copy.json"].assetKey, "server-path:Server/Items/Sword_Copy.json")
+            self.assertEqual(entries["Server/Items/Sword_Copy.json"].modificationKind, "new")
 
 
 if __name__ == "__main__":

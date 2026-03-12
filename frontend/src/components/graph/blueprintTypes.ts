@@ -11,6 +11,7 @@ export type BlueprintNodeData = {
   path?: string
   isModified?: boolean
   isRoot?: boolean
+  modificationKind?: 'override' | 'new'
   isSelected?: boolean
   isConnected?: boolean
   outgoing?: OutgoingDep[]

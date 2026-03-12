@@ -1,5 +1,121 @@
 # 📋 Session Recap — Hytale Asset Studio
 
+## 2026-03-12 — Fallback frontend si le backend live ne renvoie pas encore `modificationKind`
+
+**Contexte** : sur `ProjectModifiedGraphView`, certains serveurs backend deja lances continuaient a renvoyer `modificationKind = null` sur `/modified` et `/graph-modified`, ce qui faisait afficher `OVERRIDE` partout dans la liste et `LOCAL` dans les noeuds du graphe.
+
+**Fait** :
+- `frontend/src/views/project/ProjectModifiedGraphView.tsx`
+	- ajout d'un fallback `resolveEntryModificationKind(...)` base sur `isNew` quand `modificationKind` est absent
+	- reinjection du `modificationKind` sur les noeuds du graphe par correspondance `vfsPath -> modificationKind` a partir de la liste `/modified`
+	- resultat: l'UI continue de distinguer correctement `NEW` vs `OVERRIDE` meme si le backend en cours d'execution est une version plus ancienne
+
+**Verification** :
+- `npm --prefix frontend run build` → build OK
+
+**Note** : le code backend du repo renvoie deja correctement `modificationKind`; ce fallback protege surtout contre un `uvicorn` stale qui n'a pas encore ete relance.
+
+## 2026-03-12 — `override` vs `new` recales sur l'ID serveur des layers inferieurs
+
+**Objectif** : faire correspondre la distinction visible dans la liste et le graphe a la vraie semantique metier demandee.
+
+**Decision** :
+- pour les `server-json`, un fichier du projet actif est maintenant `override` si un asset avec le **meme ID serveur** existe deja dans un layer inferieur, meme si le chemin differe
+- un fichier `server-json` est `new` seulement si cet ID n'existe que dans le projet actif
+- pour les ressources `Common/*`, la logique reste basee sur le chemin, car il n'y a pas d'ID serveur equivalent
+
+**Fait** :
+- `backend/core/modification_service.py`
+	- nouveau service centralisant la collecte des fichiers projet modifies et leur classification `new` vs `override`
+- `backend/routes/assets.py`
+	- la liste `/modified` reutilise maintenant cette classification partagee
+- `backend/core/graph_service.py`
+	- `build_modified_graph(...)` reutilise la meme logique pour les roots modifies du graphe
+- `backend/tests/test_asset_service.py`
+	- ajout d'un test qui valide qu'un fichier projet avec le meme ID qu'un asset vanilla reste classe `override` meme si son chemin est different
+
+**Verification** :
+- `python -m unittest discover -s backend/tests -p "test_*.py"` → 24 tests OK
+- `npm --prefix frontend run build` → build OK
+
+## 2026-03-11 — Refresh de ProjectModifiedGraphView apres save/copy + cache readonly VFS
+
+**Objectif** : faire en sorte que `ProjectModifiedGraphView` se mette a jour immediatement apres un `save` ou `save as/copy`, tout en evitant de rescanner inutilement les layers read-only a chaque ecriture projet.
+
+**Fait** :
+- `frontend/src/components/editor/AssetSidePanel.tsx`
+	- `onRefresh` accepte maintenant un `nextSelectedNodeId`
+	- apres `override`, la vue se recharge explicitement sur le noeud courant
+	- apres `copy`, la vue se recharge en selectionnant directement la nouvelle entree via `server-path:<resolvedPath>`
+- `frontend/src/views/project/ProjectModifiedGraphView.tsx`
+	- ajout d'un callback `handleAssetRefresh(...)` qui resynchronise liste + graphe et met a jour la selection active
+	- `ModifiedGraphView` se recharge donc immediatement apres creation/copy depuis le panneau d'edition
+- `backend/core/vfs.py`
+	- ajout d'un cache de `list_files()` pour les mounts `vanilla` et `dependency`
+	- le cache est invalide si la signature du source readonly change (zip mtime/size, ou stats des repertoires `Common/`, `Server/`, `manifest.json` pour les dossiers)
+	- consequence: un rebuild d'index apres ecriture projet ne rescanne plus completement les gros layers readonly a chaque fois
+
+**Verification** :
+- `python -m unittest discover -s backend/tests -p "test_*.py"` → 23 tests OK
+- `npm --prefix frontend run build` → build OK
+
+**Decision** : le projet actif reste pleinement dynamique, mais les layers readonly sont maintenant traites comme persistants et caches tant que leur signature n'a pas change.
+
+## 2026-03-11 — ProjectModifiedGraphView garde les copies orphelines et distingue new/copy vs override
+
+**Objectif** : corriger la vue des assets modifies pour que les copies non referencees restent visibles dans le graphe et que l'UI distingue les roots `new/copy` des roots `override`.
+
+**Fait** :
+- `backend/core/graph_service.py`
+	- `build_modified_graph(...)` ne seed plus la BFS par `server_id` mais par chemin VFS `Server/...json`
+	- les roots modifies sont maintenant preserves meme s'ils ne sont references par aucun autre noeud
+	- ajout d'un `modificationKind` (`new` ou `override`) sur les noeuds racines modifies
+	- `modifiedIds` renvoie les IDs reels des roots (avec `server-path:*` si necessaire)
+- `backend/core/models.py`
+	- le modele `GraphNode` documente maintenant `isModifiedRoot` et `modificationKind`
+- `backend/tests/test_asset_service.py`
+	- test qu'une copie non referencee apparait bien dans `build_modified_graph`
+	- test que les roots modifies sont etiquetes `new` vs `override`
+- `frontend/src/api/types.ts`
+	- le type `GraphNode` accepte `isModifiedRoot` et `modificationKind`
+- `frontend/src/components/graph/BlueprintNode.tsx`
+	- badge explicite `NEW/COPY` ou `OVERRIDE` au lieu de tout afficher comme override
+- `frontend/src/views/project/ProjectModifiedGraphView.tsx`
+	- la vue utilise `isModifiedRoot`/`modificationKind`
+	- support de l'expansion des noeuds `server-path:*`
+	- compteur distinct `new/copy` vs `override` dans le panneau
+
+**Verification** :
+- `python -m unittest discover -s backend/tests -p "test_*.py"` → 22 tests OK
+- `npm --prefix frontend run build` → build OK
+
+**Note** : la distinction faite ici est volontairement `new/copy` vs `override`. Le Studio ne preserve pas encore une provenance fine permettant de distinguer de facon certaine un asset cree de zero d'un asset issu d'un `Save as`.
+
+## 2026-03-11 — Liste des fichiers projet dans ProjectModifiedGraphView
+
+**Objectif** : garantir qu'un fichier du projet actif reste visible et editable meme s'il n'apparait pas dans le graphe des noeuds modifies.
+
+**Fait** :
+- `backend/routes/assets.py`
+	- l'endpoint `/projects/{projectId}/modified` renvoie maintenant toujours un `assetKey` resolvable pour les `server-json` via `server-path:<vfsPath>`
+	- ajout de `modificationKind` (`new` ou `override`) sur les entrees modifiees
+- `backend/core/models.py`
+	- `ModifiedAssetEntry` porte maintenant `modificationKind`
+- `backend/tests/test_asset_service.py`
+	- test que la liste des fichiers modifies expose bien les `server-path:*` et la distinction `new` vs `override`
+- `frontend/src/views/project/ProjectModifiedGraphView.tsx`
+	- chargement parallele du graphe modifie et de la liste `/modified`
+	- ajout d'une section `Project files` dans le panneau de gauche
+	- un fichier projet non visible dans le graphe peut maintenant etre selectionne depuis cette liste puis edite dans `AssetSidePanel`
+- `frontend/src/api/types.ts`
+	- alignement du type `ModifiedAssetEntry`
+
+**Verification** :
+- `python -m unittest discover -s backend/tests -p "test_*.py"` → 23 tests OK
+- `npm --prefix frontend run build` → build OK
+
+**Decision** : la vue graphe reste une visualisation des relations. La liste `Project files` joue le role de filet de securite pour tous les fichiers du projet actif qui n'ont pas encore d'ancrage dans le graphe.
+
 ## 2026-03-11 — Cloture technique de STABILSTAGE1
 
 **Objectif** : fermer les derniers reliquats techniques du plan de stabilisation avant changement de sujet.

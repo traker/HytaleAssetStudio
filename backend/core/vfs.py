@@ -8,8 +8,32 @@ from pathlib import Path
 from backend.core.errors import http_error
 
 
+_MOUNT_FILE_LIST_CACHE: dict[tuple[str, str, str], tuple[str, list[str]]] = {}
+
+
 def _norm(p: str) -> str:
     return p.replace("\\", "/").lstrip("/")
+
+
+def _mount_cache_key(source_type: str, root: Path, prefix: str) -> tuple[str, str, str]:
+    return source_type, str(root.resolve()).replace("\\", "/").lower(), prefix
+
+
+def _mount_listing_signature(source_type: str, root: Path, prefix: str) -> str:
+    if source_type == "zip":
+        stat = root.stat()
+        return f"zip:{stat.st_size}:{stat.st_mtime_ns}"
+
+    base = root / prefix if prefix else root
+    parts: list[str] = []
+    for rel in ("Common", "Server", "manifest.json"):
+        path = base / rel
+        if not path.exists():
+            parts.append(f"{rel}:missing")
+            continue
+        stat = path.stat()
+        parts.append(f"{rel}:{stat.st_size}:{stat.st_mtime_ns}")
+    return "folder:" + "|".join(parts)
 
 
 @dataclass(frozen=True)
@@ -72,6 +96,14 @@ class Mount:
 
     def list_files(self) -> list[str]:
         # Returns VFS paths (without prefix)
+        use_cache = self.origin in {"vanilla", "dependency"}
+        cache_key = _mount_cache_key(self.source_type, self.root, self.prefix)
+        signature = _mount_listing_signature(self.source_type, self.root, self.prefix) if use_cache else None
+        if use_cache and signature is not None:
+            cached = _MOUNT_FILE_LIST_CACHE.get(cache_key)
+            if cached is not None and cached[0] == signature:
+                return list(cached[1])
+
         if self.source_type == "folder":
             base = self.root / self.prefix if self.prefix else self.root
             if not base.exists():
@@ -82,6 +114,8 @@ class Mount:
                     continue
                 rel = str(p.relative_to(base)).replace("\\", "/")
                 files.append(rel)
+            if use_cache and signature is not None:
+                _MOUNT_FILE_LIST_CACHE[cache_key] = (signature, list(files))
             return files
 
         if self.source_type == "zip":
@@ -97,6 +131,8 @@ class Mount:
                     out.append(n[len(prefix) :])
                 else:
                     out.append(n)
+            if use_cache and signature is not None:
+                _MOUNT_FILE_LIST_CACHE[cache_key] = (signature, list(out))
             return out
 
         raise http_error(500, "VFS_UNSUPPORTED", "Unsupported mount source type", {"sourceType": self.source_type})

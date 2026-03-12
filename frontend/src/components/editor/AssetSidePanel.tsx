@@ -18,7 +18,7 @@ type Props = {
   onClose: () => void
   onOpenInteractions?: () => void
   canOpenInteractions?: boolean
-  onRefresh?: () => void
+  onRefresh?: (nextSelectedNodeId?: string) => void | Promise<void>
 }
 
 export function AssetSidePanel(props: Props) {
@@ -80,7 +80,7 @@ export function AssetSidePanel(props: Props) {
         json: parsed as Record<string, unknown>,
       })
       setSaveStatus({ kind: 'idle' })
-      props.onRefresh?.()
+      await props.onRefresh?.(props.selectedNodeId)
     } catch (e) {
       const msg = e instanceof HasApiError ? e.message : 'Unexpected error'
       setSaveStatus({ kind: 'idle', error: msg })
@@ -123,7 +123,10 @@ export function AssetSidePanel(props: Props) {
       })
       setSaveAsStatus({ kind: 'idle', success: `Créé : ${resp.assetKey}` })
       setNewIdDraft('')
-      props.onRefresh?.()
+      const nextSelectedNodeId = resp.resolvedPath.startsWith('Server/')
+        ? `server-path:${resp.resolvedPath}`
+        : resp.assetKey
+      await props.onRefresh?.(nextSelectedNodeId)
     } catch (e) {
       const msg = e instanceof HasApiError ? e.message : 'Unexpected error'
       setSaveAsStatus({ kind: 'idle', error: msg })

@@ -179,9 +179,21 @@ class ModifiedAssetEntry(BaseModel):
     mtimeMs: int
     origin: Literal["project"] = "project"
     isNew: bool = False
+    modificationKind: Literal["override", "new"] = "override"
 
 
 class ModifiedAssetsResponse(BaseModel):
     projectId: str
     count: int
     entries: list[ModifiedAssetEntry]
+
+
+class GraphNode(BaseModel):
+    id: str
+    label: str
+    title: str | None = None
+    group: str | None = None
+    path: str | None = None
+    state: Literal["vanilla", "local"]
+    isModifiedRoot: bool = False
+    modificationKind: Literal["override", "new"] | None = None
