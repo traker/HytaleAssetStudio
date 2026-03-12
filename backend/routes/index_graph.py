@@ -127,9 +127,6 @@ def project_graph(
     workspace_root = resolve_workspace_root(settings, workspaceId)
     cfg, _ = load_project_config(workspace_root, projectId)
 
-    # Ensure index (memory/disk cache)
-    ensure_index(projectId, cfg)
-
     return build_focus_graph(cfg, root, depth)
 
 
@@ -142,5 +139,4 @@ def project_graph_modified(
 ) -> dict:
     workspace_root = resolve_workspace_root(settings, workspaceId)
     cfg, _ = load_project_config(workspace_root, projectId)
-    ensure_index(projectId, cfg)
     return build_modified_graph(cfg, depth)

@@ -1,7 +1,8 @@
 param(
   [int]$ApiPort = 8000,
   [int]$WebPort = 5173,
-  [switch]$KillExisting
+  [switch]$KillExisting,
+  [switch]$PerfAudit
 )
 
 $ErrorActionPreference = 'Stop'
@@ -33,6 +34,7 @@ function Stop-ListeningProcesses([int]$Port) {
 Write-Host "HytaleAssetStudio dev launcher" -ForegroundColor Cyan
 Write-Host "- API port: $ApiPort" -ForegroundColor Cyan
 Write-Host "- Web port: $WebPort" -ForegroundColor Cyan
+Write-Host "- Perf audit: $PerfAudit" -ForegroundColor Cyan
 
 if ($KillExisting) {
   Stop-ListeningProcesses -Port $ApiPort
@@ -43,12 +45,18 @@ $apiPids = Get-ListeningPids -Port $ApiPort
 if (@($apiPids).Count -gt 0) {
   Write-Host "WARNING: something is already listening on API port $ApiPort (PID(s): $($apiPids -join ', '))." -ForegroundColor Yellow
   Write-Host "         Stop it first or re-run with -KillExisting, or choose another -ApiPort." -ForegroundColor Yellow
+  if (-not $KillExisting) {
+    throw "API port $ApiPort is already in use. Re-run with -KillExisting to avoid starting a stale backend/frontend pair."
+  }
 }
 
 $webPids = Get-ListeningPids -Port $WebPort
 if (@($webPids).Count -gt 0) {
   Write-Host "WARNING: something is already listening on Web port $WebPort (PID(s): $($webPids -join ', '))." -ForegroundColor Yellow
   Write-Host "         Stop it first or re-run with -KillExisting, or choose another -WebPort." -ForegroundColor Yellow
+  if (-not $KillExisting) {
+    throw "Web port $WebPort is already in use. Re-run with -KillExisting to avoid attaching to a stale dev server."
+  }
 }
 
 # Ensure frontend proxy targets the right backend port
@@ -72,9 +80,14 @@ $commonShellArgs = @(
   '-Command'
 )
 
+$backendCommand = "python -m uvicorn backend.app.main:app --reload --host 127.0.0.1 --port $ApiPort"
+if ($PerfAudit) {
+  $backendCommand = "`$env:HAS_PERF_AUDIT='1'; $backendCommand"
+}
+
 Write-Host "\nStarting backend..." -ForegroundColor Green
 Start-Process -WorkingDirectory $root -FilePath $preferredShell -ArgumentList (
-  $commonShellArgs + @("python -m uvicorn backend.app.main:app --reload --host 127.0.0.1 --port $ApiPort")
+  $commonShellArgs + @($backendCommand)
 )
 
 Write-Host "Starting frontend..." -ForegroundColor Green
@@ -82,5 +95,9 @@ $frontendRoot = Join-Path $root 'frontend'
 Start-Process -WorkingDirectory $frontendRoot -FilePath $preferredShell -ArgumentList (
   $commonShellArgs + @("`$env:HAS_API_PORT=$ApiPort; `$env:HAS_WEB_HOST='127.0.0.1'; `$env:HAS_WEB_PORT=$WebPort; npm run dev")
 )
+
+if ($PerfAudit) {
+  Write-Host "Frontend perf logs: open http://127.0.0.1:$WebPort/?perfAudit=1" -ForegroundColor Yellow
+}
 
 Write-Host "\nDone. Close the two terminals to stop servers." -ForegroundColor Cyan

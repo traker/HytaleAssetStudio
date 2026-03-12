@@ -8,6 +8,7 @@ from backend.core.errors import http_error
 from backend.core.index_service import build_mounts, ensure_index
 from backend.core.modification_service import collect_project_modifications
 from backend.core.models import ProjectConfig
+from backend.core.perf import timed
 from backend.core.vfs import read_json_from_mount
 
 
@@ -81,9 +82,10 @@ def _extract_interaction_edges(json_obj: dict) -> dict[str, set[str]]:
 
 
 def build_focus_graph(cfg: ProjectConfig, root_key: str, depth: int | None) -> dict:
-    index = ensure_index(cfg.project.id, cfg)
-    mounts = build_mounts(cfg)
-    mounts_by_id = {m.mount_id: m for m in mounts}
+    with timed("graph.focus"):
+        index = ensure_index(cfg.project.id, cfg)
+        mounts = build_mounts(cfg)
+        mounts_by_id = {m.mount_id: m for m in mounts}
 
     if root_key.startswith("server-path:"):
         root_path = root_key.split(":", 1)[1].strip().replace("\\", "/").lstrip("/")
@@ -246,7 +248,6 @@ def build_focus_graph(cfg: ProjectConfig, root_key: str, depth: int | None) -> d
                     ensure_common_node(common_key)
                     edges.add((node_key_for_path(current_path), common_key, "resource"))
                     continue
-
                 if not _ID_CANDIDATE.match(s):
                     continue
                 if s not in unique_ids:
@@ -267,9 +268,10 @@ def build_modified_graph(cfg: ProjectConfig, depth: int) -> dict:
     """Multi-root graph: BFS from every project-layer server-json asset."""
     from pathlib import Path as _Path
 
-    index = ensure_index(cfg.project.id, cfg)
-    mounts = build_mounts(cfg)
-    mounts_by_id = {m.mount_id: m for m in mounts}
+    with timed("graph.modified"):
+        index = ensure_index(cfg.project.id, cfg)
+        mounts = build_mounts(cfg)
+        mounts_by_id = {m.mount_id: m for m in mounts}
 
     def node_key_for_id(server_id: str) -> str:
         return f"server:{server_id}"
@@ -284,7 +286,7 @@ def build_modified_graph(cfg: ProjectConfig, depth: int) -> dict:
     # Collect all modified server roots by VFS path, preserving orphan/new assets.
     modified_paths: list[str] = []
     modified_kind_by_path: dict[str, str] = {}
-    for entry in collect_project_modifications(cfg):
+    for entry in collect_project_modifications(cfg, index=index):
         if entry.kind != "server-json":
             continue
         if entry.vfs_path not in index.effective_mount_by_vfs_path:

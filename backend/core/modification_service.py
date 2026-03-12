@@ -3,8 +3,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from backend.core.index_service import build_mounts
+from backend.core.index_service import ensure_index
 from backend.core.models import ProjectConfig
+from backend.core.state import ProjectIndexState
 
 
 @dataclass(frozen=True)
@@ -18,20 +19,10 @@ class ProjectModification:
     mtime_ms: int
 
 
-def collect_project_modifications(cfg: ProjectConfig) -> list[ProjectModification]:
+def collect_project_modifications(cfg: ProjectConfig, index: ProjectIndexState | None = None) -> list[ProjectModification]:
     project_root = Path(cfg.project.assetsWritePath)
-    mounts = build_mounts(cfg)
-
-    lower_layer_paths: set[str] = set()
-    lower_layer_server_ids: set[str] = set()
-    for mount in mounts:
-        if mount.origin == "project":
-            continue
-        for rel in mount.list_files():
-            vfs_path = rel.replace("\\", "/").lstrip("/")
-            lower_layer_paths.add(vfs_path)
-            if vfs_path.lower().startswith("server/") and vfs_path.lower().endswith(".json"):
-                lower_layer_server_ids.add(Path(vfs_path).stem)
+    if index is None:
+        index = ensure_index(cfg.project.id, cfg)
 
     entries: list[ProjectModification] = []
 
@@ -43,7 +34,7 @@ def collect_project_modifications(cfg: ProjectConfig) -> list[ProjectModificatio
             vfs_path = path.relative_to(project_root).as_posix()
             stat = path.stat()
             server_id = Path(vfs_path).stem
-            is_override = server_id in lower_layer_server_ids
+            is_override = index.lower_layer_server_ids.get(server_id, False)
             entries.append(
                 ProjectModification(
                     kind="server-json",
@@ -64,7 +55,7 @@ def collect_project_modifications(cfg: ProjectConfig) -> list[ProjectModificatio
             vfs_path = path.relative_to(project_root).as_posix()
             rel_under_common = path.relative_to(common_root).as_posix()
             stat = path.stat()
-            is_override = vfs_path in lower_layer_paths
+            is_override = index.lower_layer_vfs_paths.get(vfs_path, False)
             entries.append(
                 ProjectModification(
                     kind="common-resource",

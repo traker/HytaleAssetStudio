@@ -6,6 +6,8 @@ export type HasErrorPayload = {
   }
 }
 
+import { logPerf, measureAsync, isPerfAuditEnabled } from '../perf/audit'
+
 export class HasApiError extends Error {
   status: number
   payload?: HasErrorPayload | unknown
@@ -35,14 +37,27 @@ async function readJsonSafe(res: Response): Promise<unknown> {
 }
 
 export async function httpJson<T>(input: RequestInfo | URL, init?: RequestInit): Promise<T> {
-  const res = await fetch(input, {
+  const requestUrl = typeof input === 'string' ? input : input.toString()
+  const method = init?.method ?? 'GET'
+  const res = await measureAsync(`http.${method}`, async () => fetch(input, {
     ...init,
     headers: {
       'Content-Type': 'application/json',
       ...(activeWorkspaceId ? { 'X-HAS-Workspace-Id': activeWorkspaceId } : {}),
       ...(init?.headers ?? {}),
     },
-  })
+  }), { url: requestUrl })
+
+  if (isPerfAuditEnabled()) {
+    logPerf('http.server_timing', 0, {
+      method,
+      url: requestUrl,
+      status: res.status,
+      perfId: res.headers.get('X-HAS-Perf-Id') ?? 'n/a',
+      serverTiming: res.headers.get('Server-Timing') ?? 'none',
+      totalMs: res.headers.get('X-HAS-Perf-Total-Ms') ?? 'n/a',
+    })
+  }
 
   if (!res.ok) {
     const payload = await readJsonSafe(res)

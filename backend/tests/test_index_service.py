@@ -75,6 +75,20 @@ class IndexServiceCacheTests(unittest.TestCase):
             state = ensure_index(cfg.project.id, cfg)
             self.assertEqual(state.server_json_count, 2)
 
+    def test_index_tracks_lower_layer_presence_for_modification_classification(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            project_root, vanilla_root = self.setup_pack_roots(tmp)
+            cfg = self.make_config(project_root, vanilla_root)
+
+            write_json(vanilla_root / "Server" / "Items" / "Sword.json", {"Id": "Sword"})
+            write_json(vanilla_root / "Common" / "Icons" / "Sword.png", {"fake": True})
+
+            state = ensure_index(cfg.project.id, cfg)
+
+            self.assertTrue(state.lower_layer_server_ids.get("Sword"))
+            self.assertTrue(state.lower_layer_vfs_paths.get("Server/Items/Sword.json"))
+            self.assertTrue(state.lower_layer_vfs_paths.get("Common/Icons/Sword.png"))
+
 
 if __name__ == "__main__":
     unittest.main()

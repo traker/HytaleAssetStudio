@@ -24,6 +24,11 @@ class ProjectIndexState:
     # server id -> all vfs paths (including ambiguous)
     server_id_to_all_paths: dict[str, list[str]]
 
+    # presence maps for assets that exist in lower layers (vanilla/dependency),
+    # used to classify project files as new vs override without rescanning mounts.
+    lower_layer_vfs_paths: dict[str, bool]
+    lower_layer_server_ids: dict[str, bool]
+
 
 # In-memory cache (MVP)
 PROJECT_INDEX: dict[str, ProjectIndexState] = {}

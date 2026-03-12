@@ -6,7 +6,7 @@ from pathlib import Path
 
 from backend.core.errors import http_error
 from backend.core.graph_service import _ID_CANDIDATE
-from backend.core.index_service import build_mounts, ensure_index, rebuild_project_index
+from backend.core.index_service import apply_project_server_write_to_index, build_mounts, ensure_index
 from backend.core.io import write_json
 from backend.core.models import ProjectConfig
 from backend.core.vfs import Mount, read_json_from_mount
@@ -27,9 +27,14 @@ class ResolvedServerJson:
     mount: Mount
 
 
-def resolve_server_json(cfg: ProjectConfig, asset_key: str) -> ResolvedServerJson:
+def resolve_server_json(
+    cfg: ProjectConfig,
+    asset_key: str,
+    index=None,
+) -> ResolvedServerJson:
     # Ensure index present (memory or disk cache or rebuild)
-    index = ensure_index(cfg.project.id, cfg)
+    if index is None:
+        index = ensure_index(cfg.project.id, cfg)
 
     if asset_key.startswith("server-path:"):
         vfs_path = asset_key.split(":", 1)[1].strip().replace("\\", "/").lstrip("/")
@@ -75,7 +80,8 @@ def resolve_server_json(cfg: ProjectConfig, asset_key: str) -> ResolvedServerJso
 
 
 def read_server_json(cfg: ProjectConfig, asset_key: str) -> dict:
-    resolved = resolve_server_json(cfg, asset_key)
+    index = ensure_index(cfg.project.id, cfg)
+    resolved = resolve_server_json(cfg, asset_key, index=index)
     return {
         "assetKey": resolved.asset_key,
         "resolvedPath": resolved.vfs_path,
@@ -89,8 +95,8 @@ def write_server_json_copy(cfg: ProjectConfig, asset_key: str, new_id: str, payl
     if not new_id or not _ID_CANDIDATE.match(new_id):
         raise http_error(422, "ID_INVALID", "newId must be a valid server asset ID (alphanumeric + underscore)", {"newId": new_id})
 
-    resolved = resolve_server_json(cfg, asset_key)
     index = ensure_index(cfg.project.id, cfg)
+    resolved = resolve_server_json(cfg, asset_key, index=index)
 
     if not resolved.vfs_path.lower().startswith("server/"):
         raise http_error(500, "RESOLVE_INVALID", "Resolved path is not under Server/", {"path": resolved.vfs_path})
@@ -127,7 +133,7 @@ def write_server_json_copy(cfg: ProjectConfig, asset_key: str, new_id: str, payl
         raise http_error(422, "PAYLOAD_INVALID", "json must be an object", {})
 
     write_json(dst, payload_json)
-    rebuild_project_index(cfg.project.id, cfg)
+    apply_project_server_write_to_index(cfg.project.id, cfg, new_vfs_path)
 
     return {
         "ok": True,
@@ -158,8 +164,8 @@ def write_server_json_override(cfg: ProjectConfig, asset_key: str, payload_json:
 
     write_json(dst, payload_json)
 
-    # Rebuild index so origin/state updates immediately.
-    rebuild_project_index(cfg.project.id, cfg)
+    # Update the in-memory index immediately so subsequent reads do not trigger a full rebuild.
+    apply_project_server_write_to_index(cfg.project.id, cfg, resolved.vfs_path)
 
     return {
         "ok": True,

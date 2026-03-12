@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import json
+import time
 import zipfile
 from dataclasses import dataclass
 from pathlib import Path
 
 from backend.core.errors import http_error
+from backend.core.perf import record_duration
 
 
 _MOUNT_FILE_LIST_CACHE: dict[tuple[str, str, str], tuple[str, list[str]]] = {}
@@ -73,28 +75,37 @@ class Mount:
         return False
 
     def read_text(self, vfs_path: str) -> str:
+        start = time.perf_counter()
         vfs_path = _norm(vfs_path)
         native = self.vfs_to_native(vfs_path)
-        if self.source_type == "folder":
-            return (self.root / native).read_text(encoding="utf-8", errors="ignore")
-        if self.source_type == "zip":
-            self._ensure_zip()
-            assert self._zip is not None
-            return self._zip.read(native).decode("utf-8", errors="ignore")
-        raise http_error(500, "VFS_UNSUPPORTED", "Unsupported mount source type", {"sourceType": self.source_type})
+        try:
+            if self.source_type == "folder":
+                return (self.root / native).read_text(encoding="utf-8", errors="ignore")
+            if self.source_type == "zip":
+                self._ensure_zip()
+                assert self._zip is not None
+                return self._zip.read(native).decode("utf-8", errors="ignore")
+            raise http_error(500, "VFS_UNSUPPORTED", "Unsupported mount source type", {"sourceType": self.source_type})
+        finally:
+            record_duration("vfs.read_text", (time.perf_counter() - start) * 1000.0)
 
     def read_bytes(self, vfs_path: str) -> bytes:
+        start = time.perf_counter()
         vfs_path = _norm(vfs_path)
         native = self.vfs_to_native(vfs_path)
-        if self.source_type == "folder":
-            return (self.root / native).read_bytes()
-        if self.source_type == "zip":
-            self._ensure_zip()
-            assert self._zip is not None
-            return self._zip.read(native)
-        raise http_error(500, "VFS_UNSUPPORTED", "Unsupported mount source type", {"sourceType": self.source_type})
+        try:
+            if self.source_type == "folder":
+                return (self.root / native).read_bytes()
+            if self.source_type == "zip":
+                self._ensure_zip()
+                assert self._zip is not None
+                return self._zip.read(native)
+            raise http_error(500, "VFS_UNSUPPORTED", "Unsupported mount source type", {"sourceType": self.source_type})
+        finally:
+            record_duration("vfs.read_bytes", (time.perf_counter() - start) * 1000.0)
 
     def list_files(self) -> list[str]:
+        start = time.perf_counter()
         # Returns VFS paths (without prefix)
         use_cache = self.origin in {"vanilla", "dependency"}
         cache_key = _mount_cache_key(self.source_type, self.root, self.prefix)
@@ -102,6 +113,7 @@ class Mount:
         if use_cache and signature is not None:
             cached = _MOUNT_FILE_LIST_CACHE.get(cache_key)
             if cached is not None and cached[0] == signature:
+                record_duration("vfs.list_files.cache_hit", (time.perf_counter() - start) * 1000.0)
                 return list(cached[1])
 
         if self.source_type == "folder":
@@ -116,6 +128,7 @@ class Mount:
                 files.append(rel)
             if use_cache and signature is not None:
                 _MOUNT_FILE_LIST_CACHE[cache_key] = (signature, list(files))
+            record_duration("vfs.list_files", (time.perf_counter() - start) * 1000.0)
             return files
 
         if self.source_type == "zip":
@@ -133,8 +146,10 @@ class Mount:
                     out.append(n)
             if use_cache and signature is not None:
                 _MOUNT_FILE_LIST_CACHE[cache_key] = (signature, list(out))
+            record_duration("vfs.list_files", (time.perf_counter() - start) * 1000.0)
             return out
 
+        record_duration("vfs.list_files", (time.perf_counter() - start) * 1000.0)
         raise http_error(500, "VFS_UNSUPPORTED", "Unsupported mount source type", {"sourceType": self.source_type})
 
 
@@ -184,7 +199,10 @@ def mount_from_source(
 
 
 def read_json_from_mount(mount: Mount, vfs_path: str) -> dict:
+    start = time.perf_counter()
     try:
         return json.loads(mount.read_text(vfs_path))
     except json.JSONDecodeError as e:
         raise http_error(422, "JSON_INVALID", "Invalid JSON", {"path": vfs_path, "error": str(e)})
+    finally:
+        record_duration("vfs.read_json", (time.perf_counter() - start) * 1000.0)

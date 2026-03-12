@@ -22,6 +22,7 @@ import type { BlueprintNodeData, OutgoingDep } from '../../components/graph/blue
 import { getBlueprintNodeDisplay, isInteractionBlueprintGroup } from '../../components/graph/blueprintTypes'
 import { getColorForGroup, getColorForEdgeType } from '../../components/graph/colors'
 import { layoutGraph } from '../../components/graph/layoutDagre'
+import { measureAsync, measureSync, schedulePaintMeasure } from '../../perf/audit'
 
 type Props = {
   projectId: string
@@ -50,8 +51,9 @@ function toFlow(
   rootId: string,
   onSelectNode: (sourceId: string, targetId: string) => void,
 ): { nodes: Node<BlueprintNodeData>[]; edges: Edge[] } {
-  // Build a quick lookup: id → { label, group }
-  const nodeInfoMap = new Map(data.nodes.map((n) => [n.id, { label: n.label, group: n.group ?? 'json_data' }]))
+  return measureSync('graph.to_flow', () => {
+    // Build a quick lookup: id → { label, group }
+    const nodeInfoMap = new Map(data.nodes.map((n) => [n.id, { label: n.label, group: n.group ?? 'json_data' }]))
 
   // Build outgoing deps per source node
   const outgoingMap = new Map<string, OutgoingDep[]>()
@@ -99,7 +101,8 @@ function toFlow(
     }
   })
 
-  return layoutGraph(nodes, edges, 'LR')
+    return layoutGraph(nodes, edges, 'LR')
+  }, { nodes: data.nodes.length, edges: data.edges.length, rootId })
 }
 
 export function ProjectGraphEditor(props: Props) {
@@ -128,6 +131,7 @@ export function ProjectGraphEditor(props: Props) {
   const [asset, setAsset] = useState<AssetGetResponse | null>(null)
   const assetSeq = useRef(0)
   const [assetReloadTick, setAssetReloadTick] = useState(0)
+  const graphPaintStartedAtRef = useRef<number | null>(null)
 
   const searchEnabled = props.searchEnabled ?? true
   const canLoad = useMemo(() => status.kind !== 'loading' && selected !== null, [status.kind, selected])
@@ -178,7 +182,11 @@ export function ProjectGraphEditor(props: Props) {
     setAssetError(null)
 
     try {
-      const data = await hasApi.projectGraph(props.projectId, selected.assetKey, depth)
+      const data = await measureAsync('view.project_graph.fetch', () => hasApi.projectGraph(props.projectId, selected.assetKey, depth), {
+        projectId: props.projectId,
+        root: selected.assetKey,
+        depth,
+      })
       const onSelectNode = (sourceId: string, targetId: string) => {
         setSelectedNodeId(targetId)
         const matchingEdges = baseEdgesRef.current.filter(
@@ -190,6 +198,7 @@ export function ProjectGraphEditor(props: Props) {
         })
       }
       const flow = toFlow(data, selected.assetKey, onSelectNode)
+      graphPaintStartedAtRef.current = performance.now()
       baseEdgesRef.current = flow.edges
       setNodes(flow.nodes)
       setEdges(flow.edges)
@@ -200,6 +209,17 @@ export function ProjectGraphEditor(props: Props) {
       setError(e instanceof HasApiError ? e.message : 'Unexpected error')
     }
   }, [props.projectId, selected, depth])
+
+  useEffect(() => {
+    if (graphPaintStartedAtRef.current == null) return
+    const startedAt = graphPaintStartedAtRef.current
+    graphPaintStartedAtRef.current = null
+    schedulePaintMeasure('view.project_graph.paint', startedAt, {
+      projectId: props.projectId,
+      nodes: nodes.length,
+      edges: edges.length,
+    })
+  }, [props.projectId, nodes, edges])
 
   useEffect(() => {
     if (!props.root) return

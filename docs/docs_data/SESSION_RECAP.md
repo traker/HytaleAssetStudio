@@ -1,5 +1,141 @@
 # 📋 Session Recap — Hytale Asset Studio
 
+## 2026-03-12 — STABILPERF1 formalise a partir des mesures reelles
+
+**Contexte** : les traces perf backend/frontend ont enfin confirme la nature du ralentissement dans `ProjectModifiedGraphView`.
+
+**Constats** :
+- `/modified` est le point chaud principal au cold start, autour de ~28.5s
+- le temps est presque entierement absorbe par `vfs.list_files` sur les layers readonly inferieurs
+- `graph.modified` reste faible; le graphe n'est donc pas la cause principale
+- `index.ensure` reste un cout secondaire notable sur `/graph-modified`, `/graph` et `/asset`
+- le frontend a un cout reel sur les gros graphes, mais il est secondaire par rapport au backend froid
+
+**Fait** :
+- creation de `STABILPERF1.md` pour formaliser le diagnostic, les objectifs et l'ordre d'execution
+- creation de `STABILPERF1_TRACKING.md` pour suivre l'execution du plan
+
+**Decision** : l'ordre retenu est:
+- d'abord supprimer le rescannage massif de `/modified`
+- ensuite reduire les recalculs `index.ensure`
+- ensuite seulement traiter les couts frontend sur gros graphes
+
+## 2026-03-12 — STABILPERF1 Lot 1 demarre: classification des modifications branchee sur l'index
+
+**Objectif** : retirer le rescannage complet des layers readonly dans la collecte des fichiers modifies.
+
+**Fait** :
+- `backend/core/state.py`
+	- `ProjectIndexState` porte maintenant les presences `lower_layer_vfs_paths` et `lower_layer_server_ids`
+- `backend/core/index_service.py`
+	- l'index calcule ces metadonnees lors du rebuild, au lieu de laisser `modification_service` rescanner les mounts
+	- le schema de cache d'index est incremente pour invalider les anciens caches qui n'ont pas ces champs
+- `backend/core/modification_service.py`
+	- `collect_project_modifications(...)` reutilise maintenant l'index pour classer `new` vs `override`
+- `backend/core/graph_service.py`
+	- la vue graphe modifiee reinjecte l'index deja resolu dans `collect_project_modifications(...)` pour eviter un second passage separé
+- `backend/tests/test_index_service.py`, `backend/tests/test_asset_service.py`
+	- ajout de couverture sur les metadonnees lower-layer et sur la classification `Common/*`
+
+**Verification** :
+- `python -m unittest backend.tests.test_asset_service backend.tests.test_index_service` → 12 tests OK
+- `python -m unittest discover -s backend/tests -p "test_*.py"` → 26 tests OK
+
+**Reste** : mesurer l'effet reel avant/apres sur `/modified` et `ProjectModifiedGraphView`, puis decider si un verrou/memoisation suplementaire est necessaire pour les premiers appels paralleles.
+
+## 2026-03-12 — STABILPERF1 Lot 1 valide par mesures: fin du goulet `/modified`
+
+**Contexte** : apres branchement de la classification des modifications sur l'index, il fallait verifier le gain reel sur les scenarios utilisateur de `ProjectModifiedGraphView`.
+
+**Resultats** :
+- `/modified` passe d'environ ~28.5s au premier appel a ~266.64ms backend
+- `/modified` a chaud tombe autour de ~26.43ms backend
+- `/graph-modified?depth=1` passe d'environ ~28.5s a ~286.42ms backend au premier appel, puis ~38.39ms a chaud
+- `graph.modified` reste faible; le nouveau cout dominant devient `index.ensure` et son fingerprint/cache load
+
+**Decision** : le lot 1 a atteint son objectif principal. Le prochain chantier prioritaire devient la reduction des recalculs `index.ensure` du lot 2.
+
+## 2026-03-12 — STABILPERF1 Lot 2 demarre: suppression des `ensure_index(...)` redondants
+
+**Objectif** : retirer les doubles validations d'index visibles dans les traces `graph` et `graph-modified`.
+
+**Fait** :
+- `backend/routes/index_graph.py`
+	- suppression des appels `ensure_index(...)` juste avant `build_focus_graph(...)` et `build_modified_graph(...)`, puisque ces services l'assurent deja eux-memes
+- `backend/core/asset_service.py`
+	- reutilisation du meme index pour `resolve_server_json(...)` dans les chemins lecture/copy afin d'eviter un second `ensure_index(...)` inutile
+
+**Verification** :
+- `python -m unittest discover -s backend/tests -p "test_*.py"` → 26 tests OK
+
+**Fait en plus** :
+- `backend/core/index_service.py`
+	- ajout d'un helper pour mettre a jour l'index memoire apres ecriture d'un `Server/*.json`
+- `backend/core/asset_service.py`
+	- les writes `override` / `copy` n'executent plus `rebuild_project_index(...)` synchrone
+	- ils mettent a jour l'index memoire de facon incrementale pour eviter un rebuild massif sur la lecture suivante
+
+**Verification** :
+- `python -m unittest backend.tests.test_asset_service backend.tests.test_index_service` → 13 tests OK
+- `python -m unittest discover -s backend/tests -p "test_*.py"` → 27 tests OK
+
+**Resultat final** :
+- les traces montrent maintenant `count=1` sur `index.ensure` dans les routes critiques mesurees
+- `PUT /asset` reste court (ex: ~42.19ms backend) sans `index.rebuild` massif
+- juste apres ecriture, `GET /modified` reste autour de ~30ms backend et `GET /graph-modified?depth=4` autour de ~70ms backend
+
+**Decision** : le lot 2 est considere atteint. Le point chaud residuel principal devient le frontend sur gros graphes (`layout`, `toFlow`, `paint`), qui correspond au lot 3.
+
+## 2026-03-12 — STABILPERF1 Lot 3 demarre: premiers gains sur `toFlow` et layout Dagre
+
+**Objectif** : reduire le cout frontend sur les gros graphes modifies sans perdre d'information visuelle.
+
+**Fait** :
+- `frontend/src/views/project/ProjectModifiedGraphView.tsx`
+	- `toFlow(...)` n'effectue plus de recherche lineaire `rawNodes.find(...)` pour chaque edge
+	- une map `nodeById` est construite une fois puis reutilisee pour remplir `outgoing`
+- `frontend/src/components/graph/layoutDagre.ts`
+	- ajout d'un cache LRU de positions Dagre base sur la topologie du graphe, la direction et la hauteur des noeuds
+	- un graphe identique peut maintenant reutiliser directement ses positions sans recalcul complet de layout
+- `frontend/src/components/graph/BlueprintNode.tsx`
+	- memoisation du rendu des noeuds avec comparateur custom pour limiter les rerenders React inutiles
+
+**Verification** :
+- `npm --prefix frontend run build` → OK
+
+**Resultats** :
+- sur reloads de graphes identiques, `graph.layout_dagre` tombe maintenant a ~0.00-0.10ms et `graph.modified_to_flow` a ~0.20-0.50ms
+- la navigation locale dans `ProjectModifiedGraphView` est ressentie comme beaucoup plus fluide
+- le cout residuel principal devient le paint navigateur sur gros graphes, encore autour de ~470ms a ~570ms sur `depth=4`
+
+**Decision** : le lot 3 est juge tres positif et probablement suffisant pour ce cycle `STABILPERF1`. Aller plus loin demanderait un chantier plus intrusif sur la densite DOM/UX des cartes de noeud plutot qu'une simple optimisation technique locale.
+
+## 2026-03-12 — Instrumentation opt-in pour l'audit de performance
+
+**Contexte** : avant de lancer un futur plan `STABILPERF1`, il faut mesurer concretement les couts backend/frontend sans appauvrir l'UX ni changer prematurement l'architecture.
+
+**Fait** :
+- `backend/app/main.py`
+	- ajout d'un middleware opt-in active par `HAS_PERF_AUDIT=1`
+	- chaque reponse expose `X-HAS-Perf-Id`, `X-HAS-Perf-Total-Ms` et `Server-Timing`
+- `backend/core/perf.py`
+	- nouveau helper centralisant l'agregation des spans backend par requete
+- `backend/core/index_service.py`, `backend/core/vfs.py`, `backend/core/graph_service.py`
+	- instrumentation des zones critiques index/VFS/graphe
+- `frontend/src/perf/audit.ts`
+	- nouveau helper opt-in active via `?perfAudit=1` ou `localStorage.hasPerfAudit = '1'`
+- `frontend/src/api/http.ts`, `frontend/src/components/graph/layoutDagre.ts`, `frontend/src/views/project/ProjectGraphEditor.tsx`, `frontend/src/views/project/ProjectModifiedGraphView.tsx`
+	- instrumentation des fetchs, transformations graphe, layout et paint
+- `docs/docs_data/PERF_AUDIT.md`
+	- mode d'emploi des mesures et scenarios de benchmark
+
+**Verification** :
+- `python -m compileall backend` → OK
+- `python -m unittest discover -s backend/tests -p "test_*.py"` → 24 tests OK
+- `npm --prefix frontend run build` → build OK
+
+**Decision** : l'instrumentation reste totalement desactivee par defaut. Elle sert uniquement a produire un diagnostic factuel avant toute decision de simplification, de cache supplementaire ou de refonte transport/layout.
+
 ## 2026-03-12 — Fallback frontend si le backend live ne renvoie pas encore `modificationKind`
 
 **Contexte** : sur `ProjectModifiedGraphView`, certains serveurs backend deja lances continuaient a renvoyer `modificationKind = null` sur `/modified` et `/graph-modified`, ce qui faisait afficher `OVERRIDE` partout dans la liste et `LOCAL` dans les noeuds du graphe.

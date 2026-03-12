@@ -101,9 +101,29 @@ class AssetCopyTests(unittest.TestCase):
 
             self.assertEqual(result["origin"], "project")
 
+            immediate_state = PROJECT_INDEX[cfg.project.id]
+            self.assertEqual(immediate_state.origin_by_server_path["Server/Items/Sword.json"], "project")
+            self.assertEqual(immediate_state.effective_mount_by_vfs_path["Server/Items/Sword.json"], "project")
+
             updated_index = ensure_index(cfg.project.id, cfg)
             self.assertEqual(updated_index.origin_by_server_path["Server/Items/Sword.json"], "project")
             self.assertEqual(updated_index.effective_mount_by_vfs_path["Server/Items/Sword.json"], "project")
+
+    def test_write_server_json_copy_updates_memory_index_immediately(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            project_root, vanilla_root = self.setup_pack_roots(tmp)
+            cfg = self.make_config(project_root, vanilla_root)
+
+            write_json(vanilla_root / "Server" / "Items" / "Sword.json", {"Id": "Sword", "Value": 1})
+
+            ensure_index(cfg.project.id, cfg)
+            result = write_server_json_copy(cfg, "server:Sword", "Sword_Copy", {"Id": "Sword_Copy", "Value": 2})
+
+            self.assertEqual(result["assetKey"], "server:Sword_Copy")
+            immediate_state = PROJECT_INDEX[cfg.project.id]
+            self.assertEqual(immediate_state.origin_by_server_path["Server/Items/Sword_Copy.json"], "project")
+            self.assertEqual(immediate_state.effective_mount_by_vfs_path["Server/Items/Sword_Copy.json"], "project")
+            self.assertEqual(immediate_state.server_id_to_path["Sword_Copy"], "Server/Items/Sword_Copy.json")
 
     def test_build_modified_graph_includes_unreferenced_new_copy_root(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -185,6 +205,24 @@ class AssetCopyTests(unittest.TestCase):
             self.assertEqual(entries["Server/Items/Sword.json"].modificationKind, "override")
             self.assertEqual(entries["Server/Items/Sword_Copy.json"].assetKey, "server-path:Server/Items/Sword_Copy.json")
             self.assertEqual(entries["Server/Items/Sword_Copy.json"].modificationKind, "new")
+
+    def test_list_modified_entries_marks_common_resources_by_path(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            project_root, vanilla_root = self.setup_pack_roots(tmp)
+            cfg = self.make_config(project_root, vanilla_root)
+
+            (vanilla_root / "Common" / "Icons").mkdir(parents=True, exist_ok=True)
+            (project_root / "Common" / "Icons").mkdir(parents=True, exist_ok=True)
+            (vanilla_root / "Common" / "Icons" / "Sword.png").write_text("vanilla", encoding="utf-8")
+            (project_root / "Common" / "Icons" / "Sword.png").write_text("project-override", encoding="utf-8")
+            (project_root / "Common" / "Icons" / "Axe.png").write_text("project-new", encoding="utf-8")
+
+            entries = {entry.vfsPath: entry for entry in _list_modified_entries(cfg)}
+
+            self.assertEqual(entries["Common/Icons/Sword.png"].assetKey, "common:Icons/Sword.png")
+            self.assertEqual(entries["Common/Icons/Sword.png"].modificationKind, "override")
+            self.assertEqual(entries["Common/Icons/Axe.png"].assetKey, "common:Icons/Axe.png")
+            self.assertEqual(entries["Common/Icons/Axe.png"].modificationKind, "new")
 
 
 if __name__ == "__main__":

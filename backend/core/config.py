@@ -10,6 +10,7 @@ class Settings:
     workspace_root: Path
     default_vanilla_source_type: str
     default_vanilla_path: str
+    perf_audit_enabled: bool = False
 
 
 def get_settings() -> Settings:
@@ -21,8 +22,10 @@ def get_settings() -> Settings:
         "HAS_VANILLA_PATH",
         r"K:\projet\java\TestPluginHytale\Assets",
     )
+    perf_audit_enabled = os.getenv("HAS_PERF_AUDIT", "0") == "1"
     return Settings(
         workspace_root=workspace_root,
         default_vanilla_source_type=default_vanilla_source_type,
         default_vanilla_path=default_vanilla_path,
+        perf_audit_enabled=perf_audit_enabled,
     )

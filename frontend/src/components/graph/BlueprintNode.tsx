@@ -1,3 +1,4 @@
+import { memo } from 'react'
 import { Handle, Position } from '@xyflow/react'
 
 import { getColorForGroup, getColorForEdgeType } from './colors'
@@ -13,7 +14,44 @@ const OVERRIDE_BORDER_COLOR = '#ffb347'
 const SELECTED_BORDER_COLOR = '#00D4FF'
 const SELECTED_GLOW = '0 0 0 2px #00D4FF55, 0 0 12px #00D4FF44'
 
-export const BlueprintNode = ({ data }: Props) => {
+function areOutgoingDepsEqual(a: BlueprintNodeData['outgoing'], b: BlueprintNodeData['outgoing']): boolean {
+  if (a === b) return true
+  if (!a || !b) return !a && !b
+  if (a.length !== b.length) return false
+  for (let i = 0; i < a.length; i += 1) {
+    const left = a[i]
+    const right = b[i]
+    if (
+      left.edgeLabel !== right.edgeLabel ||
+      left.targetId !== right.targetId ||
+      left.targetLabel !== right.targetLabel ||
+      left.targetGroup !== right.targetGroup
+    ) {
+      return false
+    }
+  }
+  return true
+}
+
+function arePropsEqual(prev: Props, next: Props): boolean {
+  const left = prev.data
+  const right = next.data
+  return (
+    left.label === right.label &&
+    left.group === right.group &&
+    left.path === right.path &&
+    left.isModified === right.isModified &&
+    left.isRoot === right.isRoot &&
+    left.modificationKind === right.modificationKind &&
+    left.isSelected === right.isSelected &&
+    left.isConnected === right.isConnected &&
+    left.nodeId === right.nodeId &&
+    left.onSelectNode === right.onSelectNode &&
+    areOutgoingDepsEqual(left.outgoing, right.outgoing)
+  )
+}
+
+const BlueprintNodeComponent = ({ data }: Props) => {
   const typeColor = getColorForGroup(data.group)
   const modificationBadge = data.modificationKind === 'new'
     ? { label: 'NEW', title: 'Asset present only in the current project', color: '#dff8ea', background: NEW_BORDER_COLOR }
@@ -58,6 +96,9 @@ export const BlueprintNode = ({ data }: Props) => {
         color: '#fff',
         fontFamily: 'monospace',
         boxShadow,
+        contain: 'layout paint style',
+        contentVisibility: 'auto',
+        containIntrinsicSize: '300px 180px',
       }}
     >
       <Handle type="target" position={Position.Left} style={{ background: '#555', width: 8, height: 8, border: '2px solid #222' }} />
@@ -120,12 +161,13 @@ export const BlueprintNode = ({ data }: Props) => {
             borderTop: '1px solid #2e2e2e',
             paddingTop: 4,
             paddingBottom: 4,
+            contain: 'layout paint style',
           }}
         >
           <div style={{ padding: '2px 10px 3px', fontSize: 9, color: '#555', textTransform: 'uppercase', letterSpacing: 1 }}>
             Dépendances
           </div>
-          <div style={{ maxHeight: 400, overflowY: 'auto' }}>
+          <div style={{ maxHeight: 400, overflowY: 'auto', contain: 'layout paint style' }}>
             {data.outgoing.map((dep, i) => {
               const depColor = getColorForGroup(dep.targetGroup)
               const edgeColor = getColorForEdgeType(dep.edgeLabel)
@@ -190,3 +232,5 @@ export const BlueprintNode = ({ data }: Props) => {
     </div>
   )
 }
+
+export const BlueprintNode = memo(BlueprintNodeComponent, arePropsEqual)

@@ -20,6 +20,7 @@ import type { BlueprintNodeData, OutgoingDep } from '../../components/graph/blue
 import { getBlueprintNodeDisplay, isInteractionBlueprintGroup } from '../../components/graph/blueprintTypes'
 import { getColorForEdgeType } from '../../components/graph/colors'
 import { layoutGraph } from '../../components/graph/layoutDagre'
+import { measureAsync, measureSync, schedulePaintMeasure } from '../../perf/audit'
 
 const SEMANTIC_EDGE_TYPES = new Set([
   'next', 'failed', 'replace', 'fork', 'blocked', 'collisionNext', 'groundNext',
@@ -30,6 +31,11 @@ type Props = {
   projectId: string
   onBack: () => void
   onOpenInteractions: (root: { assetKey: string; display: string }) => void
+}
+
+type HighlightState = {
+  edgeIds: Set<string>
+  nodeIds: Set<string>
 }
 
 function resolveEntryModificationKind(entry: ModifiedAssetEntry): 'override' | 'new' {
@@ -49,6 +55,32 @@ function applyModificationKindsToNodes(rawNodes: RawNode[], modifiedEntries: Mod
   })
 }
 
+function buildFlowSignature(rawNodes: RawNode[], rawEdges: RawEdge[], modifiedIdSet: Set<string>): string {
+  const nodePart = rawNodes
+    .map((node) => `${node.id}|${node.path ?? ''}|${node.group ?? ''}|${node.state}|${node.modificationKind ?? ''}|${modifiedIdSet.has(node.id) ? '1' : '0'}`)
+    .join('~')
+  const edgePart = rawEdges
+    .map((edge) => `${edge.from}>${edge.to}:${edge.type}`)
+    .join('~')
+  return `${nodePart}#${edgePart}`
+}
+
+function collectAffectedNodeIds(previousSelectedNodeId: string | null, previousHighlight: HighlightState | null, nextSelectedNodeId: string | null, nextHighlight: HighlightState | null): Set<string> {
+  const ids = new Set<string>()
+  if (previousSelectedNodeId) ids.add(previousSelectedNodeId)
+  if (nextSelectedNodeId) ids.add(nextSelectedNodeId)
+  previousHighlight?.nodeIds.forEach((id) => ids.add(id))
+  nextHighlight?.nodeIds.forEach((id) => ids.add(id))
+  return ids
+}
+
+function collectAffectedEdgeIds(previousHighlight: HighlightState | null, nextHighlight: HighlightState | null): Set<string> {
+  const ids = new Set<string>()
+  previousHighlight?.edgeIds.forEach((id) => ids.add(id))
+  nextHighlight?.edgeIds.forEach((id) => ids.add(id))
+  return ids
+}
+
 // ── Build ReactFlow nodes+edges from raw API data ─────────────────────────────
 function toFlow(
   rawNodes: RawNode[],
@@ -56,55 +88,62 @@ function toFlow(
   modifiedIdSet: Set<string>,
   onSelectNode: (src: string, tgt: string) => void,
 ) {
-  const outgoingMap = new Map<string, OutgoingDep[]>()
-  for (const n of rawNodes) outgoingMap.set(n.id, [])
-  for (const e of rawEdges) {
-    const list = outgoingMap.get(e.from) ?? []
-    const target = rawNodes.find((n) => n.id === e.to)
-    list.push({
-      edgeLabel: e.type,
-      targetId: e.to,
-      targetLabel: target?.label ?? e.to,
-      targetGroup: target?.group ?? 'json_data',
-    })
-    outgoingMap.set(e.from, list)
-  }
-
-  const nodes: Array<Node<BlueprintNodeData>> = rawNodes.map((n) => ({
-    id: n.id,
-    type: 'blueprint',
-    position: { x: 0, y: 0 },
-    data: {
-      label: n.label,
-      group: n.group ?? 'json_data',
-      path: n.path,
-      isModified: n.state === 'local',
-      isRoot: n.isModifiedRoot ?? modifiedIdSet.has(n.id),
-      modificationKind: n.modificationKind,
-      nodeId: n.id,
-      outgoing: outgoingMap.get(n.id) ?? [],
-      onSelectNode,
-    },
-  }))
-
-  const edges: Edge[] = rawEdges.map((e) => {
-    const color = getColorForEdgeType(e.type)
-    const showLabel = SEMANTIC_EDGE_TYPES.has(e.type)
-    return {
-      id: `${e.from}->${e.to}:${e.type}`,
-      source: e.from,
-      target: e.to,
-      type: 'smoothstep',
-      label: showLabel ? e.type : undefined,
-      animated: false,
-      style: { stroke: color, strokeWidth: 1.5 },
-      labelStyle: { fill: color, fontSize: 9, fontStyle: 'italic', fontWeight: 600 },
-      labelShowBg: false,
-      markerEnd: { type: 'arrowclosed' as const, color },
+  return measureSync('graph.modified_to_flow', () => {
+    const nodeById = new Map<string, RawNode>()
+    for (const node of rawNodes) {
+      nodeById.set(node.id, node)
     }
-  })
 
-  return layoutGraph(nodes, edges, 'LR')
+    const outgoingMap = new Map<string, OutgoingDep[]>()
+    for (const n of rawNodes) outgoingMap.set(n.id, [])
+    for (const e of rawEdges) {
+      const list = outgoingMap.get(e.from) ?? []
+      const target = nodeById.get(e.to)
+      list.push({
+        edgeLabel: e.type,
+        targetId: e.to,
+        targetLabel: target?.label ?? e.to,
+        targetGroup: target?.group ?? 'json_data',
+      })
+      outgoingMap.set(e.from, list)
+    }
+
+    const nodes: Array<Node<BlueprintNodeData>> = rawNodes.map((n) => ({
+      id: n.id,
+      type: 'blueprint',
+      position: { x: 0, y: 0 },
+      data: {
+        label: n.label,
+        group: n.group ?? 'json_data',
+        path: n.path,
+        isModified: n.state === 'local',
+        isRoot: n.isModifiedRoot ?? modifiedIdSet.has(n.id),
+        modificationKind: n.modificationKind,
+        nodeId: n.id,
+        outgoing: outgoingMap.get(n.id) ?? [],
+        onSelectNode,
+      },
+    }))
+
+    const edges: Edge[] = rawEdges.map((e) => {
+      const color = getColorForEdgeType(e.type)
+      const showLabel = SEMANTIC_EDGE_TYPES.has(e.type)
+      return {
+        id: `${e.from}->${e.to}:${e.type}`,
+        source: e.from,
+        target: e.to,
+        type: 'smoothstep',
+        label: showLabel ? e.type : undefined,
+        animated: false,
+        style: { stroke: color, strokeWidth: 1.5 },
+        labelStyle: { fill: color, fontSize: 9, fontStyle: 'italic', fontWeight: 600 },
+        labelShowBg: false,
+        markerEnd: { type: 'arrowclosed' as const, color },
+      }
+    })
+
+    return layoutGraph(nodes, edges, 'LR')
+  }, { nodes: rawNodes.length, edges: rawEdges.length, modifiedRoots: modifiedIdSet.size })
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -127,6 +166,8 @@ export function ProjectModifiedGraphView(props: Props) {
   const baseEdgesRef = useRef<Edge[]>([])
   // Incremented on each rebuildFlow to re-trigger the highlight useEffect
   const [rebuildTick, setRebuildTick] = useState(0)
+  const graphPaintStartedAtRef = useRef<number | null>(null)
+  const lastFlowSignatureRef = useRef<string | null>(null)
 
   const onNodesChange = useCallback(
     (changes: NodeChange[]) => setNodes((n) => applyNodeChanges(changes, n) as Array<Node<BlueprintNodeData>>),
@@ -146,10 +187,9 @@ export function ProjectModifiedGraphView(props: Props) {
   const assetSeq = useRef(0)
   const previousProjectIdRef = useRef<string | null>(null)
 
-  const [activeHighlight, setActiveHighlight] = useState<{
-    edgeIds: Set<string>
-    nodeIds: Set<string>
-  } | null>(null)
+  const [activeHighlight, setActiveHighlight] = useState<HighlightState | null>(null)
+  const previousSelectedNodeIdRef = useRef<string | null>(null)
+  const previousActiveHighlightRef = useRef<HighlightState | null>(null)
 
   const modifiedRootNodes = rawNodesRef.current.filter((node) => node.isModifiedRoot)
   const newRootCount = modifiedRootNodes.filter((node) => node.modificationKind === 'new').length
@@ -176,29 +216,65 @@ export function ProjectModifiedGraphView(props: Props) {
 
   // ── Sync isSelected + isConnected on nodes, animate highlighted edges ─────
   useEffect(() => {
-    setNodes((prev) =>
-      prev.map((n) => ({
-        ...n,
-        data: {
-          ...n.data,
-          isSelected: n.id === selectedNodeId,
-          isConnected: activeHighlight?.nodeIds.has(n.id) === true && n.id !== selectedNodeId,
-        },
-      })),
-    )
-    setEdges(
-      baseEdgesRef.current.map((e) =>
-        activeHighlight?.edgeIds.has(e.id)
-          ? {
-              ...e,
-              animated: true,
-              zIndex: 1000,
-              style: { ...(e.style as object), stroke: '#00D4FF', strokeDasharray: '6 3', strokeWidth: 2.5 },
-              markerEnd: { type: 'arrowclosed' as const, color: '#00D4FF' },
-            }
-          : e,
-      ),
-    )
+    const previousSelectedNodeId = previousSelectedNodeIdRef.current
+    const previousActiveHighlight = previousActiveHighlightRef.current
+    const affectedNodeIds = collectAffectedNodeIds(previousSelectedNodeId, previousActiveHighlight, selectedNodeId, activeHighlight)
+    const affectedEdgeIds = collectAffectedEdgeIds(previousActiveHighlight, activeHighlight)
+
+    setNodes((prev) => {
+      if (affectedNodeIds.size === 0) return prev
+      let changed = false
+      const next = prev.map((node) => {
+        if (!affectedNodeIds.has(node.id)) return node
+        const isSelected = node.id === selectedNodeId
+        const isConnected = activeHighlight?.nodeIds.has(node.id) === true && node.id !== selectedNodeId
+        if (node.data.isSelected === isSelected && node.data.isConnected === isConnected) {
+          return node
+        }
+        changed = true
+        return {
+          ...node,
+          data: {
+            ...node.data,
+            isSelected,
+            isConnected,
+          },
+        }
+      })
+      return changed ? next : prev
+    })
+
+    setEdges((prev) => {
+      if (affectedEdgeIds.size === 0 && rebuildTick === 0) return prev
+      const prevById = new Map(prev.map((edge) => [edge.id, edge]))
+      let changed = false
+      const next = baseEdgesRef.current.map((edge) => {
+        const shouldHighlight = activeHighlight?.edgeIds.has(edge.id) === true
+        const existing = prevById.get(edge.id)
+        if (!affectedEdgeIds.has(edge.id) && existing) {
+          return existing
+        }
+        if (shouldHighlight) {
+          changed = true
+          return {
+            ...edge,
+            animated: true,
+            zIndex: 1000,
+            style: { ...(edge.style as object), stroke: '#00D4FF', strokeDasharray: '6 3', strokeWidth: 2.5 },
+            markerEnd: { type: 'arrowclosed' as const, color: '#00D4FF' },
+          }
+        }
+        if (existing && existing.animated === false) {
+          return existing
+        }
+        changed = true
+        return edge
+      })
+      return changed ? next : prev
+    })
+
+    previousSelectedNodeIdRef.current = selectedNodeId
+    previousActiveHighlightRef.current = activeHighlight
   // rebuildTick ensures this re-runs after an expand merges new edges into baseEdgesRef
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedNodeId, activeHighlight, rebuildTick])
@@ -217,24 +293,47 @@ export function ProjectModifiedGraphView(props: Props) {
 
   // Rebuild ReactFlow display from accumulated raw data
   const rebuildFlow = useCallback(() => {
+    const flowSignature = buildFlowSignature(rawNodesRef.current, rawEdgesRef.current, modifiedIdSetRef.current)
+    if (lastFlowSignatureRef.current === flowSignature) {
+      return
+    }
+
     const { nodes: fn, edges: fe } = toFlow(
       rawNodesRef.current,
       rawEdgesRef.current,
       modifiedIdSetRef.current,
       handleSelectNode,
     )
+    lastFlowSignatureRef.current = flowSignature
+    graphPaintStartedAtRef.current = performance.now()
     baseEdgesRef.current = fe
     setNodes(fn)
     setEdges(fe)
     setRebuildTick((t) => t + 1)
   }, [handleSelectNode])
 
+  useEffect(() => {
+    if (graphPaintStartedAtRef.current == null) return
+    const startedAt = graphPaintStartedAtRef.current
+    graphPaintStartedAtRef.current = null
+    schedulePaintMeasure('view.modified_graph.paint', startedAt, {
+      projectId: props.projectId,
+      nodes: nodes.length,
+      edges: edges.length,
+    })
+  }, [props.projectId, nodes, edges])
+
   // ── Soft graph refresh after a save (keeps current selection) ────────────
   const softReloadGraph = useCallback(async () => {
     try {
       const [graphResp, modifiedResp] = await Promise.all([
-        hasApi.projectGraphModified(props.projectId, depth),
-        hasApi.projectModified(props.projectId),
+        measureAsync('view.modified_graph.fetch_graph', () => hasApi.projectGraphModified(props.projectId, depth), {
+          projectId: props.projectId,
+          depth,
+        }),
+        measureAsync('view.modified_graph.fetch_list', () => hasApi.projectModified(props.projectId), {
+          projectId: props.projectId,
+        }),
       ])
       rawNodesRef.current = applyModificationKindsToNodes(graphResp.nodes, modifiedResp.entries)
       rawEdgesRef.current = graphResp.edges
@@ -273,6 +372,7 @@ export function ProjectModifiedGraphView(props: Props) {
       rawEdgesRef.current = []
       modifiedIdSetRef.current = new Set()
       expandedNodeIdsRef.current = new Set()
+      lastFlowSignatureRef.current = null
       setModifiedEntries([])
       setNodes([])
       setEdges([])
@@ -281,8 +381,13 @@ export function ProjectModifiedGraphView(props: Props) {
     ;(async () => {
       try {
         const [graphResp, modifiedResp] = await Promise.all([
-          hasApi.projectGraphModified(props.projectId, depth),
-          hasApi.projectModified(props.projectId),
+          measureAsync('view.modified_graph.fetch_graph', () => hasApi.projectGraphModified(props.projectId, depth), {
+            projectId: props.projectId,
+            depth,
+          }),
+          measureAsync('view.modified_graph.fetch_list', () => hasApi.projectModified(props.projectId), {
+            projectId: props.projectId,
+          }),
         ])
         if (cancelled) return
         rawNodesRef.current = applyModificationKindsToNodes(graphResp.nodes, modifiedResp.entries)
@@ -317,7 +422,10 @@ export function ProjectModifiedGraphView(props: Props) {
       if (!nodeId.startsWith('server:') && !nodeId.startsWith('server-path:')) return
       setExpandLoading(true)
       try {
-        const resp = await hasApi.projectGraph(props.projectId, nodeId, 1)
+        const resp = await measureAsync('view.modified_graph.expand', () => hasApi.projectGraph(props.projectId, nodeId, 1), {
+          projectId: props.projectId,
+          nodeId,
+        })
         const existingNodeIds = new Set(rawNodesRef.current.map((n) => n.id))
         const existingEdgeKeys = new Set(
           rawEdgesRef.current.map((e) => `${e.from}->${e.to}:${e.type}`),
@@ -580,6 +688,7 @@ export function ProjectModifiedGraphView(props: Props) {
         nodes={nodes}
         edges={edges}
         nodeTypes={nodeTypes}
+        onlyRenderVisibleElements
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         onNodeClick={(_, n) => {
