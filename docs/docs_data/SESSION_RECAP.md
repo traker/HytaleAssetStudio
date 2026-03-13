@@ -1,4 +1,300 @@
+- 2026-03-13 - Cloture complete et archivage de `INTERACTIONEDITOR1`
+	- `INTERACTIONEDITOR1.md`
+		- ajout d'une section de cloture finale declarant le chantier termine
+	- `INTERACTIONEDITOR1_TRACKING.md`
+		- le lot 2 est aligne en `done`, ce qui cloture tout le chantier au niveau tracker
+	- `archived_task/`
+		- archivage du plan et du tracker `INTERACTIONEDITOR1`
+	- verification:
+		- le tracker ne contient plus de lot restant en cours pour `INTERACTIONEDITOR1`
+- 2026-03-13 - Cloture du lot 5 de `INTERACTIONEDITOR1`
+	- `frontend/scripts/interactionContractFixtures.ts`
+		- creation d'un mini corpus de fixtures representatif pour `Parallel`, `Wielding`, `Projectile`, `Selector`, `Charging`, `Replace`
+	- `frontend/scripts/interaction-contract.test.ts`
+		- le test contractuel frontend boucle maintenant sur ce corpus partage au lieu de cas inline disperses
+		- il verifie la preservation des branches semantiques et des champs inconnus sur l'export/save
+	- `backend/tests/test_interaction_tree_service.py`
+		- ajout de couverture `Charging` et `Replace` pour completer la passe load/import sur le meme spectre de types critiques
+	- `INTERACTIONEDITOR1_TRACKING.md`
+		- le lot 5 passe en `done`
+	- verification:
+		- `python -m unittest backend.tests.test_interaction_tree_service` → OK
+		- `npm --prefix frontend run test:interaction-contract` → OK
+- 2026-03-13 - Cloture du lot 4 de `INTERACTIONEDITOR1`
+	- `frontend/src/components/graph/interactionSchemas.ts`
+		- ajout des schemas manquants documentes: `TeleportInstance`, `TeleportConfigInstance`, `OpenContainer`, `OpenProcessingBench`, `Explode`, `SpawnPrefab`, `SpawnDrops`, `UseEntity`, `UseCoop`, `ResetCooldown`
+		- `MovementCondition`, deja ajoute plus tot, complete desormais la couverture des types documentes initialement absents
+	- `frontend/src/components/graph/colors.ts`
+		- ajout de couleurs dediees pour les nouveaux types afin d'eviter une palette trop grise dans l'UI
+	- `INTERACTIONEDITOR1_TRACKING.md`
+		- le lot 4 passe en `done`
+	- verification:
+		- `npm --prefix frontend run build` → OK
+- 2026-03-13 - Cloture du lot 3 de `INTERACTIONEDITOR1`
+	- `INTERACTIONEDITOR1_TRACKING.md`
+		- le lot 3 (`3.1`, `3.2`, `3.3`) est maintenant cloture en `done`
+		- la verification restante de `3.3` a ete levee: `InteractionFormPanel.tsx` ne garde plus que le wiring generique et appelle le registre type-aware extrait dans `interactionFormTypeSections.tsx`
+	- stabilisation finale associee:
+		- correction du parseur backend pour eviter les doublons d'edges sur `Charging.Next`
+	- verification:
+		- `npm --prefix frontend run build` → OK
+		- `python -m unittest backend.tests.test_interaction_tree_service` → OK
+- 2026-03-13 - Fix des doublons d'edges sur `Charging.Next`
+	- `backend/core/interaction_tree_service.py`
+		- `collect_relation_refs(...)` ne rescane plus les conteneurs relationnels generiques avant de descendre dans leurs enfants; cela evitait de reconstruire deux fois les memes edges sortants pour des noeuds inline dans des structures `dict-time` comme `Charging.Next`
+		- ajout d'une deduplication defensive sur `(from, to, type)` lors de la collecte des edges
+	- `backend/tests/test_interaction_tree_service.py`
+		- ajout d'un test de non-regression couvrant un `Charging` avec plusieurs paliers inline ayant eux-memes `Next` / `Failed`
+	- verification:
+		- `python -m unittest backend.tests.test_interaction_tree_service` → OK
+- 2026-03-13 - Demarrage du lot 3.3 de `INTERACTIONEDITOR1`
+	- `frontend/src/components/editor/interactionFormTypeSections.tsx`
+		- nouveau module dedie au registre type-aware et a ses helpers locaux (`NestedObjectSection`, `ItemStackEditor`, `ReplaceDefaultValueEditor`, etc.)
+		- les sections specialisees par type (`Selector`, `Charging`, `DamageEntity`, `ModifyInventory`, `ChangeStat*`, `StatsCondition*`, `EffectCondition`, `MovementCondition`, `Condition`) n'encombrent plus le panel principal
+	- `frontend/src/components/editor/InteractionFormPanel.tsx`
+		- le panel principal est recentre sur le wiring: onglets, rendu schema generique, `DictTimeEditor`, `ExtraFields`, apply/save
+		- l'ajout d'un nouveau type-aware editor devient localise dans le module extrait au lieu d'imposer de retravailler tout le fichier principal
+- 2026-03-13 - Cloture du lot 1 de `INTERACTIONEDITOR1`
+	- le lot 1 est maintenant termine: parser backend, UI graphe et export frontend preservent le contrat semantique principal (`ForkInteractions`, `BlockedInteractions`, `CollisionNext`, `GroundNext`, `HitBlock`, `HitEntity`, `HitNothing`)
+	- ajout d'un test contractuel frontend executable via `npm --prefix frontend run test:interaction-contract`
+	- ce test couvre l'export semantique de `Parallel`, `Wielding`, `Projectile`, `Selector`, et verifie aussi la preservation des champs inconnus non derives des edges
+	- la couverture backend `backend.tests.test_interaction_tree_service` a ete etendue a `Wielding.BlockedInteractions`
+	- validations de cloture lot 1:
+		- `python -m unittest backend.tests.test_interaction_tree_service`
+		- `npm --prefix frontend run test:interaction-contract`
+		- `npm --prefix frontend run build`
+	- limite explicitement maintenue hors-scope du lot 1: `HitEntityRules`
+- 2026-03-13 - Demarrage du lot 3 avec `Charging`
+	- `frontend/src/components/graph/interactionSchemas.ts`
+		- le schema `Charging` expose maintenant aussi `Failed`, `FailOnDamage`, `Delay`, `MouseSensitivityAdjustmentTarget`, `MouseSensitivityAdjustmentDuration`
+	- `frontend/src/components/editor/InteractionFormPanel.tsx`
+		- ajout d'une section dediee `Charging Behavior` pour les flags et reglages observes dans les assets/doc Hytale
+		- `Charging.Next` reste edite comme dict-time, mais chaque entree peut maintenant etre basculee entre reference serveur et objet inline JSON
+		- cela retire un point de friction majeur: les paliers inline ne sont plus simplement visibles, ils deviennent editables sans passer par `Raw JSON`
+	- verification:
+		- `npm --prefix frontend run build` → OK
+- 2026-03-13 - `Replace` devient type-aware
+	- `frontend/src/components/graph/interactionSchemas.ts`
+		- le schema `Replace` expose maintenant `Next`, ce qui aligne le frontend avec les usages observes dans la doc/legacy
+	- `frontend/src/components/editor/InteractionFormPanel.tsx`
+		- ajout d'un bloc dedie `Replace Behavior` pour `Var`, `DefaultOk` et `Next`
+		- ajout d'un editeur `DefaultValue` capable de travailler soit en mode container `{ Interactions: [...] }`, soit en mode objet JSON brut
+		- le cas frequent `DefaultValue.Interactions` n'est donc plus un simple blob opaque
+	- verification:
+		- `npm --prefix frontend run build` → OK
+- 2026-03-13 - `Wielding` devient type-aware
+	- `frontend/src/components/graph/interactionSchemas.ts`
+		- le schema `Wielding` couvre maintenant les champs observes en pratique: `RunTime`, `HorizontalSpeedMultiplier`, `CancelOnOtherClick`, `FailOnDamage`, `BlockedEffects`, `DamageModifiers`, `AngledWielding`, `StaminaCost`, `Forks`, `Failed`
+		- `Failed` est maintenant declare comme branche semantique du graphe, en plus de `Next` et `BlockedInteractions`
+	- `frontend/src/components/editor/InteractionFormPanel.tsx`
+		- ajout d'un bloc dedie `Wielding Behavior` pour les reglages de garde/parade
+		- ajout de sections guidees pour `StaminaCost` et `AngledWielding`
+		- `DamageModifiers` et `BlockedEffects` sont maintenant exposes explicitement dans la partie defense
+	- verification:
+		- `npm --prefix frontend run build` → OK
+- 2026-03-13 - `Chaining` devient type-aware
+	- `frontend/src/components/editor/InteractionFormPanel.tsx`
+		- ajout d'un bloc dedie `Chaining Behavior` pour `ChainId` et `ChainingAllowance`
+		- ajout d'un editeur structure pour `Next`, avec ordre explicite et bascule reference serveur / objet inline
+		- ajout d'un editeur structure pour `Flags`, afin d'editer les finishers/branches lies a `ChainFlag` sans repasser par un blob JSON
+	- cela couvre mieux les cas reels `FirstClick` / combos conditionnels documentes dans `114_Interaction_Type_Chaining.md`
+	- verification:
+		- `npm --prefix frontend run build` → OK
+- 2026-03-13 - `Selector` avance devient type-aware
+	- `frontend/src/components/graph/interactionSchemas.ts`
+		- le schema `Selector` expose maintenant `FailOn`, `Failed` et `HitEntityRules` en plus des branches deja presentes
+	- `frontend/src/components/editor/InteractionFormPanel.tsx`
+		- ajout d'un bloc `Selector Behavior` pour `RunTime`, `FailOn`, `Next`, `Failed`
+		- ajout d'editeurs structures pour `HitEntity`, `HitBlock`, `HitNothing` via leurs containers `{ Interactions: [...] }`
+		- ajout d'un editeur `HitEntityRules` avec `Matchers` + `Next`, tout en gardant ce sous-contrat hors du mapping semantique graphe/import/export
+	- verification:
+		- `npm --prefix frontend run build` → OK
+- 2026-03-13 - Stabilisation du pattern du form panel (`INTERACTIONEDITOR1` 2.3)
+	- extraction des editeurs structures reutilisables dans `frontend/src/components/editor/interactionFormStructuredEditors.tsx`
+	- le pattern commun liste / map / container / hit rules n'est plus duplique inline dans `InteractionFormPanel.tsx`
+	- `InteractionFormPanel.tsx` reste le point de registre type-aware, mais sa responsabilite est reduite aux sections et au wiring
+	- verification:
+		- `npm --prefix frontend run build` → OK
+- 2026-03-13 - `DamageEntity` devient type-aware
+	- `frontend/src/components/editor/InteractionFormPanel.tsx`
+		- ajout d'un bloc dedie `Damage Entity` pour `Parent` et `Effects`
+		- ajout d'un bloc `Damage Calculator` pour `Type`, `Class`, `RandomPercentageModifier` et un editeur structure de `BaseDamage`
+		- ajout d'un bloc `Damage Effects` pour les sons, `WorldParticles` et `Knockback`
+		- ajout d'un editeur guide `EntityStatsOnHit`
+		- preservation explicite des champs inconnus dans `DamageCalculator`, `DamageEffects` et `Knockback` via des zones JSON annexes
+	- `frontend/src/components/graph/interactionSchemas.ts`
+		- descriptions du schema `DamageEntity` precisees pour mieux refleter les sous-objets reellement supportes
+	- verification:
+		- `npm --prefix frontend run build` → OK
+- 2026-03-13 - `ModifyInventory` devient type-aware
+	- `frontend/src/components/graph/interactionSchemas.ts`
+		- le schema `ModifyInventory` abandonne les faux champs generiques `Items` / `Mode` et expose les cles reelles observees dans les assets: `AdjustHeldItemQuantity`, `AdjustHeldItemDurability`, `ItemToRemove`, `ItemToAdd`, `BrokenItem`, `NotifyOnBreak`, `NotifyOnBreakMessage`, `Next`, `Failed`
+		- `Failed` est maintenant declare comme branche semantique du graphe pour ce type
+	- `frontend/src/components/editor/interactionFormStructuredEditors.tsx`
+		- `InteractionValueEditor` est exporte pour reutilisation locale sur les branches ref/inline uniques
+	- `frontend/src/components/editor/InteractionFormPanel.tsx`
+		- ajout d'un bloc dedie `Modify Inventory` pour les ajustements de stack/durabilite et les options de break
+		- ajout d'editeurs guides `Item To Remove` et `Item To Add` avec preservation des champs inconnus eventuels
+		- `Next` et `Failed` sont maintenant editables comme ref serveur ou objet inline, ce qui colle aux usages reels des assets Hytale
+	- verification:
+		- `npm --prefix frontend run build` → OK
+- 2026-03-13 - `ChangeStat` et `ChangeStatWithModifier` deviennent type-aware
+	- `frontend/src/components/graph/interactionSchemas.ts`
+		- `ChangeStat` expose maintenant `ValueType`, `RunTime`, `Effects` et `Failed` en plus de `Behaviour`, `StatModifiers` et `Next`
+		- `ChangeStatWithModifier` remplace le faux champ `Behaviour` par les champs reels `InteractionModifierId` et `ValueType`, tout en gardant `StatModifiers` et `Next`
+	- `frontend/src/components/editor/InteractionFormPanel.tsx`
+		- ajout d'un editeur structure commun pour `StatModifiers`
+		- `ChangeStat` dispose maintenant d'un bloc dedie avec `Behaviour`, `ValueType`, `RunTime`, `Effects`, puis de sections ref/inline pour `Next` et `Failed`
+		- `ChangeStatWithModifier` dispose d'un bloc dedie avec `InteractionModifierId`, `ValueType`, `StatModifiers` et `Next`
+	- verification:
+		- `npm --prefix frontend run build` → OK
+- 2026-03-13 - `StatsCondition` devient type-aware
+	- `frontend/src/components/graph/interactionSchemas.ts`
+		- `StatsCondition` expose maintenant `ValueType`, `LessThan`, `Lenient`, `RunTime` et `Effects` en plus de `Costs`, `Next`, `Failed`
+		- `StatsConditionWithModifier` expose maintenant explicitement `InteractionModifierId` et un vrai `Costs` de type dictionnaire numerique
+	- `frontend/src/components/editor/InteractionFormPanel.tsx`
+		- ajout d'un editeur structure commun pour `Costs`
+		- `StatsCondition` dispose maintenant d'un bloc dedie pour les options de comparaison, puis de sections ref/inline pour `Next` et `Failed`
+		- `StatsConditionWithModifier` reutilise le meme pattern avec `InteractionModifierId`
+	- verification:
+		- `npm --prefix frontend run build` → OK
+- 2026-03-13 - `EffectCondition` devient type-aware
+	- `frontend/src/components/graph/interactionSchemas.ts`
+		- `EffectCondition` abandonne le faux schema `EffectId` / `Invert` et expose maintenant les champs reels `Entity`, `EntityEffectIds`, `Match`, `Next`, `Failed`
+	- `frontend/src/components/editor/InteractionFormPanel.tsx`
+		- ajout d'un bloc dedie `Effect Condition` pour `Entity` et `Match`
+		- ajout d'un editeur structure pour la liste `EntityEffectIds`
+		- `Next` et `Failed` sont maintenant editables comme ref serveur ou objet inline
+	- verification:
+		- `npm --prefix frontend run build` → OK
+- 2026-03-13 - `MovementCondition` devient type-aware
+	- `frontend/src/components/graph/interactionSchemas.ts`
+		- ajout du schema `MovementCondition` avec les branches directionnelles reelles `ForwardLeft`, `Forward`, `ForwardRight`, `Left`, `Right`, `BackLeft`, `Back`, `BackRight`, ainsi qu'un `Failed` optionnel
+	- `frontend/src/components/editor/InteractionFormPanel.tsx`
+		- ajout d'un bloc dedie `Directional Branches` avec edition ref serveur / objet inline pour chaque direction de mouvement
+		- ajout d'une section `Failed` pour le fallback optionnel
+	- verification:
+		- `npm --prefix frontend run build` → OK
+- 2026-03-13 - Cloture du lot 3.2 de `INTERACTIONEDITOR1`
+	- la passe gameplay / combat / inventory est maintenant terminee pour les types vises: `DamageEntity`, `ModifyInventory`, `ChangeStat`, `ChangeStatWithModifier`, `StatsCondition`, `EffectCondition`, `MovementCondition`
+	- tous ces sous-editeurs ont ete valides par `npm --prefix frontend run build` au fil de l'eau
+	- le prochain choix de pilotage n'est plus un type restant du lot 3.2, mais soit une cloture plus large du lot 3, soit le passage au lot 4, soit une passe de non-regression du lot 5
+- 2026-03-13 - Fix du graphe d'interactions pour les containers anonymes dans les listes relationnelles
+	- `backend/core/interaction_tree_service.py`
+		- le parseur de l'arbre d'interactions traverse maintenant correctement les wrappers anonymes du type `{ Interactions: [...] }` lorsqu'ils apparaissent a l'interieur de listes relationnelles comme `Parallel.Interactions`
+		- cela evite de creer des noeuds inline orphelins dans l'editeur pour certains assets reels, notamment des signatures d'armes avec `Selector` / `Replace` imbriques dans des containers sans champ `Type`
+	- `backend/tests/test_interaction_tree_service.py`
+		- ajout d'un test de non-regression couvrant un `Parallel` dont les enfants sont encapsules dans des containers anonymes
+	- verification:
+		- `python -m unittest backend.tests.test_interaction_tree_service` → OK
 # 📋 Session Recap — Hytale Asset Studio
+
+## 2026-03-12 — Etat + plan + tracker pour le chantier Interaction Editor
+
+**Contexte** : le chantier d'amelioration de l'editeur d'interactions devient suffisamment large pour necessiter un cadrage dedie, separe du simple fil de conversation.
+
+**Fait** :
+- creation de `INTERACTIONEDITOR1.md`
+	- etat factuel de l'editeur actuel
+	- ecarts critiques sur la fidelite graphe/import/export
+	- plan de travail par lots
+- creation de `INTERACTIONEDITOR1_TRACKING.md`
+	- tracker pre-rempli avec l'avancement actuel
+	- `Condition` et `Selector` deja notes comme premiere vague type-aware terminee
+
+**Constats formalises** :
+- le backend parse deja plus de branches semantiques que le frontend d'edition n'en preserve actuellement
+- l'export frontend rabat encore trop de branches sur `Interactions`
+- la couverture schema reste partielle par rapport a la liste de types Hytale documentee
+
+**Decision** : le prochain chantier prioritaire sur l'editeur d'interactions doit commencer par la fidelite du contrat graphe/import/export, avant d'etendre massivement les widgets de formulaire type-aware.
+
+**Complement 1.1** :
+- la cartographie precise des branches semantiques a preserver a ete formalisee dans `INTERACTIONEDITOR1.md`
+- elle montre noir sur blanc quels chemins sont aujourd'hui preserves (`Next`, `Failed`, `Interactions`) et lesquels sont encore ecrases (`ForkInteractions`, `BlockedInteractions`, `CollisionNext`, `GroundNext`, `StartInteraction`, `CancelInteraction`, `HitBlock`, `HitEntity`, `HitNothing`)
+- le set minimal d'edge types recommande pour la phase suivante a ete fige dans le plan/tracker
+
+**Avancee 1.2** :
+- `frontend/src/components/graph/InteractionNode.tsx`
+	- ajout de handles semantiques conditionnels en fonction du type d'interaction / schema
+- `frontend/src/views/project/InteractionTreeEditor.tsx`
+	- le graphe d'edition preserve maintenant des edge types UI distincts (`fork`, `blocked`, `collisionNext`, `groundNext`, `start`, `cancel`, `hitBlock`, `hitEntity`, `hitNothing`) au lieu de tout rabatre systematiquement sur `child`
+- `frontend/src/components/graph/interactionSchemas.ts`
+	- alignement des `outgoingEdges` connus pour `Parallel`, `Wielding`, `Projectile`, `Selector`
+- `frontend/src/components/graph/colors.ts`
+	- ajout des couleurs manquantes pour ces branches
+
+**Verification** :
+- `npm --prefix frontend run build` → OK
+
+**Limite restante** :
+- cette avancee rend l'UI capable d'editer ces branches distinctement, mais le parser backend et l'export frontend ne les reconstituent pas encore tous correctement au reload/save; c'est le coeur de la suite 1.3.
+
+**Cloture 1.3** :
+- `backend/core/interaction_tree_service.py`
+	- mapping des relations Hytale aligne sur des edge types distincts: `fork`, `blocked`, `collisionNext`, `groundNext`, `start`, `cancel`, `hitBlock`, `hitEntity`, `hitNothing`
+- `frontend/src/components/graph/interactionExport.ts`
+	- reconstruction semantique des cles JSON Hytale:
+	  - `ForkInteractions`
+	  - `BlockedInteractions`
+	  - `CollisionNext`
+	  - `GroundNext`
+	  - `StartInteraction`
+	  - `CancelInteraction`
+	  - containers `HitBlock` / `HitEntity` / `HitNothing` avec `{ Interactions: [...] }`
+- `backend/tests/test_interaction_tree_service.py`
+	- ajout de couverture sur les edge types parses pour `Parallel`, `Projectile`, `Selector`
+
+**Verification** :
+- `python -m unittest backend.tests.test_interaction_tree_service` → OK
+- `npm --prefix frontend run build` → OK
+
+**Limite restante** :
+- `HitEntityRules` reste hors du contrat sémantique courant et demandera un traitement dédié dans une suite de lot separée.
+
+## 2026-03-12 — Premier jalon type-aware pour l'editeur d'interactions
+
+**Contexte** : l'editeur d'interactions etait deja base sur `interactionSchemas.ts`, mais le rendu restait trop generique pour certains types qui portent des sous-objets structurants (`Condition`, `Selector`, etc.).
+
+**Fait** :
+- `frontend/src/components/editor/InteractionFormPanel.tsx`
+	- ajout d'une couche de rendu specifique au `nodeType`, en plus du rendu schema-driven existant
+	- ajout d'un bloc dedie pour `Condition` :
+	  - edition guidee des shortcuts racine (`RequiredGameMode`, `Crouching`, `Jumping`, `Swimming`, `InWater`, `OnGround`)
+	  - edition guidee du sous-objet optionnel `Condition` (`EntityType`, `Stat`, `Comparison`, `Value`, `GameMode`, etc.)
+	- ajout d'un bloc dedie pour `Selector` :
+	  - edition guidee du sous-objet `Selector` (`Id`, `Direction`, `TestLineOfSight`, distances, offsets, etc.)
+	- les champs non pris en charge par ces sous-editeurs restent preserves via le schema generique + `Additional Fields`
+
+**Verification** :
+- `npm --prefix frontend run build` → OK
+
+**Decision** : le chantier interaction editor doit maintenant avancer type par type, avec des sous-editeurs specialises la ou la forme JSON encode une structure metier specifique. `Condition` et `Selector` servent de premiere base pour cette direction.
+
+## 2026-03-12 — AssetSidePanel supporte maintenant les ressources Common en preview
+
+**Contexte** : certains noeuds `common:*` du graphe etaient encore traites comme "pas de server JSON", ce qui empechait d'inspecter visuellement les images, les sons et les fichiers de modele/animation depuis le panneau lateral.
+
+**Fait** :
+- `frontend/src/api/http.ts`, `frontend/src/api/hasApi.ts`
+	- ajout d'un helper de fetch brut avec les headers workspace existants
+	- ajout d'accesseurs frontend pour `/resource`
+- `frontend/src/components/editor/AssetSidePanel.tsx`
+	- ajout d'un mode `preview` pour les ressources `common:*`
+	- preview image pour les formats image (`.png`, etc.)
+	- lecteur audio pour `.ogg` et autres types audio reconnus
+	- fallback texte read-only pour les formats JSON-like/textuels (`.blockymodel`, `.blockyanim`, `.animation`, `.material`, `.particle`, `.effect`, `.prefab`, etc.)
+	- fallback binaire avec bouton `Open raw` si aucun preview n'est supporte
+- `frontend/src/views/project/ProjectGraphEditor.tsx`, `frontend/src/views/project/ProjectModifiedGraphView.tsx`
+	- suppression du faux message d'erreur "Common resource (no server JSON)" pour laisser le panneau charger la preview
+- `frontend/src/views/project/ProjectModifiedAssetsView.tsx`
+	- un clic sur une ressource `Common` ouvre maintenant le meme panneau lateral au lieu d'un nouvel onglet brut
+
+**Verification** :
+- lecture d'assets vanilla locaux: les fichiers `.blockyanim` observes sont bien des JSON textuels
+- `npm --prefix frontend run build` → OK
+
+**Decision** : l'edition reste reservee aux `Server/*.json`, mais le panneau lateral devient maintenant un inspecteur generique utile pour les noeuds `Common` les plus frequents.
 
 ## 2026-03-12 — STABILPERF1 formalise a partir des mesures reelles
 
