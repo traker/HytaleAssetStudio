@@ -43,10 +43,7 @@ def load_project_config(workspace_root: Path, project_id: str) -> tuple[ProjectC
 
 
 def save_project_config(cfg_path: Path, cfg: ProjectConfig) -> None:
-    # Compatibility: pydantic v1/v2
-    from backend.core.pydantic_compat import model_dump
-
-    write_json(cfg_path, model_dump(cfg))
+    write_json(cfg_path, cfg.model_dump())
 
 
 def get_project_assets_root(cfg: ProjectConfig) -> Path:

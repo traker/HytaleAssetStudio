@@ -24,7 +24,6 @@ from backend.core.models import (
     ProjectOpenResponse,
 )
 from backend.core.io import write_json
-from backend.core.pydantic_compat import model_dump
 from backend.core.project_service import load_project_config, save_project_config
 from backend.core.import_service import import_pack
 from backend.core.project_create_service import create_project
@@ -63,10 +62,7 @@ def project_get_config(
 ) -> dict:
     workspace_root = resolve_workspace_root(settings, workspaceId)
     cfg, _ = load_project_config(workspace_root, projectId)
-    # Compatibility: pydantic v1/v2
-    from backend.core.pydantic_compat import model_dump
-
-    return model_dump(cfg)
+    return cfg.model_dump()
 
 
 @router.put("/projects/{projectId}/layers", response_model=OkResponse)
@@ -113,7 +109,7 @@ def project_get_manifest(
     manifest_path = Path(cfg.project.assetsWritePath) / "manifest.json"
     if not manifest_path.exists():
         # Return a default manifest seeded from project metadata
-        return model_dump(ProjectManifest(Group=cfg.project.id, Name=cfg.project.displayName))
+        return ProjectManifest(Group=cfg.project.id, Name=cfg.project.displayName).model_dump()
     try:
         return json.loads(manifest_path.read_text(encoding="utf-8"))
     except Exception as e:
@@ -130,6 +126,5 @@ def project_put_manifest(
     workspace_root = resolve_workspace_root(settings, workspaceId)
     cfg, _ = load_project_config(workspace_root, projectId)
     manifest_path = Path(cfg.project.assetsWritePath) / "manifest.json"
-    from backend.core.pydantic_compat import model_dump
-    write_json(manifest_path, model_dump(req.manifest))
+    write_json(manifest_path, req.manifest.model_dump())
     return OkResponse(ok=True)

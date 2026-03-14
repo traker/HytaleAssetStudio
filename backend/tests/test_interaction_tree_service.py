@@ -7,7 +7,6 @@ import pytest
 from backend.core.interaction_tree_service import build_interaction_tree
 from backend.core.io import write_json
 from backend.core.models import PackSource, ProjectConfig, ProjectConfigProject
-from backend.core.pydantic_compat import model_dump
 from backend.core.state import PROJECT_INDEX, PROJECT_INDEX_FINGERPRINT
 
 
@@ -42,7 +41,7 @@ class InteractionTreeServiceTests:
             vanilla=PackSource(sourceType="folder", path=str(vanilla_root)),
             layers=[],
         )
-        write_json(project_root / "has.project.json", model_dump(cfg))
+        write_json(project_root / "has.project.json", cfg.model_dump())
         return workspace_root, project_root, vanilla_root
 
     def test_build_interaction_tree_preserves_parallel_fork_edges(self) -> None:

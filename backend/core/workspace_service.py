@@ -17,7 +17,6 @@ from backend.core.models import (
     WorkspaceOpenRequest,
     WorkspaceOpenResponse,
 )
-from backend.core.pydantic_compat import model_dump
 from backend.core.state import WORKSPACE_ROOT_BY_ID, _WORKSPACE_LOCK
 
 
@@ -100,7 +99,7 @@ def open_workspace(settings: Settings, req: WorkspaceOpenRequest) -> WorkspaceOp
                     "rootPath": str(root),
                     "projectsDir": str(projects_dir),
                 },
-                "defaults": model_dump(defaults_model),
+                "defaults": defaults_model.model_dump(),
             },
         )
 

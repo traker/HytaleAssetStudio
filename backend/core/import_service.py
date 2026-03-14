@@ -17,7 +17,6 @@ from backend.core.models import (
 )
 from backend.core.project_create_service import _slugify, create_project
 from backend.core.project_service import load_project_config, save_project_config
-from backend.core.pydantic_compat import model_dump
 from backend.core.vfs import mount_from_source, read_json_from_mount
 from backend.core.workspace_service import _load_workspace_defaults, _project_config_path
 
@@ -54,7 +53,7 @@ def _normalize_import_manifest(pack_mount) -> dict | None:
             {"source": str(pack_mount.root), "error": str(exc)},
         )
 
-    return model_dump(normalized)
+    return normalized.model_dump()
 
 
 def import_pack(settings: Settings, req: ImportPackRequest) -> ImportPackResponse:
@@ -116,7 +115,7 @@ def import_pack(settings: Settings, req: ImportPackRequest) -> ImportPackRespons
         "enabled": True,
     }
 
-    existing = [model_dump(l) for l in cfg.layers]
+    existing = [l.model_dump() for l in cfg.layers]
     existing = [l for l in existing if l.get("id") != layer_id]
     cfg.layers = [ProjectLayer(**new_layer)] + [ProjectLayer(**l) for l in existing]
 

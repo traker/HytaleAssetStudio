@@ -65,14 +65,12 @@ def _project_content_signature(cfg: ProjectConfig) -> dict[str, object]:
 
 
 def _index_fingerprint(cfg: ProjectConfig) -> str:
-    from backend.core.pydantic_compat import model_dump
-
     with timed("index.fingerprint"):
         data = {
             "projectId": cfg.project.id,
             "assetsWritePath": cfg.project.assetsWritePath,
-            "vanilla": model_dump(cfg.vanilla),
-            "layers": [model_dump(l) for l in cfg.layers],
+            "vanilla": cfg.vanilla.model_dump(),
+            "layers": [l.model_dump() for l in cfg.layers],
             "projectContent": _project_content_signature(cfg),
         }
         raw = json.dumps(data, sort_keys=True, ensure_ascii=False).encode("utf-8")

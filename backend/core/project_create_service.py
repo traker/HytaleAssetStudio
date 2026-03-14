@@ -14,7 +14,6 @@ from backend.core.models import (
     ProjectCreateRequest,
     ProjectCreateResponse,
 )
-from backend.core.pydantic_compat import model_dump
 from backend.core.workspace_service import _project_config_path
 
 
@@ -120,7 +119,7 @@ def create_project(workspace_root: Path, req: ProjectCreateRequest) -> ProjectCr
         write_json(manifest_path, manifest_data)
         created_paths.append(manifest_path)
 
-        write_json(cfg_path, model_dump(cfg))
+        write_json(cfg_path, cfg.model_dump())
         created_paths.append(cfg_path)
     except HTTPException:
         _cleanup_created_paths(created_paths)
