@@ -71,3 +71,30 @@ export default defineConfig([
   },
 ])
 ```
+
+---
+
+## Architecture: `src/api/`
+
+### Structure
+
+| Fichier | Rôle |
+|---|---|
+| `client.ts` | Primitives HTTP (`httpFetch`, `httpJson`) — usage interne uniquement |
+| `workspaceSession.ts` | Session & erreurs (`HasApiError`, `setApiWorkspaceId`, `buildHeaders`) |
+| `hasApi.ts` | Surface API typée exposée aux composants |
+| `types.ts` | Types request/response maintenus manuellement |
+| `index.ts` | Barrel : re-exporte `workspaceSession`, `types`, `hasApi` — **pas** `httpFetch`/`httpJson` |
+
+### Stratégie `types.ts` vs `generated.ts` (décision B)
+
+`src/api/types.ts` est la **source de vérité frontend** pour les contrats request/response.
+
+Le script `npm run codegen` peut générer un fichier `src/api/generated.ts` depuis l'OpenAPI du backend, mais celui-ci sert uniquement de **référence/validation** — les imports dans le code source pointent vers `types.ts`.
+
+**Pourquoi B et pas A (suppression de `types.ts`) :**
+- Le CI n'a pas accès au backend en live, donc codegen ne peut pas tourner automatiquement.
+- `types.ts` est stable, versionné, et indépendant de l'état du serveur.
+
+**Workflow de mise à jour :** quand le backend évolue, mettre à jour `types.ts` manuellement, puis vérifier avec `codegen` si disponible.
+
