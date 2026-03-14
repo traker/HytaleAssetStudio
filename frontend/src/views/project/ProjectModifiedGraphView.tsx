@@ -550,7 +550,7 @@ export function ProjectModifiedGraphView(props: Props) {
           position: 'absolute',
           top: 12,
           left: 12,
-          bottom: 12,
+          bottom: 130,
           width: 320,
           zIndex: 10,
           display: 'flex',
