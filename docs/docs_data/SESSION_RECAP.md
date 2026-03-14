@@ -1,3 +1,21 @@
+- 2026-03-14 - ASSETFORMS1 complété — Lots 3–6 implémentés (suite de la session précédente)
+	- **Lot 3 — EntityEffectFormEditor + EffectsBlockEditor** (commit `09000c4`)
+		- `EffectsBlockEditor.tsx` extrait de `InteractionFormPanel.tsx` — réutilisable par les deux contextes
+		- `extraStringKeys` prop ajoutée (EntityBottomTint, EntityTopTint, ScreenEffect, ModelVFXId, PlayerSoundEventId)
+		- `EntityEffectFormEditor.tsx` créé : Duration/Infinite/Debuff, OverlapBehavior (select), DamageCalculatorCooldown, StatusEffectIcon, DeathMessageKey, ApplicationEffects & DamageEffects via EffectsBlockEditor, DamageCalculator/StatModifiers JSON
+		- Branché dans `AssetSidePanel` switch `entity-effect`
+	- **Lot 4 — BlockType dans ItemFormEditor** (commit `4c5ea8d`)
+		- Section collapsible `▸ Block Type` visible uniquement si `json.BlockType` existe
+		- Champs structurés : Material (select), DrawType, Group, BlockSoundSetId, BlockParticleSetId, Gathering/Flags/Textures (JSON)
+		- Extra keys (CustomModel, Bench, State…) en catch-all JSON dans la section
+	- **Lot 5 — ProjectileFormEditor** (commit `5c4fa33`)
+		- `ProjectileFormEditor.tsx` créé : Appearance + booleans, Physics (MuzzleVelocity, TerminalVelocity, Gravity…), Shape optionnel (Radius/Height), Aim, Damage, Audio (Hit/Miss/Death sound), Particles (SystemId inline), Extra catch-all
+		- Branché dans `AssetSidePanel` switch `projectile`
+	- **Lot 6 — NPCRoleFormEditor** (commit `c5c2fb4`)
+		- `NPCRoleFormEditor.tsx` créé : Type=Variant → Reference + Modify k/v editor + Parameters k/v editor ; autres types → message fallback vers JSON tab
+		- Branché dans `AssetSidePanel` switch `npc-role`
+	- `ASSETFORMS1_TRACKING.md` : tous lots marqués `done`
+	- Build final : `npm run build` → ✅ (536 modules, 0 erreur TS)
 - 2026-03-14 - Clôture complète de `STABILSTAGE2` — Lots 4 et 5 terminés
 	- **Lot 4 — Frontend qualité et performance** : tous les 7 items terminés
 		- `4.1` `.tmp/` ajouté au `.gitignore`

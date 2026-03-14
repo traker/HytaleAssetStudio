@@ -15,6 +15,113 @@ Document de suivi pour exécuter le plan `ASSETFORMS1.md`.
 
 ### Lot 1 — Simple.Effects.Particles
 
+- Statut global: `done`
+- Commit: Lot 1 in prior session
+
+#### 1.1 Éditeur Particles dans renderField('effects')
+
+- Statut: `done`
+
+---
+
+### Lot 2 — Socle routing extensible (AssetSidePanel)
+
+- Statut global: `done`
+
+#### 2.1 Créer `assetTypeRegistry.ts`
+
+- Statut: `done`
+
+#### 2.2 Modifier `AssetSidePanel.tsx`
+
+- Statut: `done`
+
+---
+
+### Lot 3 — EntityEffectFormEditor
+
+- Statut global: `done`
+- Commit: `09000c4`
+
+#### 3.1 Extraire `EffectsBlockEditor.tsx`
+
+- Statut: `done`
+- Notes: added `extraStringKeys` prop so EntityEffectFormEditor can show
+  EntityBottomTint/EntityTopTint/ScreenEffect/ModelVFXId in ApplicationEffects
+  and PlayerSoundEventId in DamageEffects.
+
+#### 3.2 Créer `EntityEffectFormEditor.tsx`
+
+- Statut: `done`
+- Notes: DamageCalculatorCooldown, StatusEffectIcon, DeathMessageKey added
+  beyond original plan spec (observed from Burn.json sample).
+
+---
+
+### Lot 4 — Section BlockType dans ItemFormEditor
+
+- Statut global: `done`
+- Commit: `4c5ea8d`
+
+#### 4.1 Ajouter section BlockType collapsible
+
+- Statut: `done`
+- Notes: Extra BlockType keys (CustomModel, CustomModelTexture, HitboxType,
+  VariantRotation, Bench, State, Opacity, ParticleColor, Support…) rendered
+  as JSON k/v catch-all inside the collapsed section.
+
+---
+
+### Lot 5 — ProjectileFormEditor
+
+- Statut global: `done`
+- Commit: `5c4fa33`
+
+#### 5.1 Créer `ProjectileFormEditor.tsx`
+
+- Statut: `done`
+- Notes: Added DeadTimeMiss, DeathSoundEventId, MissParticles, DeathParticles,
+  DeathEffectsOnHit, Radius, Height (conditional section) beyond original plan.
+
+---
+
+### Lot 6 — NPCRoleFormEditor (Variant uniquement)
+
+- Statut global: `done`
+- Commit: `c5c2fb4`
+
+#### 6.1 Créer `NPCRoleFormEditor.tsx`
+
+- Statut: `done`
+- Notes: Non-Variant types show an informational fallback message directing
+  users to the JSON tab.
+
+---
+
+## Questions ouvertes
+
+| # | Question | Décision |
+|---|----------|----------|
+| Q1 | Drop tables : éditeur récursif complet ou JSON ? | JSON brut (Monaco) — hors scope |
+| Q2 | `EffectsBlockEditor` : même fichier ou module séparé ? | Module séparé `EffectsBlockEditor.tsx` ✓ |
+| Q3 | NPC Template : couvert dans ce chantier ? | Non — hors scope |
+
+
+Document de suivi pour exécuter le plan `ASSETFORMS1.md`.
+
+## Légende
+
+- `todo`: non commencé
+- `in-progress`: en cours
+- `blocked`: bloqué par une décision ou un contrat incomplet
+- `done`: terminé et vérifié
+
+---
+
+## Tableau de bord
+
+### Lot 1 — Simple.Effects.Particles
+
 - Statut global: `todo`
 - Objectif: exposer un éditeur de tableau structuré pour `Particles` dans le bloc `Effects` des interactions.
 
