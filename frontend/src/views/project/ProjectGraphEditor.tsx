@@ -14,7 +14,7 @@ import {
 import '@xyflow/react/dist/style.css'
 
 import { HasApiError, hasApi } from '../../api'
-import type { AssetGetResponse, ProjectGraphResponse, SearchResult } from '../../api'
+import type { ProjectGraphResponse, SearchResult } from '../../api'
 
 import { AssetSidePanel } from '../../components/editor/AssetSidePanel'
 import { BlueprintNode } from '../../components/graph/BlueprintNode'
@@ -23,6 +23,7 @@ import { getBlueprintNodeDisplay, isInteractionBlueprintGroup } from '../../comp
 import { getColorForGroup, getColorForEdgeType } from '../../components/graph/colors'
 import { layoutGraph, MAX_DAGRE_NODES } from '../../components/graph/layoutDagre'
 import { measureAsync, measureSync, schedulePaintMeasure } from '../../perf/audit'
+import { useAsset } from '../../hooks/useAsset'
 
 type Props = {
   projectId: string
@@ -36,8 +37,6 @@ type Props = {
 }
 
 type Status = { kind: 'idle' | 'loading'; message?: string }
-
-type AssetStatus = { kind: 'idle' | 'loading' }
 
 const nodeTypes = {
   blueprint: BlueprintNode,
@@ -127,12 +126,17 @@ export function ProjectGraphEditor(props: Props) {
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
   const [activeHighlight, setActiveHighlight] = useState<{ edgeIds: Set<string>; nodeIds: Set<string> } | null>(null)
   const baseEdgesRef = useRef<Edge[]>([])
-  const [assetStatus, setAssetStatus] = useState<AssetStatus>({ kind: 'idle' })
-  const [assetError, setAssetError] = useState<string | null>(null)
-  const [asset, setAsset] = useState<AssetGetResponse | null>(null)
-  const assetSeq = useRef(0)
-  const [assetReloadTick, setAssetReloadTick] = useState(0)
   const graphPaintStartedAtRef = useRef<number | null>(null)
+
+  const assetEnabled = Boolean(
+    selectedNodeId &&
+      !selectedNodeId.startsWith('common:'),
+  )
+  const { asset, loading: assetLoading, error: assetError, reload: reloadAsset } = useAsset(
+    props.projectId,
+    selectedNodeId,
+    assetEnabled,
+  )
 
   const searchEnabled = props.searchEnabled ?? true
   const canLoad = useMemo(() => status.kind !== 'loading' && selected !== null, [status.kind, selected])
@@ -179,8 +183,6 @@ export function ProjectGraphEditor(props: Props) {
     setEdges([])
     setSelectedNodeId(null)
     setActiveHighlight(null)
-    setAsset(null)
-    setAssetError(null)
 
     try {
       const data = await measureAsync('view.project_graph.fetch', () => hasApi.projectGraph(props.projectId, selected.assetKey, depth), {
@@ -263,40 +265,6 @@ export function ProjectGraphEditor(props: Props) {
     }, 200)
     return () => clearTimeout(t)
   }, [isDropdownOpen, searchTerm, props.projectId])
-
-  useEffect(() => {
-    if (!selectedNodeId) {
-      setAsset(null)
-      setAssetError(null)
-      setAssetStatus({ kind: 'idle' })
-      return
-    }
-
-    if (selectedNodeId.startsWith('common:')) {
-      setAsset(null)
-      setAssetStatus({ kind: 'idle' })
-      setAssetError(null)
-      return
-    }
-
-    const mySeq = ++assetSeq.current
-    setAssetStatus({ kind: 'loading' })
-    setAssetError(null)
-
-    ;(async () => {
-      try {
-        const a = await hasApi.assetGet(props.projectId, selectedNodeId)
-        if (assetSeq.current !== mySeq) return
-        setAsset(a)
-        setAssetStatus({ kind: 'idle' })
-      } catch (e) {
-        if (assetSeq.current !== mySeq) return
-        setAsset(null)
-        setAssetStatus({ kind: 'idle' })
-        setAssetError(e instanceof HasApiError ? e.message : 'Unexpected error')
-      }
-    })()
-  }, [props.projectId, selectedNodeId, assetReloadTick])
 
   const selectedNode = useMemo(() => {
     if (!selectedNodeId) return null
@@ -513,10 +481,10 @@ export function ProjectGraphEditor(props: Props) {
           projectId={props.projectId}
           selectedNodeId={selectedNodeId}
           asset={asset}
-          loading={assetStatus.kind === 'loading'}
+          loading={assetLoading}
           error={assetError}
           onClose={() => { setSelectedNodeId(null); setActiveHighlight(null) }}
-          onRefresh={() => setAssetReloadTick((t) => t + 1)}
+          onRefresh={reloadAsset}
           onOpenInteractions={
             props.onOpenInteractions
               ? () => {

@@ -18,7 +18,7 @@ import {
 import '@xyflow/react/dist/style.css'
 
 import { HasApiError, hasApi } from '../../api'
-import type { AssetGetResponse, InteractionTreeResponse } from '../../api'
+import type { InteractionTreeResponse } from '../../api'
 
 import { AssetSidePanel } from '../../components/editor/AssetSidePanel'
 import { InteractionPalette, DRAG_MIME } from '../../components/editor/InteractionPalette'
@@ -27,6 +27,7 @@ import { InteractionNode, type InteractionNodeData } from '../../components/grap
 import { getColorForEdgeType } from '../../components/graph/colors'
 import { layoutGraph, MAX_DAGRE_NODES } from '../../components/graph/layoutDagre'
 import { exportInteractionTree } from '../../components/graph/interactionExport'
+import { useAsset } from '../../hooks/useAsset'
 
 type Props = {
   projectId: string
@@ -136,12 +137,6 @@ function InteractionTreeEditorInner(props: Props) {
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle')
   const [saveError, setSaveError] = useState<string | null>(null)
 
-  const [asset, setAsset] = useState<AssetGetResponse | null>(null)
-  const [assetError, setAssetError] = useState<string | null>(null)
-  const [assetLoading, setAssetLoading] = useState(false)
-  const assetSeq = useRef(0)
-  const [assetReloadTick, setAssetReloadTick] = useState(0)
-
   const onNodesChange = useCallback(
     (changes: NodeChange[]) => setNodes((prev) => applyNodeChanges(changes, prev)),
     [],
@@ -182,9 +177,6 @@ function InteractionTreeEditorInner(props: Props) {
   useEffect(() => {
     setSelectedNodeId(null)
     setActiveHighlight(null)
-    setAsset(null)
-    setAssetError(null)
-    setAssetLoading(false)
     setEditMode(false)
     setSaveStatus('idle')
     setSaveError(null)
@@ -233,32 +225,11 @@ function InteractionTreeEditorInner(props: Props) {
     selectedIsExternal && selectedNodeId && (selectedNodeId.startsWith('server:') || selectedNodeId.startsWith('server-path:')),
   )
 
-  useEffect(() => {
-    if (!selectedIsServerAsset || !selectedNodeId) {
-      setAsset(null)
-      setAssetError(null)
-      setAssetLoading(false)
-      return
-    }
-
-    const mySeq = ++assetSeq.current
-    setAssetLoading(true)
-    setAssetError(null)
-    setAsset(null)
-
-    ;(async () => {
-      try {
-        const a = await hasApi.assetGet(props.projectId, selectedNodeId)
-        if (assetSeq.current !== mySeq) return
-        setAsset(a)
-      } catch (e) {
-        if (assetSeq.current !== mySeq) return
-        setAssetError(e instanceof HasApiError ? e.message : 'Unexpected error')
-      } finally {
-        if (assetSeq.current === mySeq) setAssetLoading(false)
-      }
-    })()
-  }, [props.projectId, selectedIsServerAsset, selectedNodeId, assetReloadTick])
+  const { asset, loading: assetLoading, error: assetError, reload: reloadAsset } = useAsset(
+    props.projectId,
+    selectedNodeId,
+    selectedIsServerAsset,
+  )
 
   // ── Edit mode: connect edges ──
   const onConnect = useCallback(
@@ -503,7 +474,7 @@ function InteractionTreeEditorInner(props: Props) {
             loading={assetLoading}
             error={assetError}
             onClose={() => { setSelectedNodeId(null); setActiveHighlight(null) }}
-            onRefresh={() => { setAssetReloadTick((t) => t + 1); setTreeReloadTick((t) => t + 1) }}
+            onRefresh={() => { reloadAsset(); setTreeReloadTick((t) => t + 1) }}
           />
         </div>
       )}
