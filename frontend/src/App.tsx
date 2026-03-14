@@ -18,6 +18,7 @@ function App() {
   const [projects, setProjects] = useState<ProjectInfo[]>([])
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null)
   const [projectView, setProjectView] = useState<ProjectView>('config')
+  const [itemRoot, setItemRoot] = useState<GraphRoot | null>(null)
   const [interactionRoot, setInteractionRoot] = useState<GraphRoot | null>(null)
   const [isBusy, setIsBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -41,6 +42,8 @@ function App() {
   function selectProject(id: string): void {
     setSelectedProjectId(id)
     setProjectView('config')
+    setItemRoot(null)
+    setInteractionRoot(null)
   }
 
   async function refreshAndSelect(projectId: string): Promise<void> {
@@ -58,6 +61,8 @@ function App() {
   function backToHome(): void {
     setSelectedProjectId(null)
     setProjectView('config')
+    setItemRoot(null)
+    setInteractionRoot(null)
   }
 
   // Truncate long workspace path for breadcrumb display
@@ -142,8 +147,10 @@ function App() {
           <div style={{ display: projectView === 'graph-items' ? 'flex' : 'none', flex: 1, minHeight: 0 }}>
             <ProjectGraphItemsView
               projectId={selectedProjectId}
+              root={itemRoot}
               onBack={() => setProjectView('config')}
               onOpenInteractions={(root) => {
+                setItemRoot(root)
                 setInteractionRoot(root)
                 setProjectView('graph-interactions')
               }}
@@ -154,6 +161,10 @@ function App() {
               projectId={selectedProjectId}
               root={interactionRoot}
               onBack={() => setProjectView('graph-items')}
+              onOpenItem={(root) => {
+                setItemRoot(root)
+                setProjectView('graph-items')
+              }}
             />
           </div>
           <div style={{ display: projectView === 'modified' ? 'flex' : 'none', flex: 1, minHeight: 0 }}>

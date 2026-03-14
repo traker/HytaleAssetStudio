@@ -32,6 +32,7 @@ type Props = {
   projectId: string
   root: { assetKey: string; display: string }
   onBack: () => void
+  onOpenItem?: (root: { assetKey: string; display: string }) => void
 }
 
 type Status = { kind: 'idle' | 'loading'; message?: string }
@@ -380,6 +381,23 @@ function InteractionTreeEditorInner(props: Props) {
     setActiveHighlight({ edgeIds: new Set(connectedEdges.map((e) => e.id)), nodeIds: neighborIds })
   }, [])
 
+  const handleNodeDoubleClick = useCallback((_: React.MouseEvent, n: Node) => {
+    const data = n.data as InteractionNodeData | undefined
+    const isServerRef = Boolean(
+      data?.isExternal && (n.id.startsWith('server:') || n.id.startsWith('server-path:')),
+    )
+    if (!isServerRef) return
+
+    const display = typeof data?.rawFields?.ServerId === 'string' && data.rawFields.ServerId.trim()
+      ? data.rawFields.ServerId.trim()
+      : data?.label ?? n.id
+
+    props.onOpenItem?.({
+      assetKey: n.id,
+      display,
+    })
+  }, [props])
+
   const saveLabel =
     saveStatus === 'saving' ? 'Saving…'
     : saveStatus === 'ok' ? '✓ Saved'
@@ -416,6 +434,7 @@ function InteractionTreeEditorInner(props: Props) {
           onNodesDelete={editMode ? onNodesDelete : undefined}
           onEdgesDelete={editMode ? onEdgesDelete : undefined}
           onNodeClick={handleNodeClick}
+          onNodeDoubleClick={handleNodeDoubleClick}
           nodesConnectable={editMode}
           elementsSelectable={true}
           deleteKeyCode={editMode ? 'Delete' : null}

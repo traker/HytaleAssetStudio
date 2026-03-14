@@ -4,6 +4,7 @@ type Props = {
   projectId: string
   root: { assetKey: string; display: string } | null
   onBack: () => void
+  onOpenItem?: (root: { assetKey: string; display: string }) => void
 }
 
 export function ProjectGraphInteractionsView(props: Props) {
@@ -19,5 +20,5 @@ export function ProjectGraphInteractionsView(props: Props) {
     )
   }
 
-  return <InteractionTreeEditor projectId={props.projectId} root={props.root} onBack={props.onBack} />
+  return <InteractionTreeEditor projectId={props.projectId} root={props.root} onBack={props.onBack} onOpenItem={props.onOpenItem} />
 }
