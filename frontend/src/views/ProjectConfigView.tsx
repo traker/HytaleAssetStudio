@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { HasApiError, hasApi } from '../api'
 import type { PackSource, ProjectConfig, ProjectLayer, ProjectManifest, ProjectManifestAuthor } from '../api'
 import { PathInput } from '../components/ui/PathInput'
+import { clone } from '../utils/clone'
 
 type Props = {
   projectId: string
@@ -11,10 +12,6 @@ type Props = {
 }
 
 type Status = { kind: 'idle' | 'loading' | 'saving' | 'exporting'; message?: string }
-
-function clone<T>(v: T): T {
-  return JSON.parse(JSON.stringify(v)) as T
-}
 
 export function ProjectConfigView(props: Props) {
   const [config, setConfig] = useState<ProjectConfig | null>(null)
