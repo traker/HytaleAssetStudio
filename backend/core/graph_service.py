@@ -241,6 +241,20 @@ def build_focus_graph(cfg: ProjectConfig, root_key: str, depth: int | None) -> d
                         seen.add(child_path)
                         queue.append((child_path, d + 1))
         else:
+            # For non-interaction nodes: explicitly follow top-level Interactions
+            # values using server_id_to_all_paths so ambiguous IDs (e.g. Block_Primary
+            # present in both /Interactions/ and /RootInteractions/) are not silently dropped.
+            if isinstance(data, dict):
+                item_ints = data.get("Interactions")
+                if isinstance(item_ints, dict):
+                    for slot_val in item_ints.values():
+                        if isinstance(slot_val, str) and _ID_CANDIDATE.match(slot_val.strip()):
+                            for child_path in index.server_id_to_all_paths.get(slot_val.strip(), []):
+                                edges.add((node_key_for_path(current_path), node_key_for_path(child_path), "calls"))
+                                if child_path not in seen:
+                                    seen.add(child_path)
+                                    queue.append((child_path, d + 1))
+
             for s in _iter_strings(data):
                 s = s.strip()
 
@@ -394,6 +408,20 @@ def build_modified_graph(cfg: ProjectConfig, depth: int) -> dict:
                         seen.add(child_path)
                         queue.append((child_path, d + 1))
         else:
+            # Explicitly follow top-level Interactions values via server_id_to_all_paths
+            # so ambiguous IDs (same filename in /Interactions/ and /RootInteractions/) are
+            # not silently dropped.
+            if isinstance(data, dict):
+                item_ints = data.get("Interactions")
+                if isinstance(item_ints, dict):
+                    for slot_val in item_ints.values():
+                        if isinstance(slot_val, str) and _ID_CANDIDATE.match(slot_val.strip()):
+                            for child_path in index.server_id_to_all_paths.get(slot_val.strip(), []):
+                                edges.add((node_key_for_path(current_path), node_key_for_path(child_path), "calls"))
+                                if child_path not in seen:
+                                    seen.add(child_path)
+                                    queue.append((child_path, d + 1))
+
             for s in _iter_strings(data):
                 s = s.strip()
                 common_key = _try_common_asset_key(s)

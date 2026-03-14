@@ -1,7 +1,10 @@
 import type { Edge, Node } from '@xyflow/react'
 import dagre from 'dagre'
+import ELK from 'elkjs/lib/elk.bundled.js'
 
 import { measureSync } from '../../perf/audit'
+
+const elk = new ELK()
 
 const LAYOUT_CACHE_LIMIT = 24
 const layoutCache = new Map<string, Map<string, { x: number; y: number }>>()
@@ -115,4 +118,58 @@ export function layoutGraph<TNode extends Node>(nodes: TNode[], edges: Edge[], d
 
     return { nodes: layoutNodes, edges: layoutEdges, truncatedAt }
   }, { direction, nodes: nodes.length, edges: edges.length })
+}
+
+export async function layoutGraphElk<TNode extends Node>(
+  nodes: TNode[],
+  edges: Edge[],
+  direction: 'TB' | 'LR' = 'LR',
+): Promise<{ nodes: TNode[]; edges: Edge[]; truncatedAt?: number }> {
+  let truncatedAt: number | undefined
+  let layoutNodes = nodes
+  let layoutEdges = edges
+
+  if (nodes.length > MAX_DAGRE_NODES) {
+    truncatedAt = nodes.length
+    layoutNodes = nodes.slice(0, MAX_DAGRE_NODES)
+    const visibleIds = new Set(layoutNodes.map((n) => n.id))
+    layoutEdges = edges.filter((e) => visibleIds.has(e.source) && visibleIds.has(e.target))
+  }
+
+  const elkGraph = {
+    id: 'root',
+    layoutOptions: {
+      'elk.algorithm': 'layered',
+      'elk.direction': direction === 'LR' ? 'RIGHT' : 'DOWN',
+      'elk.layered.spacing.nodeNodeBetweenLayers': '140',
+      'elk.spacing.nodeNode': '60',
+      'elk.layered.nodePlacement.strategy': 'BRANDES_KOEPF',
+    },
+    children: layoutNodes.map((n) => ({
+      id: n.id,
+      width: NODE_WIDTH,
+      height: estimateNodeHeight(n),
+    })),
+    edges: layoutEdges.map((e) => ({
+      id: e.id,
+      sources: [e.source],
+      targets: [e.target],
+    })),
+  }
+
+  const result = await elk.layout(elkGraph)
+
+  const posMap = new Map<string, { x: number; y: number }>()
+  for (const child of result.children ?? []) {
+    if (child.x != null && child.y != null) {
+      posMap.set(child.id, { x: child.x, y: child.y })
+    }
+  }
+
+  for (const node of layoutNodes) {
+    const pos = posMap.get(node.id)
+    if (pos) node.position = pos
+  }
+
+  return { nodes: layoutNodes, edges: layoutEdges, truncatedAt }
 }

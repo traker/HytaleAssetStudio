@@ -14,16 +14,17 @@ import {
 import '@xyflow/react/dist/style.css'
 
 import { HasApiError, hasApi } from '../../api'
-import type { ProjectGraphResponse, SearchResult } from '../../api'
+import type { GraphNode, GraphEdge, SearchResult } from '../../api'
 
 import { AssetSidePanel } from './AssetSidePanel'
 import { BlueprintNode } from '../../components/graph/BlueprintNode'
 import type { BlueprintNodeData, OutgoingDep } from '../../components/graph/blueprintTypes'
 import { getBlueprintNodeDisplay, isInteractionBlueprintGroup } from '../../components/graph/blueprintTypes'
 import { getColorForGroup, getColorForEdgeType } from '../../components/graph/colors'
-import { layoutGraph, MAX_DAGRE_NODES } from '../../components/graph/layoutDagre'
+import { layoutGraph, layoutGraphElk, MAX_DAGRE_NODES } from '../../components/graph/layoutDagre'
 import { measureAsync, measureSync, schedulePaintMeasure } from '../../perf/audit'
 import { useAsset } from '../../hooks/useAsset'
+import { useLayoutEngine } from '../../hooks/useLayoutEngine'
 
 type Props = {
   projectId: string
@@ -46,62 +47,61 @@ const nodeTypes = {
 const SEMANTIC_EDGE_TYPES = new Set(['next', 'failed', 'replace', 'fork', 'blocked', 'collisionNext', 'groundNext'])
 
 function toFlow(
-  data: ProjectGraphResponse,
+  rawNodes: GraphNode[],
+  rawEdges: GraphEdge[],
   rootId: string,
   onSelectNode: (sourceId: string, targetId: string) => void,
 ): { nodes: Node<BlueprintNodeData>[]; edges: Edge[]; truncatedAt?: number } {
   return measureSync('graph.to_flow', () => {
-    // Build a quick lookup: id → { label, group }
-    const nodeInfoMap = new Map(data.nodes.map((n) => [n.id, { label: n.label, group: n.group ?? 'json_data' }]))
+    const nodeInfoMap = new Map(rawNodes.map((n) => [n.id, { label: n.label, group: n.group ?? 'json_data' }]))
 
-  // Build outgoing deps per source node
-  const outgoingMap = new Map<string, OutgoingDep[]>()
-  for (const e of data.edges) {
-    if (!outgoingMap.has(e.from)) outgoingMap.set(e.from, [])
-    const target = nodeInfoMap.get(e.to)
-    outgoingMap.get(e.from)!.push({
-      edgeLabel: e.type,
-      targetId: e.to,
-      targetLabel: target?.label ?? e.to,
-      targetGroup: target?.group ?? 'json_data',
-    })
-  }
-
-  const nodes: Node<BlueprintNodeData>[] = data.nodes.map((n) => ({
-    id: n.id,
-    type: 'blueprint',
-    position: { x: 0, y: 0 },
-    data: {
-      label: n.label,
-      group: n.group ?? 'json_data',
-      path: n.path,
-      isModified: n.state === 'local',
-      isRoot: n.id === rootId,
-      nodeId: n.id,
-      outgoing: outgoingMap.get(n.id) ?? [],
-      onSelectNode,
-    },
-  }))
-
-  const edges: Edge[] = data.edges.map((e) => {
-    const color = getColorForEdgeType(e.type)
-    const showLabel = SEMANTIC_EDGE_TYPES.has(e.type)
-    return {
-      id: `${e.from}->${e.to}:${e.type}`,
-      source: e.from,
-      target: e.to,
-      type: 'smoothstep',
-      label: showLabel ? e.type : undefined,
-      animated: false,
-      style: { stroke: color, strokeWidth: 1.5 },
-      labelStyle: { fill: color, fontSize: 9, fontStyle: 'italic', fontWeight: 600 },
-      labelShowBg: false,
-      markerEnd: { type: 'arrowclosed' as const, color },
+    const outgoingMap = new Map<string, OutgoingDep[]>()
+    for (const e of rawEdges) {
+      if (!outgoingMap.has(e.from)) outgoingMap.set(e.from, [])
+      const target = nodeInfoMap.get(e.to)
+      outgoingMap.get(e.from)!.push({
+        edgeLabel: e.type,
+        targetId: e.to,
+        targetLabel: target?.label ?? e.to,
+        targetGroup: target?.group ?? 'json_data',
+      })
     }
-  })
+
+    const nodes: Node<BlueprintNodeData>[] = rawNodes.map((n) => ({
+      id: n.id,
+      type: 'blueprint',
+      position: { x: 0, y: 0 },
+      data: {
+        label: n.label,
+        group: n.group ?? 'json_data',
+        path: n.path,
+        isModified: n.state === 'local',
+        isRoot: n.id === rootId,
+        nodeId: n.id,
+        outgoing: outgoingMap.get(n.id) ?? [],
+        onSelectNode,
+      },
+    }))
+
+    const edges: Edge[] = rawEdges.map((e) => {
+      const color = getColorForEdgeType(e.type)
+      const showLabel = SEMANTIC_EDGE_TYPES.has(e.type)
+      return {
+        id: `${e.from}->${e.to}:${e.type}`,
+        source: e.from,
+        target: e.to,
+        type: 'smoothstep',
+        label: showLabel ? e.type : undefined,
+        animated: false,
+        style: { stroke: color, strokeWidth: 1.5 },
+        labelStyle: { fill: color, fontSize: 9, fontStyle: 'italic', fontWeight: 600 },
+        labelShowBg: false,
+        markerEnd: { type: 'arrowclosed' as const, color },
+      }
+    })
 
     return layoutGraph(nodes, edges, 'LR')
-  }, { nodes: data.nodes.length, edges: data.edges.length, rootId })
+  }, { nodes: rawNodes.length, edges: rawEdges.length, rootId })
 }
 
 export function ProjectGraphEditor(props: Props) {
@@ -127,6 +127,20 @@ export function ProjectGraphEditor(props: Props) {
   const [activeHighlight, setActiveHighlight] = useState<{ edgeIds: Set<string>; nodeIds: Set<string> } | null>(null)
   const baseEdgesRef = useRef<Edge[]>([])
   const graphPaintStartedAtRef = useRef<number | null>(null)
+  const layoutNodesRef = useRef<Node[]>([])
+  const layoutEdgesRef = useRef<Edge[]>([])
+  const [layoutTick, setLayoutTick] = useState(0)
+
+  const { engine, toggleEngine } = useLayoutEngine()
+
+  const rawNodesRef = useRef<GraphNode[]>([])
+  const rawEdgesRef = useRef<GraphEdge[]>([])
+  const rootIdRef = useRef<string>('')
+  const expandedNodeIdsRef = useRef<Set<string>>(new Set())
+  const reactFlowInstanceRef = useRef<{ fitView: (opts?: { nodes?: Array<{ id: string }>; padding?: number; duration?: number }) => void } | null>(null)
+  const pendingFocusRef = useRef<string | null>(null)
+  const selectedNodeIdRef = useRef<string | null>(null)
+  const [expandLoading, setExpandLoading] = useState(false)
 
   const assetEnabled = Boolean(
     selectedNodeId &&
@@ -172,7 +186,67 @@ export function ProjectGraphEditor(props: Props) {
           : e,
       ),
     )
-  }, [selectedNodeId, activeHighlight])
+  }, [selectedNodeId, activeHighlight, layoutTick])
+
+  const rebuildFlow = useCallback(() => {
+    const onSelectNode = (sourceId: string, targetId: string) => {
+      setSelectedNodeId(targetId)
+      const matchingEdges = baseEdgesRef.current.filter(
+        (e) => e.source === sourceId && e.target === targetId,
+      )
+      setActiveHighlight({
+        edgeIds: new Set(matchingEdges.map((e) => e.id)),
+        nodeIds: new Set([targetId]),
+      })
+    }
+    const flow = toFlow(rawNodesRef.current, rawEdgesRef.current, rootIdRef.current, onSelectNode)
+    graphPaintStartedAtRef.current = performance.now()
+    baseEdgesRef.current = flow.edges
+    layoutNodesRef.current = flow.nodes
+    layoutEdgesRef.current = flow.edges
+    setNodes(flow.nodes)
+    setEdges(flow.edges)
+    setTruncationWarning(
+      flow.truncatedAt != null
+        ? `⚠ Graph truncated to ${MAX_DAGRE_NODES} nodes (${flow.truncatedAt} total — increase depth or narrow search)`
+        : null,
+    )
+    setLayoutTick((t) => t + 1)
+  }, [])
+
+  const expandNode = useCallback(async (nodeId: string) => {
+    if (expandedNodeIdsRef.current.has(nodeId)) return
+    if (!nodeId.startsWith('server:') && !nodeId.startsWith('server-path:')) return
+    expandedNodeIdsRef.current.add(nodeId)
+    setExpandLoading(true)
+    try {
+      const resp = await hasApi.projectGraph(props.projectId, nodeId, 1)
+      const existingNodeIds = new Set(rawNodesRef.current.map((n) => n.id))
+      const existingEdgeKeys = new Set(rawEdgesRef.current.map((e) => `${e.from}->${e.to}:${e.type}`))
+      let changed = false
+      for (const n of resp.nodes) {
+        if (!existingNodeIds.has(n.id)) {
+          rawNodesRef.current.push(n)
+          changed = true
+        }
+      }
+      for (const e of resp.edges) {
+        const key = `${e.from}->${e.to}:${e.type}`
+        if (!existingEdgeKeys.has(key)) {
+          rawEdgesRef.current.push(e)
+          changed = true
+        }
+      }
+      if (changed) {
+        pendingFocusRef.current = selectedNodeIdRef.current
+        rebuildFlow()
+      }
+    } catch {
+      expandedNodeIdsRef.current.delete(nodeId)
+    } finally {
+      setExpandLoading(false)
+    }
+  }, [props.projectId, rebuildFlow])
 
   const load = useCallback(async () => {
     if (!selected) return
@@ -183,6 +257,12 @@ export function ProjectGraphEditor(props: Props) {
     setEdges([])
     setSelectedNodeId(null)
     setActiveHighlight(null)
+    rawNodesRef.current = []
+    rawEdgesRef.current = []
+    rootIdRef.current = selected.assetKey
+    expandedNodeIdsRef.current = new Set()
+    layoutNodesRef.current = []
+    layoutEdgesRef.current = []
 
     try {
       const data = await measureAsync('view.project_graph.fetch', () => hasApi.projectGraph(props.projectId, selected.assetKey, depth), {
@@ -190,33 +270,53 @@ export function ProjectGraphEditor(props: Props) {
         root: selected.assetKey,
         depth,
       })
-      const onSelectNode = (sourceId: string, targetId: string) => {
-        setSelectedNodeId(targetId)
-        const matchingEdges = baseEdgesRef.current.filter(
-          (e) => e.source === sourceId && e.target === targetId,
-        )
-        setActiveHighlight({
-          edgeIds: new Set(matchingEdges.map((e) => e.id)),
-          nodeIds: new Set([targetId]),
-        })
-      }
-      const flow = toFlow(data, selected.assetKey, onSelectNode)
-      graphPaintStartedAtRef.current = performance.now()
-      baseEdgesRef.current = flow.edges
-      setNodes(flow.nodes)
-      setEdges(flow.edges)
-      setTruncationWarning(
-        flow.truncatedAt != null
-          ? `⚠ Graph truncated to ${MAX_DAGRE_NODES} nodes (${flow.truncatedAt} total — increase depth or narrow search)`
-          : null,
-      )
+      rawNodesRef.current = data.nodes
+      rawEdgesRef.current = data.edges
+      expandedNodeIdsRef.current.add(selected.assetKey)
+      rebuildFlow()
       setStatus({ kind: 'idle', message: `Loaded: ${data.nodes.length} nodes, ${data.edges.length} edges` })
       setTimeout(() => setStatus({ kind: 'idle' }), 1500)
     } catch (e) {
       setStatus({ kind: 'idle' })
       setError(e instanceof HasApiError ? e.message : 'Unexpected error')
     }
-  }, [props.projectId, selected, depth])
+  }, [props.projectId, selected, depth, rebuildFlow])
+
+  // Re-apply layout when engine or data changes; pre-set focus target so the
+  // focus effect fires after setNodes completes.
+  useEffect(() => {
+    if (!layoutNodesRef.current.length) return
+    if (selectedNodeIdRef.current) pendingFocusRef.current = selectedNodeIdRef.current
+    const freshNodes = layoutNodesRef.current.map((n) => ({ ...n, position: { x: 0, y: 0 } }))
+    const edges = layoutEdgesRef.current
+    const applyPositions = (newNodes: typeof freshNodes) => {
+      const posMap = new Map(newNodes.map((n) => [n.id, n.position]))
+      setNodes((prev) => prev.map((n) => ({ ...n, position: posMap.get(n.id) ?? n.position })))
+    }
+    if (engine === 'elk') {
+      void layoutGraphElk(freshNodes, edges, 'LR').then((r) => applyPositions(r.nodes))
+    } else {
+      applyPositions(layoutGraph(freshNodes, edges, 'LR').nodes)
+    }
+  }, [engine, layoutTick]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Keep selectedNodeIdRef in sync for use inside stable callbacks
+  useEffect(() => { selectedNodeIdRef.current = selectedNodeId }, [selectedNodeId])
+
+  // Expand adjacent nodes on selection
+  useEffect(() => {
+    if (!selectedNodeId) return
+    void expandNode(selectedNodeId)
+  }, [selectedNodeId, expandNode])
+
+  // Focus the selected node after each layout update
+  useEffect(() => {
+    const id = pendingFocusRef.current
+    if (!id) return
+    pendingFocusRef.current = null
+    reactFlowInstanceRef.current?.fitView({ nodes: [{ id }], padding: 0.5, duration: 400 })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [nodes])
 
   useEffect(() => {
     if (graphPaintStartedAtRef.current == null) return
@@ -293,6 +393,7 @@ export function ProjectGraphEditor(props: Props) {
         nodeTypes={nodeTypes}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
+        onInit={(inst) => { reactFlowInstanceRef.current = inst }}
         onNodeClick={(_, n) => {
           setSelectedNodeId(n.id)
           const connectedEdges = baseEdgesRef.current.filter(
@@ -455,6 +556,22 @@ export function ProjectGraphEditor(props: Props) {
             </button>
 
             <button
+              onClick={toggleEngine}
+              title="Basculer moteur de layout"
+              style={{
+                padding: '5px 10px',
+                background: engine === 'elk' ? '#4a3f7a' : '#333',
+                color: '#fff',
+                border: '1px solid #555',
+                borderRadius: '4px',
+                cursor: 'pointer',
+                fontSize: 11,
+              }}
+            >
+              {engine === 'elk' ? 'ELK' : 'Dagre'}
+            </button>
+
+            <button
               onClick={props.onBack}
               disabled={status.kind === 'loading'}
               style={{
@@ -470,6 +587,7 @@ export function ProjectGraphEditor(props: Props) {
             </button>
           </div>
 
+          {expandLoading && <p style={{ marginTop: 4, fontSize: 10, color: '#888', fontStyle: 'italic' }}>⟳ Expanding…</p>}
           {status.message && <p style={{ marginTop: 10, opacity: 0.8 }}>{status.message}</p>}
           {truncationWarning && <p style={{ marginTop: 8, color: '#FF9500', fontSize: 11 }}>{truncationWarning}</p>}
           {error && <p style={{ marginTop: 8, color: '#FF6B6B' }}>{error}</p>}

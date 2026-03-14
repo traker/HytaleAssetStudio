@@ -19,8 +19,9 @@ import { BlueprintNode } from '../../components/graph/BlueprintNode'
 import type { BlueprintNodeData, OutgoingDep } from '../../components/graph/blueprintTypes'
 import { getBlueprintNodeDisplay, isInteractionBlueprintGroup } from '../../components/graph/blueprintTypes'
 import { getColorForEdgeType } from '../../components/graph/colors'
-import { layoutGraph, MAX_DAGRE_NODES } from '../../components/graph/layoutDagre'
+import { layoutGraph, layoutGraphElk, MAX_DAGRE_NODES } from '../../components/graph/layoutDagre'
 import { measureAsync, measureSync, schedulePaintMeasure } from '../../perf/audit'
+import { useLayoutEngine } from '../../hooks/useLayoutEngine'
 
 const SEMANTIC_EDGE_TYPES = new Set([
   'next', 'failed', 'replace', 'fork', 'blocked', 'collisionNext', 'groundNext',
@@ -170,6 +171,10 @@ export function ProjectModifiedGraphView(props: Props) {
   const [rebuildTick, setRebuildTick] = useState(0)
   const graphPaintStartedAtRef = useRef<number | null>(null)
   const lastFlowSignatureRef = useRef<string | null>(null)
+  const layoutNodesRef = useRef<Array<Node<BlueprintNodeData>>>([])
+  const layoutEdgesRef = useRef<Edge[]>([])
+
+  const { engine, toggleEngine } = useLayoutEngine()
 
   const onNodesChange = useCallback(
     (changes: NodeChange[]) => setNodes((n) => applyNodeChanges(changes, n) as Array<Node<BlueprintNodeData>>),
@@ -346,6 +351,8 @@ export function ProjectModifiedGraphView(props: Props) {
     lastFlowSignatureRef.current = flowSignature
     graphPaintStartedAtRef.current = performance.now()
     baseEdgesRef.current = fe
+    layoutNodesRef.current = fn
+    layoutEdgesRef.current = fe
     setNodes(fn)
     setEdges(fe)
     setTruncationWarning(
@@ -355,6 +362,22 @@ export function ProjectModifiedGraphView(props: Props) {
     )
     setRebuildTick((t) => t + 1)
   }, [handleSelectNode])
+
+  // Re-apply layout when engine or rebuild tick changes
+  useEffect(() => {
+    if (!layoutNodesRef.current.length) return
+    const freshNodes = layoutNodesRef.current.map((n) => ({ ...n, position: { x: 0, y: 0 } }))
+    const edges = layoutEdgesRef.current
+    const applyPositions = (newNodes: typeof freshNodes) => {
+      const posMap = new Map(newNodes.map((n) => [n.id, n.position]))
+      setNodes((prev) => prev.map((n) => ({ ...n, position: posMap.get(n.id) ?? n.position })))
+    }
+    if (engine === 'elk') {
+      void layoutGraphElk(freshNodes, edges, 'LR').then((r) => applyPositions(r.nodes))
+    } else {
+      applyPositions(layoutGraph(freshNodes, edges, 'LR').nodes)
+    }
+  }, [engine, rebuildTick]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (graphPaintStartedAtRef.current == null) return
@@ -589,6 +612,22 @@ export function ProjectModifiedGraphView(props: Props) {
             }}
           >
             ← Back
+          </button>
+          <button
+            onClick={toggleEngine}
+            title="Basculer moteur de layout"
+            style={{
+              background: engine === 'elk' ? '#2e1e5a' : 'none',
+              border: `1px solid ${engine === 'elk' ? '#5544aa' : '#3a3a55'}`,
+              borderRadius: 4,
+              color: engine === 'elk' ? '#8877ee' : '#888',
+              fontSize: 10,
+              cursor: 'pointer',
+              padding: '2px 8px',
+              fontWeight: 600,
+            }}
+          >
+            {engine === 'elk' ? 'ELK' : 'Dagre'}
           </button>
         </div>
 

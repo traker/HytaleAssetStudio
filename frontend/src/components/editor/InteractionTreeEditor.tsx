@@ -25,9 +25,10 @@ import { InteractionPalette, DRAG_MIME } from './InteractionPalette'
 import { InteractionFormPanel } from './InteractionFormPanel'
 import { InteractionNode, type InteractionNodeData } from '../../components/graph/InteractionNode'
 import { getColorForEdgeType } from '../../components/graph/colors'
-import { layoutGraph, MAX_DAGRE_NODES } from '../../components/graph/layoutDagre'
+import { layoutGraph, layoutGraphElk, MAX_DAGRE_NODES } from '../../components/graph/layoutDagre'
 import { exportInteractionTree } from '../../components/graph/interactionExport'
 import { useAsset } from '../../hooks/useAsset'
+import { useLayoutEngine } from '../../hooks/useLayoutEngine'
 
 type Props = {
   projectId: string
@@ -136,6 +137,11 @@ function InteractionTreeEditorInner(props: Props) {
   const [editMode, setEditMode] = useState(false)
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle')
   const [saveError, setSaveError] = useState<string | null>(null)
+  const layoutNodesRef = useRef<Node[]>([])
+  const layoutEdgesRef = useRef<Edge[]>([])
+  const [layoutTick, setLayoutTick] = useState(0)
+
+  const { engine, toggleEngine } = useLayoutEngine()
 
   const onNodesChange = useCallback(
     (changes: NodeChange[]) => setNodes((prev) => applyNodeChanges(changes, prev)),
@@ -180,7 +186,25 @@ function InteractionTreeEditorInner(props: Props) {
     setEditMode(false)
     setSaveStatus('idle')
     setSaveError(null)
+    layoutNodesRef.current = []
+    layoutEdgesRef.current = []
   }, [props.projectId, props.root.assetKey])
+
+  // Re-apply layout when engine or data changes
+  useEffect(() => {
+    if (!layoutNodesRef.current.length) return
+    const freshNodes = layoutNodesRef.current.map((n) => ({ ...n, position: { x: 0, y: 0 } }))
+    const edges = layoutEdgesRef.current
+    const applyPositions = (newNodes: typeof freshNodes) => {
+      const posMap = new Map(newNodes.map((n) => [n.id, n.position]))
+      setNodes((prev) => prev.map((n) => ({ ...n, position: posMap.get(n.id) ?? n.position })))
+    }
+    if (engine === 'elk') {
+      void layoutGraphElk(freshNodes, edges, 'TB').then((r) => applyPositions(r.nodes))
+    } else {
+      applyPositions(layoutGraph(freshNodes, edges, 'TB').nodes)
+    }
+  }, [engine, layoutTick]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Load tree
   useEffect(() => {
@@ -197,8 +221,11 @@ function InteractionTreeEditorInner(props: Props) {
         treeRootRef.current = data.root
         const flow = toFlow(data)
         baseEdgesRef.current = flow.edges
+        layoutNodesRef.current = flow.nodes
+        layoutEdgesRef.current = flow.edges
         setNodes(flow.nodes)
         setEdges(flow.edges)
+        setLayoutTick((t) => t + 1)
         setTruncationWarning(
           flow.truncatedAt != null
             ? `⚠ Graph truncated to ${MAX_DAGRE_NODES} nodes (${flow.truncatedAt} total)`
@@ -430,6 +457,13 @@ function InteractionTreeEditorInner(props: Props) {
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
               <button onClick={props.onBack} disabled={status.kind === 'loading'} style={btnStyle('#333')}>
                 ← Back
+              </button>
+              <button
+                onClick={toggleEngine}
+                title="Basculer moteur de layout"
+                style={{ ...btnStyle(engine === 'elk' ? '#2a1a4a' : '#333'), color: engine === 'elk' ? '#9977dd' : '#aaa', borderColor: engine === 'elk' ? '#7755cc' : '#555', fontSize: 11 }}
+              >
+                {engine === 'elk' ? 'ELK' : 'Dagre'}
               </button>
               <button
                 onClick={() => { setEditMode((v) => !v); if (editMode) { setSelectedNodeId(null); setActiveHighlight(null) } }}
