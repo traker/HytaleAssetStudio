@@ -8,6 +8,7 @@ import { InteractionVarsEditor, type InteractionVarsValue } from './InteractionV
 import { ItemFormEditor } from './ItemFormEditor'
 import { EntityEffectFormEditor } from './EntityEffectFormEditor'
 import { ProjectileFormEditor } from './ProjectileFormEditor'
+import { NPCRoleFormEditor } from './NPCRoleFormEditor'
 import { detectAssetKind } from './assetTypeRegistry'
 
 type Tab = 'json' | 'form' | 'vars'
@@ -730,6 +731,14 @@ export function AssetSidePanel(props: Props) {
             case 'projectile':
               return (
                 <ProjectileFormEditor
+                  json={currentFormJson}
+                  onChange={canEdit ? handleFormChange : () => {}}
+                  readOnly={!canEdit}
+                />
+              )
+            case 'npc-role':
+              return (
+                <NPCRoleFormEditor
                   json={currentFormJson}
                   onChange={canEdit ? handleFormChange : () => {}}
                   readOnly={!canEdit}
