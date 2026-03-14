@@ -23,8 +23,8 @@ Document de pilotage pour exécuter le plan défini dans [AUDIT1.md](AUDIT1.md).
 | Lot | Titre | Statut |
 |---|---|---|
 | Lot 1 | Nettoyage sans risque | `done` |
-| Lot 2 | Harmonisation backend | `in-progress` |
-| Lot 3 | Harmonisation frontend | `todo` |
+| Lot 2 | Harmonisation backend | `done` |
+| Lot 3 | Harmonisation frontend | `in-progress` |
 
 ---
 
@@ -148,12 +148,12 @@ Document de pilotage pour exécuter le plan défini dans [AUDIT1.md](AUDIT1.md).
 
 ## Lot 2 — Harmonisation backend
 
-- Statut global : `todo`
+- Statut global : `done`
 - Objectif : déduplication de logique, découpage de `models.py`, nettoyage des imports croisés entre services.
 
 ### 2.1 — Déduplication de `_group_for_server_path`
 
-- Statut : `todo`
+- Statut : `done`
 - Priorité : P0
 - Fichiers cibles :
   - `backend/core/graph_service.py`
@@ -175,7 +175,7 @@ Document de pilotage pour exécuter le plan défini dans [AUDIT1.md](AUDIT1.md).
 
 ### 2.2 — Découper `models.py` en modules thématiques
 
-- Statut : `todo`
+- Statut : `done`
 - Priorité : P1
 - Fichiers cibles :
   - `backend/core/models.py` → à supprimer après migration
@@ -202,7 +202,7 @@ Document de pilotage pour exécuter le plan défini dans [AUDIT1.md](AUDIT1.md).
 
 ### 2.3 — Déplacer `_project_config_path` et `_load_workspace_defaults` vers `project_service.py`
 
-- Statut : `todo`
+- Statut : `done`
 - Priorité : P1
 - Fichiers cibles :
   - `backend/core/workspace_service.py` (source)
@@ -227,7 +227,7 @@ Document de pilotage pour exécuter le plan défini dans [AUDIT1.md](AUDIT1.md).
 
 ### 2.4 — Supprimer `pydantic_compat.py`
 
-- Statut : `todo`
+- Statut : `done`
 - Priorité : P1
 - Fichiers cibles :
   - `backend/core/pydantic_compat.py`
@@ -252,7 +252,7 @@ Document de pilotage pour exécuter le plan défini dans [AUDIT1.md](AUDIT1.md).
 
 ### 2.5 — Renommer `routes/index_graph.py` → `routes/graph.py`
 
-- Statut : `todo`
+- Statut : `done`
 - Priorité : P2
 - Fichiers cibles :
   - `backend/routes/index_graph.py` → `backend/routes/graph.py`
