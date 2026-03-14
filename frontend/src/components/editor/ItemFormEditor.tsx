@@ -13,6 +13,7 @@
  */
 
 import { useState } from 'react'
+import { TEXTAREA_STYLE } from './formStyles'
 
 // ─────────────────────────────────────────────────────────────
 // Style constants
@@ -123,6 +124,7 @@ const HANDLED_KEYS = new Set([
   'Tags',
   'Recipe',
   'IconProperties',
+  'BlockType',
 ])
 
 // ─────────────────────────────────────────────────────────────
@@ -334,6 +336,199 @@ function TagArrayEditor({
         </div>
       )}
     </div>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────
+// BlockType section
+// ─────────────────────────────────────────────────────────────
+
+const BLOCK_MATERIAL_OPTIONS = ['Solid', 'Fluid', 'Gas', 'NonCollidable', 'Platform']
+
+// Keys shown with structured inputs; everything else → JSON textarea
+const BLOCK_SIMPLE_KEYS = new Set([
+  'Material', 'DrawType', 'Group', 'BlockSoundSetId', 'BlockParticleSetId',
+  'Gathering', 'Flags', 'Textures',
+])
+
+function BlockTypeSection({
+  blockType,
+  onChange,
+  readOnly,
+}: {
+  blockType: Record<string, unknown>
+  onChange: (v: Record<string, unknown>) => void
+  readOnly: boolean
+}) {
+  const [collapsed, setCollapsed] = useState(true)
+
+  const setField = (k: string, v: unknown) => {
+    if (readOnly) return
+    const next = { ...blockType }
+    if (v === undefined || v === null || v === '') delete next[k]
+    else next[k] = v
+    onChange(next)
+  }
+
+  const setJsonField = (k: string, raw: string) => {
+    if (readOnly) return
+    const trimmed = raw.trim()
+    const next = { ...blockType }
+    if (!trimmed) delete next[k]
+    else try { next[k] = JSON.parse(trimmed) } catch { return }
+    onChange(next)
+  }
+
+  const extraKeys = Object.keys(blockType).filter((k) => !BLOCK_SIMPLE_KEYS.has(k))
+
+  return (
+    <>
+      <button
+        onClick={() => setCollapsed((c) => !c)}
+        style={{
+          width: '100%', textAlign: 'left', background: 'transparent',
+          border: 'none', borderBottom: '1px solid #222', padding: '6px 0',
+          color: '#61dafb', fontSize: 10, fontWeight: 700, letterSpacing: '0.08em',
+          textTransform: 'uppercase', cursor: 'pointer', marginTop: 14, marginBottom: 0,
+        }}
+      >
+        {collapsed ? '▸' : '▾'} Block Type
+      </button>
+      {!collapsed && (
+        <div style={{ marginTop: 8 }}>
+          {/* Material */}
+          <div style={FIELD}>
+            <label style={LABEL}>Material</label>
+            <select
+              value={typeof blockType['Material'] === 'string' ? (blockType['Material'] as string) : ''}
+              onChange={(e) => setField('Material', e.target.value || undefined)}
+              disabled={readOnly}
+              style={{ ...INPUT, background: '#1e1e2e', color: '#ccc', borderColor: '#3a3a5c', height: 26 }}
+            >
+              <option value="">— unset —</option>
+              {BLOCK_MATERIAL_OPTIONS.map((o) => <option key={o} value={o}>{o}</option>)}
+            </select>
+          </div>
+
+          {/* DrawType */}
+          <div style={FIELD}>
+            <label style={LABEL}>DrawType</label>
+            <input
+              type="text"
+              value={typeof blockType['DrawType'] === 'string' ? (blockType['DrawType'] as string) : ''}
+              onChange={(e) => setField('DrawType', e.target.value || undefined)}
+              disabled={readOnly}
+              style={INPUT}
+              placeholder="Cube, Mesh, Crossed, Model…"
+            />
+          </div>
+
+          {/* Group */}
+          <div style={FIELD}>
+            <label style={LABEL}>Group</label>
+            <input
+              type="text"
+              value={typeof blockType['Group'] === 'string' ? (blockType['Group'] as string) : ''}
+              onChange={(e) => setField('Group', e.target.value || undefined)}
+              disabled={readOnly}
+              style={INPUT}
+            />
+          </div>
+
+          {/* BlockSoundSetId */}
+          <div style={FIELD}>
+            <label style={LABEL}>BlockSoundSetId</label>
+            <input
+              type="text"
+              value={typeof blockType['BlockSoundSetId'] === 'string' ? (blockType['BlockSoundSetId'] as string) : ''}
+              onChange={(e) => setField('BlockSoundSetId', e.target.value || undefined)}
+              disabled={readOnly}
+              style={INPUT}
+            />
+          </div>
+
+          {/* BlockParticleSetId */}
+          <div style={FIELD}>
+            <label style={LABEL}>BlockParticleSetId</label>
+            <input
+              type="text"
+              value={typeof blockType['BlockParticleSetId'] === 'string' ? (blockType['BlockParticleSetId'] as string) : ''}
+              onChange={(e) => setField('BlockParticleSetId', e.target.value || undefined)}
+              disabled={readOnly}
+              style={INPUT}
+            />
+          </div>
+
+          {/* Gathering — JSON */}
+          <div style={FIELD}>
+            <label style={LABEL}>Gathering (JSON)</label>
+            <textarea
+              rows={3}
+              defaultValue={blockType['Gathering'] !== undefined ? JSON.stringify(blockType['Gathering'], null, 2) : ''}
+              readOnly={readOnly}
+              onBlur={(e) => setJsonField('Gathering', e.target.value)}
+              style={{ ...TEXTAREA_STYLE, width: '100%', resize: 'vertical', fontSize: 11 }}
+              spellCheck={false}
+            />
+          </div>
+
+          {/* Flags — JSON */}
+          <div style={FIELD}>
+            <label style={LABEL}>Flags (JSON)</label>
+            <textarea
+              rows={2}
+              defaultValue={blockType['Flags'] !== undefined ? JSON.stringify(blockType['Flags'], null, 2) : ''}
+              readOnly={readOnly}
+              onBlur={(e) => setJsonField('Flags', e.target.value)}
+              style={{ ...TEXTAREA_STYLE, width: '100%', resize: 'vertical', fontSize: 11 }}
+              spellCheck={false}
+            />
+          </div>
+
+          {/* Textures — JSON */}
+          <div style={FIELD}>
+            <label style={LABEL}>Textures (JSON)</label>
+            <textarea
+              rows={2}
+              defaultValue={blockType['Textures'] !== undefined ? JSON.stringify(blockType['Textures'], null, 2) : ''}
+              readOnly={readOnly}
+              onBlur={(e) => setJsonField('Textures', e.target.value)}
+              style={{ ...TEXTAREA_STYLE, width: '100%', resize: 'vertical', fontSize: 11 }}
+              spellCheck={false}
+            />
+          </div>
+
+          {/* Remaining block keys — JSON catch-all */}
+          {extraKeys.map((k) => {
+            const val = blockType[k]
+            const isComplex = typeof val === 'object' && val !== null
+            return (
+              <div key={k} style={FIELD}>
+                <label style={LABEL}>{k}</label>
+                {isComplex ? (
+                  <textarea
+                    rows={3}
+                    defaultValue={JSON.stringify(val, null, 2)}
+                    readOnly={readOnly}
+                    onBlur={(e) => { if (!readOnly) setJsonField(k, e.target.value) }}
+                    style={{ ...TEXTAREA_STYLE, width: '100%', resize: 'vertical', fontSize: 11 }}
+                    spellCheck={false}
+                  />
+                ) : (
+                  <input
+                    type="text"
+                    defaultValue={val === undefined || val === null ? '' : String(val)}
+                    readOnly={readOnly}
+                    onBlur={(e) => { if (!readOnly) setField(k, e.target.value || undefined) }}
+                    style={SMALL_INPUT}
+                  />
+                )}
+              </div>
+            )
+          })}
+        </div>
+      )}
+    </>
   )
 }
 
@@ -693,6 +888,15 @@ export function ItemFormEditor({ json, onChange, readOnly = false }: ItemFormEdi
             spellCheck={false}
           />
         </>
+      )}
+
+      {/* ── Block Type ── */}
+      {json['BlockType'] !== undefined && (
+        <BlockTypeSection
+          blockType={asObj(json['BlockType'])}
+          onChange={(v) => set('BlockType', v)}
+          readOnly={readOnly}
+        />
       )}
 
       {/* ── Extra fields not covered above ── */}
