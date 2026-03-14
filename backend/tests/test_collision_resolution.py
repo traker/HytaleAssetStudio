@@ -11,7 +11,7 @@ from backend.core.graph_service import build_focus_graph
 from backend.core.index_service import ensure_index
 from backend.core.io import write_json
 from backend.core.models import PackSource, ProjectConfig, ProjectConfigProject
-from backend.routes.index_graph import _build_search_results
+from backend.routes.graph import _build_search_results
 from backend.core.state import PROJECT_INDEX, PROJECT_INDEX_FINGERPRINT
 
 

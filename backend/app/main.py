@@ -13,7 +13,7 @@ from backend.core.perf import build_server_timing_header, finish_request_perf, l
 from backend.routes.assets import router as assets_router
 from backend.routes.dialog import router as dialog_router
 from backend.routes.interactions import router as interactions_router
-from backend.routes.index_graph import router as index_graph_router
+from backend.routes.graph import router as index_graph_router
 from backend.routes.projects import router as projects_router
 from backend.routes.workspace import router as workspace_router
 
