@@ -405,7 +405,13 @@ export type ItemFormEditorProps = {
  * (has Quality or ItemLevel — never present in interaction files).
  */
 export function looksLikeItem(json: Record<string, unknown>): boolean {
-  return 'Quality' in json || 'ItemLevel' in json || 'MaxDurability' in json
+  return (
+    'Quality' in json ||
+    'ItemLevel' in json ||
+    'MaxDurability' in json ||
+    'PlayerAnimationsId' in json ||
+    ('Icon' in json && 'TranslationProperties' in json)
+  )
 }
 
 export function ItemFormEditor({ json, onChange, readOnly = false }: ItemFormEditorProps) {
