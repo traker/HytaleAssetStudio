@@ -224,12 +224,15 @@ export function ProjectModifiedGraphView(props: Props) {
     if (!entry.assetKey) return
     setSelectedNodeId(entry.assetKey)
     setActiveHighlight(null)
-    if (rawNodesRef.current.some((n) => n.id === entry.assetKey)) {
-      reactFlowInstanceRef.current?.fitView({
-        nodes: [{ id: entry.assetKey }] as { id: string }[],
-        padding: 0.4,
-        duration: 400,
-      })
+    const nodeId = entry.assetKey
+    if (rawNodesRef.current.some((n) => n.id === nodeId)) {
+      setTimeout(() => {
+        reactFlowInstanceRef.current?.fitView({
+          nodes: [{ id: nodeId }] as { id: string }[],
+          padding: 0.5,
+          duration: 500,
+        })
+      }, 50)
     }
   }, [])
 
