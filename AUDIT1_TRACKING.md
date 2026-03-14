@@ -22,20 +22,20 @@ Document de pilotage pour exécuter le plan défini dans [AUDIT1.md](AUDIT1.md).
 
 | Lot | Titre | Statut |
 |---|---|---|
-| Lot 1 | Nettoyage sans risque | `todo` |
-| Lot 2 | Harmonisation backend | `todo` |
+| Lot 1 | Nettoyage sans risque | `done` |
+| Lot 2 | Harmonisation backend | `in-progress` |
 | Lot 3 | Harmonisation frontend | `todo` |
 
 ---
 
 ## Lot 1 — Nettoyage sans risque
 
-- Statut global : `todo`
+- Statut global : `done`
 - Objectif : supprimer code mort, binaires parasites, dossiers vides, scripts obsolètes. Aucune logique modifiée.
 
 ### 1.1 — Supprimer les binaires commitées à la racine
 
-- Statut : `todo`
+- Statut : `done`
 - Priorité : P0
 - Fichiers cibles :
   - `Capture d'écran 2026-03-13 154451.png`
@@ -53,7 +53,7 @@ Document de pilotage pour exécuter le plan défini dans [AUDIT1.md](AUDIT1.md).
 
 ### 1.2 — Supprimer `ProjectGraphView.tsx` (dead code)
 
-- Statut : `todo`
+- Statut : `done`
 - Priorité : P0
 - Fichiers cibles :
   - `frontend/src/views/ProjectGraphView.tsx`
@@ -71,7 +71,7 @@ Document de pilotage pour exécuter le plan défini dans [AUDIT1.md](AUDIT1.md).
 
 ### 1.3 — Supprimer `frontend/src/assets/react.svg`
 
-- Statut : `todo`
+- Statut : `done`
 - Priorité : P0
 - Fichiers cibles :
   - `frontend/src/assets/react.svg`
@@ -89,7 +89,7 @@ Document de pilotage pour exécuter le plan défini dans [AUDIT1.md](AUDIT1.md).
 
 ### 1.4 — Supprimer les dossiers vides `backend/static/` et `backend/core/graph/`
 
-- Statut : `todo`
+- Statut : `done`
 - Priorité : P0
 - Fichiers cibles :
   - `backend/static/` (contient uniquement `.gitkeep`)
@@ -109,7 +109,7 @@ Document de pilotage pour exécuter le plan défini dans [AUDIT1.md](AUDIT1.md).
 
 ### 1.5 — Archiver `scripts/convert_tests.py`
 
-- Statut : `todo`
+- Statut : `done`
 - Priorité : P1
 - Fichiers cibles :
   - `scripts/convert_tests.py`
@@ -127,7 +127,7 @@ Document de pilotage pour exécuter le plan défini dans [AUDIT1.md](AUDIT1.md).
 
 ### 1.6 — Renommer les fichiers composants React en PascalCase
 
-- Statut : `todo`
+- Statut : `done`
 - Priorité : P1
 - Fichiers cibles :
   - `frontend/src/components/editor/interactionFormTypeSections.tsx` → `InteractionFormTypeSections.tsx`
