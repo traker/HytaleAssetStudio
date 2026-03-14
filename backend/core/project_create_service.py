@@ -14,7 +14,7 @@ from backend.core.models import (
     ProjectCreateRequest,
     ProjectCreateResponse,
 )
-from backend.core.workspace_service import _project_config_path
+from backend.core.project_service import _project_config_path
 
 
 logger = logging.getLogger("uvicorn.error")

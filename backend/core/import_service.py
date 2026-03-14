@@ -16,9 +16,8 @@ from backend.core.models import (
     ProjectManifest,
 )
 from backend.core.project_create_service import _slugify, create_project
-from backend.core.project_service import load_project_config, save_project_config
+from backend.core.project_service import load_project_config, save_project_config, _load_workspace_defaults, _project_config_path
 from backend.core.vfs import mount_from_source, read_json_from_mount
-from backend.core.workspace_service import _load_workspace_defaults, _project_config_path
 
 
 def _normalize_import_manifest(pack_mount) -> dict | None:

@@ -3,12 +3,32 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
+from backend.core.config import Settings
 from backend.core.errors import http_error
 from backend.core.io import read_json, write_json
-from backend.core.models import ProjectConfig
+from backend.core.models import PackSource, ProjectConfig, WorkspaceDefaults
 
 
 logger = logging.getLogger("uvicorn.error")
+
+
+def _project_config_path(project_root: Path) -> Path:
+    return project_root / "has.project.json"
+
+
+def _load_workspace_defaults(settings: Settings) -> WorkspaceDefaults:
+    cfg_path = settings.workspace_root / "has.workspace.json"
+    if cfg_path.exists():
+        cfg = read_json(cfg_path)
+        defaults = cfg.get("defaults") or {}
+        vanilla = defaults.get("vanilla") or {}
+        return WorkspaceDefaults(vanilla=PackSource(**vanilla))
+    return WorkspaceDefaults(
+        vanilla=PackSource(
+            sourceType=settings.default_vanilla_source_type,  # type: ignore[arg-type]
+            path=settings.default_vanilla_path,
+        )
+    )
 
 
 def find_project_config_path(workspace_root: Path, project_id: str) -> Path:

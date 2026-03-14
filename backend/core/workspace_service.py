@@ -17,6 +17,7 @@ from backend.core.models import (
     WorkspaceOpenRequest,
     WorkspaceOpenResponse,
 )
+from backend.core.project_service import _project_config_path
 from backend.core.state import WORKSPACE_ROOT_BY_ID, _WORKSPACE_LOCK
 
 
@@ -31,11 +32,6 @@ def _workspace_id_for_root(root: Path) -> str:
 
 def _workspace_config_path(root: Path) -> Path:
     return root / "has.workspace.json"
-
-
-def _project_config_path(project_root: Path) -> Path:
-    return project_root / "has.project.json"
-
 
 
 def register_workspace_root(root: Path) -> str:
@@ -54,21 +50,6 @@ def resolve_workspace_root(settings: Settings, workspace_id: str | None) -> Path
         raise http_error(404, "WORKSPACE_NOT_FOUND", "Unknown workspaceId. Open the workspace first.", {"workspaceId": workspace_id})
 
     return Path(root)
-
-
-def _load_workspace_defaults(settings: Settings) -> WorkspaceDefaults:
-    cfg_path = _workspace_config_path(settings.workspace_root)
-    if cfg_path.exists():
-        cfg = read_json(cfg_path)
-        defaults = cfg.get("defaults") or {}
-        vanilla = defaults.get("vanilla") or {}
-        return WorkspaceDefaults(vanilla=PackSource(**vanilla))
-    return WorkspaceDefaults(
-        vanilla=PackSource(
-            sourceType=settings.default_vanilla_source_type,  # type: ignore[arg-type]
-            path=settings.default_vanilla_path,
-        )
-    )
 
 
 def open_workspace(settings: Settings, req: WorkspaceOpenRequest) -> WorkspaceOpenResponse:
