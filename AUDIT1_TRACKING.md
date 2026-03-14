@@ -24,7 +24,7 @@ Document de pilotage pour exécuter le plan défini dans [AUDIT1.md](AUDIT1.md).
 |---|---|---|
 | Lot 1 | Nettoyage sans risque | `done` |
 | Lot 2 | Harmonisation backend | `done` |
-| Lot 3 | Harmonisation frontend | `in-progress` |
+| Lot 3 | Harmonisation frontend | `done` |
 
 ---
 
@@ -272,12 +272,12 @@ Document de pilotage pour exécuter le plan défini dans [AUDIT1.md](AUDIT1.md).
 
 ## Lot 3 — Harmonisation frontend
 
-- Statut global : `todo`
+- Statut global : `done`
 - Objectif : clarifier la structure `src/`, isoler les responsabilités dans `api/`, extraire les hooks et utils.
 
 ### 3.1 — Créer `frontend/src/hooks/` et extraire les hooks partagés
 
-- Statut : `todo`
+- Statut : `done` — commit `c94c5c1`
 - Priorité : P1
 - Fichiers cibles :
   - `frontend/src/hooks/` (nouveau)
@@ -300,7 +300,7 @@ Document de pilotage pour exécuter le plan défini dans [AUDIT1.md](AUDIT1.md).
 
 ### 3.2 — Créer `frontend/src/utils/` et y déplacer les helpers purs
 
-- Statut : `todo`
+- Statut : `done` — commit `976d243`
 - Priorité : P1
 - Fichiers cibles :
   - `frontend/src/utils/` (nouveau)
@@ -322,7 +322,7 @@ Document de pilotage pour exécuter le plan défini dans [AUDIT1.md](AUDIT1.md).
 
 ### 3.3 — Isoler les internals HTTP dans `api/`
 
-- Statut : `todo`
+- Statut : `done` — commit `ce39b34`
 - Priorité : P1
 - Fichiers cibles :
   - `frontend/src/api/http.ts` (à scinder)
@@ -349,7 +349,7 @@ Document de pilotage pour exécuter le plan défini dans [AUDIT1.md](AUDIT1.md).
 
 ### 3.4 — Documenter la stratégie `types.ts` vs `generated.ts`
 
-- Statut : `todo`
+- Statut : `done` — commit `f1a5ba5` — décision B (garder types.ts)
 - Priorité : P2
 - Fichiers cibles :
   - `frontend/src/api/types.ts`
@@ -371,7 +371,7 @@ Document de pilotage pour exécuter le plan défini dans [AUDIT1.md](AUDIT1.md).
 
 ### 3.5 — Déplacer `InteractionTreeEditor` et `ProjectGraphEditor` dans `components/editor/`
 
-- Statut : `todo`
+- Statut : `done` — commit `177a349`
 - Priorité : P2
 - Fichiers cibles :
   - `frontend/src/views/project/InteractionTreeEditor.tsx` → `frontend/src/components/editor/InteractionTreeEditor.tsx`
