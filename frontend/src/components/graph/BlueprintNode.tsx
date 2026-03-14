@@ -8,7 +8,6 @@ type Props = {
   data: BlueprintNodeData
 }
 
-const ROOT_BORDER_COLOR = '#FF9500'
 const NEW_BORDER_COLOR = '#36c275'
 const OVERRIDE_BORDER_COLOR = '#ffb347'
 const SELECTED_BORDER_COLOR = '#00D4FF'
@@ -56,27 +55,15 @@ const BlueprintNodeComponent = ({ data }: Props) => {
   const modificationBadge = data.modificationKind === 'new'
     ? { label: 'NEW', title: 'Asset present only in the current project', color: '#dff8ea', background: NEW_BORDER_COLOR }
     : data.modificationKind === 'override'
-      ? { label: 'OVERRIDE', title: 'Asset ID already exists in a lower layer', color: '#2b1800', background: OVERRIDE_BORDER_COLOR }
+      ? { label: 'OVR', title: 'Asset ID already exists in a lower layer', color: '#2b1800', background: OVERRIDE_BORDER_COLOR }
       : data.isModified
         ? { label: 'LOCAL', title: 'Project-local asset', color: '#111', background: '#8aa4b8' }
         : null
 
   const selected = data.isSelected
   const connected = data.isConnected
-  const rootBorderColor = data.modificationKind === 'new'
-    ? NEW_BORDER_COLOR
-    : data.modificationKind === 'override'
-      ? OVERRIDE_BORDER_COLOR
-      : ROOT_BORDER_COLOR
-  const borderColor = data.isRoot
-    ? rootBorderColor
-    : selected
-      ? SELECTED_BORDER_COLOR
-      : connected
-        ? '#00D4FF66'
-        : typeColor
-  const borderWidth = data.isRoot || selected ? 3 : connected ? 2 : 2
-  const boxShadow = selected ? SELECTED_GLOW : connected ? '0 0 0 1px #00D4FF33' : undefined
+  const borderWidth = data.isRoot || selected ? 3 : 2
+  const borderColor = selected ? SELECTED_BORDER_COLOR : typeColor
 
   return (
     <div
@@ -85,17 +72,13 @@ const BlueprintNodeComponent = ({ data }: Props) => {
         flexDirection: 'column',
         minWidth: 230,
         maxWidth: 300,
-        backgroundColor: data.modificationKind === 'new'
-          ? 'rgba(13, 42, 27, 0.92)'
-          : data.modificationKind === 'override'
-            ? 'rgba(48, 30, 12, 0.92)'
-            : '#1a1a1a',
+        backgroundColor: '#1a1a1a',
         borderRadius: 6,
         border: `${borderWidth}px solid ${borderColor}`,
         overflow: 'hidden',
         color: '#fff',
         fontFamily: 'monospace',
-        boxShadow,
+        boxShadow: selected ? SELECTED_GLOW : data.isRoot ? `0 0 0 1px ${typeColor}66` : connected ? '0 0 0 1px #00D4FF33' : undefined,
         contain: 'layout paint style',
         contentVisibility: 'auto',
         containIntrinsicSize: '300px 180px',
@@ -106,7 +89,7 @@ const BlueprintNodeComponent = ({ data }: Props) => {
       {/* ── Header ── */}
       <div
         style={{
-          backgroundColor: data.isRoot ? rootBorderColor : typeColor,
+          backgroundColor: typeColor,
           color: '#111',
           padding: '5px 8px',
           fontSize: 10,

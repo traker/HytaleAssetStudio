@@ -12,8 +12,10 @@
  *   - an inline object { Interactions: [...], ... } → read-only badge (edit in JSON tab)
  */
 
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { TEXTAREA_STYLE } from './formStyles'
+import { hasApi } from '../../api/hasApi'
+import type { SearchResult } from '../../api/types'
 
 // ─────────────────────────────────────────────────────────────
 // Style constants
@@ -533,6 +535,315 @@ function BlockTypeSection({
 }
 
 // ─────────────────────────────────────────────────────────────
+// Item picker input (combobox with live search)
+// ─────────────────────────────────────────────────────────────
+
+function ItemPickerInput({
+  value,
+  onChange,
+  projectId,
+  readOnly,
+  placeholder = 'ItemId…',
+}: {
+  value: string
+  onChange: (v: string) => void
+  projectId: string | undefined
+  readOnly: boolean
+  placeholder?: string
+}) {
+  const [query, setQuery] = useState(value)
+  const [results, setResults] = useState<SearchResult[]>([])
+  const [open, setOpen] = useState(false)
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const containerRef = useRef<HTMLDivElement>(null)
+
+  // Sync query when value changes externally
+  useEffect(() => { setQuery(value) }, [value])
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    function onMouseDown(e: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', onMouseDown)
+    return () => document.removeEventListener('mousedown', onMouseDown)
+  }, [])
+
+  function handleInput(q: string) {
+    setQuery(q)
+    if (!projectId || q.trim().length < 2) { setResults([]); setOpen(false); return }
+    if (debounceRef.current) clearTimeout(debounceRef.current)
+    debounceRef.current = setTimeout(async () => {
+      try {
+        const resp = await hasApi.projectSearch(projectId, q.trim(), 50)
+        const filtered = resp.results.filter((r) => r.group === 'item' || r.group === 'block')
+        setResults(filtered)
+        setOpen(filtered.length > 0)
+      } catch { /* ignore */ }
+    }, 200)
+  }
+
+  function select(r: SearchResult) {
+    const id = r.assetKey
+    setQuery(id)
+    onChange(id)
+    setResults([])
+    setOpen(false)
+  }
+
+  function commit() {
+    onChange(query.trim())
+    setOpen(false)
+  }
+
+  return (
+    <div ref={containerRef} style={{ position: 'relative', flex: 1 }}>
+      <input
+        type="text"
+        value={query}
+        onChange={(e) => handleInput(e.target.value)}
+        onBlur={commit}
+        readOnly={readOnly}
+        style={{ ...SMALL_INPUT, width: '100%' }}
+        placeholder={placeholder}
+        spellCheck={false}
+        autoComplete="off"
+      />
+      {open && (
+        <div style={{
+          position: 'absolute',
+          top: '100%',
+          left: 0,
+          right: 0,
+          background: '#1a1a2e',
+          border: '1px solid #3a3a5c',
+          borderRadius: 4,
+          maxHeight: 180,
+          overflowY: 'auto',
+          zIndex: 999,
+          fontSize: 11,
+        }}>
+          {results.map((r) => (
+            <div
+              key={r.assetKey + (r.path ?? '')}
+              onMouseDown={(e) => { e.preventDefault(); select(r) }}
+              style={{
+                padding: '4px 8px',
+                cursor: 'pointer',
+                color: r.assetKey === value ? '#61dafb' : '#ccc',
+                borderBottom: '1px solid #252540',
+              }}
+              onMouseEnter={(e) => (e.currentTarget.style.background = '#252545')}
+              onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+            >
+              <span style={{ color: '#61dafb', marginRight: 6 }}>{r.assetKey}</span>
+              {r.group && <span style={{ color: '#555', fontSize: 10 }}>{r.group}</span>}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────
+// Recipe editor
+// ─────────────────────────────────────────────────────────────
+
+type RecipeInput = { ItemId: string; Quantity: number }
+type BenchReq = { Id: string; Type: string; Categories: string[]; RequiredTierLevel: number }
+type RecipeData = {
+  Input?: RecipeInput[]
+  BenchRequirement?: BenchReq[]
+  KnowledgeRequired?: boolean
+  TimeSeconds?: number
+}
+
+function RecipeEditor({
+  value,
+  onChange,
+  projectId,
+  readOnly,
+}: {
+  value: unknown
+  onChange: (v: RecipeData) => void
+  projectId: string | undefined
+  readOnly: boolean
+}) {
+  const recipe: RecipeData = (typeof value === 'object' && value !== null)
+    ? (value as RecipeData)
+    : {}
+
+  const inputs: RecipeInput[] = Array.isArray(recipe.Input)
+    ? (recipe.Input as RecipeInput[])
+    : []
+  const benches: BenchReq[] = Array.isArray(recipe.BenchRequirement)
+    ? (recipe.BenchRequirement as BenchReq[])
+    : []
+
+  function update(patch: Partial<RecipeData>) {
+    onChange({ ...recipe, ...patch })
+  }
+
+  // Input[]
+  function setInput(i: number, field: keyof RecipeInput, val: string | number) {
+    const next = inputs.map((row, idx) => idx === i ? { ...row, [field]: val } : row)
+    update({ Input: next })
+  }
+  function addInput() {
+    update({ Input: [...inputs, { ItemId: '', Quantity: 1 }] })
+  }
+  function removeInput(i: number) {
+    const next = inputs.filter((_, idx) => idx !== i)
+    update({ Input: next.length > 0 ? next : undefined })
+  }
+
+  // BenchRequirement[]
+  function setBench(i: number, field: keyof BenchReq, val: unknown) {
+    const next = benches.map((row, idx) => idx === i ? { ...row, [field]: val } : row)
+    update({ BenchRequirement: next })
+  }
+  function addBench() {
+    update({ BenchRequirement: [...benches, { Id: '', Type: 'Crafting', Categories: [], RequiredTierLevel: 0 }] })
+  }
+  function removeBench(i: number) {
+    const next = benches.filter((_, idx) => idx !== i)
+    update({ BenchRequirement: next.length > 0 ? next : undefined })
+  }
+  function setBenchCategory(i: number, raw: string) {
+    const cats = raw.split(',').map((s) => s.trim()).filter(Boolean)
+    setBench(i, 'Categories', cats)
+  }
+
+  return (
+    <div>
+      {/* ── Inputs ── */}
+      <label style={{ ...LABEL, marginBottom: 4 }}>Input Items</label>
+      {inputs.map((row, i) => (
+        <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 4 }}>
+          <ItemPickerInput
+            value={row.ItemId}
+            onChange={(v) => setInput(i, 'ItemId', v)}
+            projectId={projectId}
+            readOnly={readOnly}
+            placeholder="ItemId…"
+          />
+          <input
+            type="number"
+            min={1}
+            value={row.Quantity}
+            onChange={(e) => setInput(i, 'Quantity', parseInt(e.target.value, 10) || 1)}
+            readOnly={readOnly}
+            style={{ ...SMALL_INPUT, width: 64 }}
+            title="Quantity"
+          />
+          {!readOnly && (
+            <button onClick={() => removeInput(i)} style={REMOVE_BTN} title="Remove">×</button>
+          )}
+        </div>
+      ))}
+      {!readOnly && (
+        <button onClick={addInput} style={{ ...ADD_BTN, marginBottom: 10 }}>+ Add ingredient</button>
+      )}
+
+      {/* ── Bench requirements ── */}
+      <label style={{ ...LABEL, marginBottom: 4 }}>Bench Requirements</label>
+      {benches.map((row, i) => (
+        <div key={i} style={{ border: '1px solid #2a2a45', borderRadius: 4, padding: '6px 8px', marginBottom: 6 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 4 }}>
+            <div style={{ flex: 1 }}>
+              <label style={LABEL}>Id</label>
+              <input
+                type="text"
+                value={row.Id}
+                onChange={(e) => setBench(i, 'Id', e.target.value)}
+                readOnly={readOnly}
+                style={SMALL_INPUT}
+                placeholder="Armor_Bench"
+              />
+            </div>
+            <div style={{ flex: 1 }}>
+              <label style={LABEL}>Type</label>
+              <input
+                type="text"
+                value={row.Type}
+                onChange={(e) => setBench(i, 'Type', e.target.value)}
+                readOnly={readOnly}
+                style={SMALL_INPUT}
+                placeholder="Crafting"
+              />
+            </div>
+            <div style={{ flex: 0 }}>
+              <label style={LABEL}>Tier</label>
+              <input
+                type="number"
+                min={0}
+                value={row.RequiredTierLevel}
+                onChange={(e) => setBench(i, 'RequiredTierLevel', parseInt(e.target.value, 10) || 0)}
+                readOnly={readOnly}
+                style={{ ...SMALL_INPUT, width: 54 }}
+              />
+            </div>
+            {!readOnly && (
+              <button onClick={() => removeBench(i)} style={{ ...REMOVE_BTN, alignSelf: 'flex-end', marginBottom: 2 }} title="Remove">×</button>
+            )}
+          </div>
+          <div>
+            <label style={LABEL}>Categories (comma-separated)</label>
+            <input
+              type="text"
+              value={Array.isArray(row.Categories) ? row.Categories.join(', ') : ''}
+              onChange={(e) => setBenchCategory(i, e.target.value)}
+              readOnly={readOnly}
+              style={SMALL_INPUT}
+              placeholder="Armor, Weapon…"
+            />
+          </div>
+        </div>
+      ))}
+      {!readOnly && (
+        <button onClick={addBench} style={{ ...ADD_BTN, marginBottom: 10 }}>+ Add bench requirement</button>
+      )}
+
+      {/* ── Misc ── */}
+      <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <input
+            type="checkbox"
+            id="knowledgeRequired"
+            checked={recipe.KnowledgeRequired === true}
+            onChange={(e) => update({ KnowledgeRequired: e.target.checked ? true : undefined })}
+            disabled={readOnly}
+            style={{ width: 14, height: 14, accentColor: '#61dafb', cursor: readOnly ? 'default' : 'pointer' }}
+          />
+          <label htmlFor="knowledgeRequired" style={{ fontSize: 12, color: '#ccc', cursor: readOnly ? 'default' : 'pointer' }}>
+            Knowledge Required
+          </label>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <label style={{ ...LABEL, marginBottom: 0, minWidth: 80 }}>Time (s)</label>
+          <input
+            type="number"
+            step="any"
+            min={0}
+            value={recipe.TimeSeconds ?? ''}
+            onChange={(e) => {
+              const v = e.target.value.trim()
+              update({ TimeSeconds: v === '' ? undefined : parseFloat(v) })
+            }}
+            readOnly={readOnly}
+            style={{ ...SMALL_INPUT, width: 72 }}
+            placeholder="—"
+          />
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────
 // Extra fields (not handled above, not InteractionVars)
 // ─────────────────────────────────────────────────────────────
 
@@ -593,6 +904,7 @@ export type ItemFormEditorProps = {
   json: Record<string, unknown>
   onChange: (updated: Record<string, unknown>) => void
   readOnly?: boolean
+  projectId?: string
 }
 
 /**
@@ -609,7 +921,7 @@ export function looksLikeItem(json: Record<string, unknown>): boolean {
   )
 }
 
-export function ItemFormEditor({ json, onChange, readOnly = false }: ItemFormEditorProps) {
+export function ItemFormEditor({ json, onChange, readOnly = false, projectId }: ItemFormEditorProps) {
   function set(key: string, value: unknown) {
     if (readOnly) return
     const next = { ...json }
@@ -858,16 +1170,11 @@ export function ItemFormEditor({ json, onChange, readOnly = false }: ItemFormEdi
       {('Recipe' in json) && (
         <>
           <div style={SECTION_HEADER}>Recipe</div>
-          <textarea
-            rows={6}
-            defaultValue={JSON.stringify(json['Recipe'], null, 2)}
+          <RecipeEditor
+            value={json['Recipe']}
+            onChange={(v) => set('Recipe', v)}
+            projectId={projectId}
             readOnly={readOnly}
-            onBlur={(e) => {
-              if (readOnly) return
-              try { set('Recipe', JSON.parse(e.target.value)) } catch { /* ignore */ }
-            }}
-            style={{ ...INPUT, resize: 'vertical', lineHeight: 1.4, fontSize: 11 }}
-            spellCheck={false}
           />
         </>
       )}

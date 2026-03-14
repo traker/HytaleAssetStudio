@@ -37,6 +37,7 @@ type Props = {
   onOpenInteractions?: () => void
   canOpenInteractions?: boolean
   onRefresh?: (nextSelectedNodeId?: string) => void | Promise<void>
+  onIsolateNode?: () => void
 }
 
 export function AssetSidePanel(props: Props) {
@@ -422,6 +423,23 @@ export function AssetSidePanel(props: Props) {
             </>
           )}
 
+          {props.onIsolateNode && (
+            <button
+              onClick={props.onIsolateNode}
+              style={{
+                padding: '4px 8px',
+                background: '#1a1a35',
+                color: '#8877ee',
+                border: '1px solid #4444aa',
+                borderRadius: 4,
+                cursor: 'pointer',
+              }}
+              title="Isoler ce nœud et ses enfants dans le graphe"
+            >
+              Isolate
+            </button>
+          )}
+
           {props.onOpenInteractions && (
             <button
               onClick={props.onOpenInteractions}
@@ -719,6 +737,7 @@ export function AssetSidePanel(props: Props) {
                   json={currentFormJson}
                   onChange={canEdit ? handleFormChange : () => {}}
                   readOnly={!canEdit}
+                  projectId={props.projectId}
                 />
               )
             case 'entity-effect':

@@ -18,7 +18,7 @@ import { AssetSidePanel } from '../../components/editor/AssetSidePanel'
 import { BlueprintNode } from '../../components/graph/BlueprintNode'
 import type { BlueprintNodeData, OutgoingDep } from '../../components/graph/blueprintTypes'
 import { getBlueprintNodeDisplay, isInteractionBlueprintGroup } from '../../components/graph/blueprintTypes'
-import { getColorForEdgeType } from '../../components/graph/colors'
+import { getColorForGroup, getColorForEdgeType } from '../../components/graph/colors'
 import { layoutGraph, layoutGraphElk, MAX_DAGRE_NODES } from '../../components/graph/layoutDagre'
 import { measureAsync, measureSync, schedulePaintMeasure } from '../../perf/audit'
 import { useLayoutEngine } from '../../hooks/useLayoutEngine'
@@ -54,6 +54,21 @@ function applyModificationKindsToNodes(rawNodes: RawNode[], modifiedEntries: Mod
     const modificationKind = kindByPath.get(node.path)
     return modificationKind ? { ...node, modificationKind } : node
   })
+}
+
+function computeIsolatedSubgraph(rootId: string, edges: RawEdge[]): Set<string> {
+  const nodeIds = new Set<string>([rootId])
+  const queue = [rootId]
+  while (queue.length > 0) {
+    const cur = queue.shift()!
+    for (const e of edges) {
+      if (e.from === cur && !nodeIds.has(e.to)) {
+        nodeIds.add(e.to)
+        queue.push(e.to)
+      }
+    }
+  }
+  return nodeIds
 }
 
 function buildFlowSignature(rawNodes: RawNode[], rawEdges: RawEdge[], modifiedIdSet: Set<string>): string {
@@ -156,6 +171,9 @@ export function ProjectModifiedGraphView(props: Props) {
   const [truncationWarning, setTruncationWarning] = useState<string | null>(null)
   const [modifiedEntries, setModifiedEntries] = useState<ModifiedAssetEntry[]>([])
   const [filterText, setFilterText] = useState('')
+  const [filterGroup, setFilterGroup] = useState<string | null>(null)
+  const [isolatedRootId, setIsolatedRootId] = useState<string | null>(null)
+  const isolatedRootIdRef = useRef<string | null>(null)
 
   // Raw accumulated data (grows on expand clicks)
   const rawNodesRef = useRef<RawNode[]>([])
@@ -171,6 +189,8 @@ export function ProjectModifiedGraphView(props: Props) {
   const [rebuildTick, setRebuildTick] = useState(0)
   const graphPaintStartedAtRef = useRef<number | null>(null)
   const lastFlowSignatureRef = useRef<string | null>(null)
+  // Forward ref so handleModifiedEntryClick (declared before rebuildFlow) can call it
+  const rebuildFlowRef = useRef<() => void>(() => {})
   const layoutNodesRef = useRef<Array<Node<BlueprintNodeData>>>([])
   const layoutEdgesRef = useRef<Edge[]>([])
 
@@ -217,18 +237,48 @@ export function ProjectModifiedGraphView(props: Props) {
     return Array.from(byPath.values())
   }, [modifiedEntries])
 
+  // Map assetKey → group resolved from rawNodesRef; re-computed when graph is rebuilt
+  const entryGroupMap = useMemo(() => {
+    const map = new Map<string, string>()
+    for (const entry of visibleModifiedEntries) {
+      if (!entry.assetKey) continue
+      const node = rawNodesRef.current.find(
+        (n) => n.id === entry.assetKey || (n.path != null && entry.assetKey === `server-path:${n.path}`),
+      )
+      map.set(entry.assetKey, node?.group ?? 'json_data')
+    }
+    return map
+  // rebuildTick signals rawNodesRef was updated
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visibleModifiedEntries, rebuildTick])
+
+  const availableGroups = useMemo(() => {
+    const groups = new Set<string>()
+    for (const g of entryGroupMap.values()) groups.add(g)
+    return Array.from(groups).sort()
+  }, [entryGroupMap])
+
   const filteredEntries = useMemo(() => {
     const q = filterText.trim().toLowerCase()
-    if (!q) return visibleModifiedEntries
-    return visibleModifiedEntries.filter((e) =>
-      e.vfsPath.toLowerCase().includes(q) ||
-      (e.assetKey ?? '').toLowerCase().includes(q),
-    )
-  }, [visibleModifiedEntries, filterText])
+    return visibleModifiedEntries.filter((e) => {
+      if (filterGroup && entryGroupMap.get(e.assetKey ?? '') !== filterGroup) return false
+      if (q && !e.vfsPath.toLowerCase().includes(q) && !(e.assetKey ?? '').toLowerCase().includes(q)) return false
+      return true
+    })
+  }, [visibleModifiedEntries, filterText, filterGroup, entryGroupMap])
 
   const handleModifiedEntryClick = useCallback((entry: ModifiedAssetEntry) => {
     if (!entry.assetKey) return
     const assetKey = entry.assetKey
+
+    // Clear any active isolation so the full graph is visible before focusing
+    if (isolatedRootIdRef.current !== null) {
+      isolatedRootIdRef.current = null
+      setIsolatedRootId(null)
+      lastFlowSignatureRef.current = null
+      rebuildFlowRef.current()
+    }
+
     // assetKey from the modified list is always "server-path:…" but the graph node
     // may use "server:SomeId" when the ID is unique — resolve by path or direct match
     const graphNode = rawNodesRef.current.find(
@@ -243,6 +293,7 @@ export function ProjectModifiedGraphView(props: Props) {
       setSelectedNodeId(assetKey)
     }
     setActiveHighlight(null)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   // ── Sync isSelected + isConnected on nodes, animate highlighted edges ─────
@@ -337,14 +388,22 @@ export function ProjectModifiedGraphView(props: Props) {
 
   // Rebuild ReactFlow display from accumulated raw data
   const rebuildFlow = useCallback(() => {
-    const flowSignature = buildFlowSignature(rawNodesRef.current, rawEdgesRef.current, modifiedIdSetRef.current)
+    const rootId = isolatedRootIdRef.current
+    let visibleNodes = rawNodesRef.current
+    let visibleEdges = rawEdgesRef.current
+    if (rootId) {
+      const nodeIds = computeIsolatedSubgraph(rootId, rawEdgesRef.current)
+      visibleNodes = rawNodesRef.current.filter((n) => nodeIds.has(n.id))
+      visibleEdges = rawEdgesRef.current.filter((e) => nodeIds.has(e.from) && nodeIds.has(e.to))
+    }
+    const flowSignature = buildFlowSignature(visibleNodes, visibleEdges, modifiedIdSetRef.current)
     if (lastFlowSignatureRef.current === flowSignature) {
       return
     }
 
     const { nodes: fn, edges: fe, truncatedAt } = toFlow(
-      rawNodesRef.current,
-      rawEdgesRef.current,
+      visibleNodes,
+      visibleEdges,
       modifiedIdSetRef.current,
       handleSelectNode,
     )
@@ -362,6 +421,7 @@ export function ProjectModifiedGraphView(props: Props) {
     )
     setRebuildTick((t) => t + 1)
   }, [handleSelectNode])
+  rebuildFlowRef.current = rebuildFlow
 
   // Re-apply layout when engine or rebuild tick changes
   useEffect(() => {
@@ -389,6 +449,22 @@ export function ProjectModifiedGraphView(props: Props) {
       edges: edges.length,
     })
   }, [props.projectId, nodes, edges])
+
+  // ── Isolate a node (show only it + its descendants) ─────────────────────
+  const isolateNodeFromPanel = useCallback(() => {
+    if (!selectedNodeId) return
+    isolatedRootIdRef.current = selectedNodeId
+    setIsolatedRootId(selectedNodeId)
+    lastFlowSignatureRef.current = null
+    rebuildFlow()
+  }, [selectedNodeId, rebuildFlow])
+
+  const clearIsolation = useCallback(() => {
+    isolatedRootIdRef.current = null
+    setIsolatedRootId(null)
+    lastFlowSignatureRef.current = null
+    rebuildFlow()
+  }, [rebuildFlow])
 
   // ── Soft graph refresh after a save (keeps current selection) ────────────
   const softReloadGraph = useCallback(async () => {
@@ -587,6 +663,19 @@ export function ProjectModifiedGraphView(props: Props) {
           boxShadow: '0 10px 30px rgba(0,0,0,0.22)',
         }}
       >
+        {isolatedRootId && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 8px', background: '#1a1a35', border: '1px solid #4444aa', borderRadius: 6, flexShrink: 0 }}>
+            <span style={{ fontSize: 10, color: '#8877ee', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Isolated</span>
+            <span style={{ fontSize: 10, color: '#aaa', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 140 }} title={isolatedRootId}>
+              {isolatedRootId.replace(/^server(-path)?:/, '')}
+            </span>
+            <button
+              onClick={clearIsolation}
+              title="Exit isolation"
+              style={{ background: 'none', border: 'none', color: '#8877ee', cursor: 'pointer', fontSize: 14, lineHeight: 1, padding: '0 2px' }}
+            >×</button>
+          </div>
+        )}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
           <span
             style={{
@@ -750,27 +839,57 @@ export function ProjectModifiedGraphView(props: Props) {
                   >×</button>
                 )}
               </div>
-              <span style={{ fontSize: 10, color: filterText ? '#aaaaff' : '#555', whiteSpace: 'nowrap', flexShrink: 0 }}>
-                {filterText
+              <span style={{ fontSize: 10, color: filterText || filterGroup ? '#aaaaff' : '#555', whiteSpace: 'nowrap', flexShrink: 0 }}>
+                {filterText || filterGroup
                   ? `${filteredEntries.length}/${visibleModifiedEntries.length}`
                   : `${visibleModifiedEntries.length} file${visibleModifiedEntries.length !== 1 ? 's' : ''}`
                 }
               </span>
             </div>
+            {availableGroups.length > 1 && (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 8, flexShrink: 0 }}>
+                {availableGroups.map((g) => {
+                  const active = filterGroup === g
+                  const color = getColorForGroup(g)
+                  return (
+                    <button
+                      key={g}
+                      onClick={() => setFilterGroup(active ? null : g)}
+                      style={{
+                        fontSize: 9,
+                        padding: '2px 7px',
+                        borderRadius: 999,
+                        border: `1px solid ${active ? color : color + '66'}`,
+                        background: active ? color : 'transparent',
+                        color: active ? '#111' : color,
+                        cursor: 'pointer',
+                        fontWeight: 700,
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.04em',
+                        transition: 'all 0.1s',
+                      }}
+                    >
+                      {g}
+                    </button>
+                  )
+                })}
+              </div>
+            )}
             <div style={{ overflow: 'auto', flex: 1 }}>
             {filteredEntries.length === 0 && (
               <div style={{ fontSize: 11, color: '#555', fontStyle: 'italic', textAlign: 'center', marginTop: 12 }}>Aucun résultat</div>
             )}
             {filteredEntries.map((entry) => {
               const isSelected = selectedNodeId === entry.assetKey
-              const badgeLabel = entry.modificationKind === 'new' ? 'NEW' : 'OVERRIDE'
+              const group = entryGroupMap.get(entry.assetKey ?? '') ?? 'json_data'
+              const nodeColor = getColorForGroup(group)
+              const badgeLabel = entry.modificationKind === 'new' ? 'NEW' : 'OVR'
               const badgeColor = entry.modificationKind === 'new' ? '#36c275' : '#ffb347'
               const badgeTextColor = entry.modificationKind === 'new' ? '#dff8ea' : '#2b1800'
               const rowBackground = isSelected
-                ? '#1e2a36'
-                : entry.modificationKind === 'new'
-                  ? 'rgba(13, 42, 27, 0.55)'
-                  : 'rgba(48, 30, 12, 0.55)'
+                ? `${nodeColor}22`
+                : 'rgba(24,24,36,0.7)'
+              const borderColor = isSelected ? nodeColor : `${nodeColor}88`
               const displayPath = entry.vfsPath.replace(/^Server\//, '').replace(/^Common\//, '')
               const lastSlash = displayPath.lastIndexOf('/')
               const fileName = lastSlash >= 0 ? displayPath.slice(lastSlash + 1) : displayPath
@@ -783,8 +902,8 @@ export function ProjectModifiedGraphView(props: Props) {
                     width: '100%',
                     textAlign: 'left',
                     background: rowBackground,
-                    border: `1px solid ${badgeColor}66`,
-                    borderLeft: `4px solid ${badgeColor}`,
+                    border: `1px solid ${borderColor}`,
+                    borderLeft: `4px solid ${nodeColor}`,
                     borderRadius: 6,
                     color: '#ddd',
                     padding: '7px 8px',
@@ -805,9 +924,14 @@ export function ProjectModifiedGraphView(props: Props) {
                         </span>
                       )}
                     </div>
-                    <span style={{ fontSize: 9, color: badgeTextColor, background: badgeColor, border: `1px solid ${badgeColor}`, borderRadius: 999, padding: '1px 5px', flexShrink: 0, fontWeight: 700 }}>
-                      {badgeLabel}
-                    </span>
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 3, flexShrink: 0 }}>
+                      <span style={{ fontSize: 9, color: '#111', background: nodeColor, borderRadius: 999, padding: '1px 5px', fontWeight: 700, textTransform: 'uppercase' }}>
+                        {group}
+                      </span>
+                      <span style={{ fontSize: 9, color: badgeTextColor, background: badgeColor, border: `1px solid ${badgeColor}`, borderRadius: 999, padding: '1px 5px', fontWeight: 700 }}>
+                        {badgeLabel}
+                      </span>
+                    </div>
                   </div>
                   <div style={{ marginTop: 4, fontSize: 10, color: '#777', display: 'flex', justifyContent: 'space-between', gap: 8 }}>
                     <span>{entry.kind === 'server-json' ? 'Server JSON' : 'Common resource'}</span>
@@ -882,6 +1006,7 @@ export function ProjectModifiedGraphView(props: Props) {
               : undefined
           }
           canOpenInteractions={canOpenInteractions}
+          onIsolateNode={isolateNodeFromPanel}
         />
       )}
     </div>

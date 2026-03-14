@@ -1,3 +1,14 @@
+- 2026-03-14 - Nouveau chantier UX/UI `UXWORKFLOW1` initialise
+	- Contexte:
+		- un audit frontend centre sur workflow UX, interactions utilisateur et UI a ete realise
+		- plusieurs frictions prioritaires ont ete retenues: perte silencieuse de draft possible, workflow `Items -> Interactions` peu decouvrable, navigation graphe trop mouvante, messages de troncature peu actionnables, creation de projet fragile sur le champ directory
+	- Sorties creees:
+		- `UXWORKFLOW1.md` - plan atomique de remediations UX/UI
+		- `UXWORKFLOW1_TRACKING.md` - tracker d'execution avec regles de suivi, validations et statuts par lot
+	- Pilotage retenu:
+		- priorite initiale sur la confiance utilisateur et la decouvrabilite des workflows avant toute refonte visuelle plus large
+		- chaque sous-tache UX doit etre fermee avec une preuve concrete (build, test manuel, ou observation UI notee dans le tracker)
+
 - 2026-03-14 - ASSETFORMS1 complété — Lots 3–6 implémentés (suite de la session précédente)
 	- **Lot 3 — EntityEffectFormEditor + EffectsBlockEditor** (commit `09000c4`)
 		- `EffectsBlockEditor.tsx` extrait de `InteractionFormPanel.tsx` — réutilisable par les deux contextes
