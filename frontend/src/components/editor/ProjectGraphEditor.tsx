@@ -16,7 +16,7 @@ import '@xyflow/react/dist/style.css'
 import { HasApiError, hasApi } from '../../api'
 import type { ProjectGraphResponse, SearchResult } from '../../api'
 
-import { AssetSidePanel } from '../../components/editor/AssetSidePanel'
+import { AssetSidePanel } from './AssetSidePanel'
 import { BlueprintNode } from '../../components/graph/BlueprintNode'
 import type { BlueprintNodeData, OutgoingDep } from '../../components/graph/blueprintTypes'
 import { getBlueprintNodeDisplay, isInteractionBlueprintGroup } from '../../components/graph/blueprintTypes'

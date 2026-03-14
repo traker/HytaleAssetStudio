@@ -1,4 +1,4 @@
-import { ProjectGraphEditor } from './ProjectGraphEditor'
+import { ProjectGraphEditor } from '../../components/editor/ProjectGraphEditor'
 
 type Props = {
   projectId: string

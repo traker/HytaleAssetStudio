@@ -1,4 +1,4 @@
-import { InteractionTreeEditor } from './InteractionTreeEditor'
+import { InteractionTreeEditor } from '../../components/editor/InteractionTreeEditor'
 
 type Props = {
   projectId: string
