@@ -1,4 +1,5 @@
-import { httpFetch, httpJson, setApiWorkspaceId } from './http'
+import { httpFetch, httpJson } from './client'
+import { setApiWorkspaceId } from './workspaceSession'
 import type {
   AssetGetResponse,
   AssetPutRequest,
