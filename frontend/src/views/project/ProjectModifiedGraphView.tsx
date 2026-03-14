@@ -154,6 +154,7 @@ export function ProjectModifiedGraphView(props: Props) {
   const [error, setError] = useState<string | null>(null)
   const [truncationWarning, setTruncationWarning] = useState<string | null>(null)
   const [modifiedEntries, setModifiedEntries] = useState<ModifiedAssetEntry[]>([])
+  const [filterText, setFilterText] = useState('')
 
   // Raw accumulated data (grows on expand clicks)
   const rawNodesRef = useRef<RawNode[]>([])
@@ -208,6 +209,15 @@ export function ProjectModifiedGraphView(props: Props) {
     }
     return Array.from(byPath.values())
   }, [modifiedEntries])
+
+  const filteredEntries = useMemo(() => {
+    const q = filterText.trim().toLowerCase()
+    if (!q) return visibleModifiedEntries
+    return visibleModifiedEntries.filter((e) =>
+      e.vfsPath.toLowerCase().includes(q) ||
+      (e.assetKey ?? '').toLowerCase().includes(q),
+    )
+  }, [visibleModifiedEntries, filterText])
 
   const handleModifiedEntryClick = useCallback((entry: ModifiedAssetEntry) => {
     if (!entry.assetKey) return
@@ -629,12 +639,62 @@ export function ProjectModifiedGraphView(props: Props) {
               borderTop: '1px solid #2a2a2a',
               paddingTop: 8,
               flex: 1,
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 0,
             }}
           >
-            <div style={{ fontSize: 10, color: '#666', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6 }}>
-              Project files
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8, flexShrink: 0 }}>
+              <div style={{ position: 'relative', flex: 1 }}>
+                <input
+                  type="text"
+                  value={filterText}
+                  onChange={(e) => setFilterText(e.target.value)}
+                  placeholder="Filtrer…"
+                  style={{
+                    width: '100%',
+                    boxSizing: 'border-box',
+                    padding: '4px 24px 4px 7px',
+                    background: '#111',
+                    color: '#ccc',
+                    border: '1px solid #333',
+                    borderRadius: 4,
+                    fontSize: 11,
+                    outline: 'none',
+                  }}
+                />
+                {filterText && (
+                  <button
+                    onClick={() => setFilterText('')}
+                    style={{
+                      position: 'absolute',
+                      right: 4,
+                      top: '50%',
+                      transform: 'translateY(-50%)',
+                      background: 'none',
+                      border: 'none',
+                      color: '#666',
+                      cursor: 'pointer',
+                      fontSize: 12,
+                      padding: 0,
+                      lineHeight: 1,
+                    }}
+                    title="Effacer le filtre"
+                  >×</button>
+                )}
+              </div>
+              <span style={{ fontSize: 10, color: filterText ? '#aaaaff' : '#555', whiteSpace: 'nowrap', flexShrink: 0 }}>
+                {filterText
+                  ? `${filteredEntries.length}/${visibleModifiedEntries.length}`
+                  : `${visibleModifiedEntries.length} file${visibleModifiedEntries.length !== 1 ? 's' : ''}`
+                }
+              </span>
             </div>
-            {visibleModifiedEntries.map((entry) => {
+            <div style={{ overflow: 'auto', flex: 1 }}>
+            {filteredEntries.length === 0 && (
+              <div style={{ fontSize: 11, color: '#555', fontStyle: 'italic', textAlign: 'center', marginTop: 12 }}>Aucun résultat</div>
+            )}
+            {filteredEntries.map((entry) => {
               const isSelected = selectedNodeId === entry.assetKey
               const badgeLabel = entry.modificationKind === 'new' ? 'NEW' : 'OVERRIDE'
               const badgeColor = entry.modificationKind === 'new' ? '#36c275' : '#ffb347'
@@ -689,6 +749,7 @@ export function ProjectModifiedGraphView(props: Props) {
                 </button>
               )
             })}
+            </div>
           </div>
         )}
       </div>
