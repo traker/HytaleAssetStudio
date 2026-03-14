@@ -7,6 +7,7 @@ import type { AssetGetResponse } from '../../api'
 import { InteractionVarsEditor, type InteractionVarsValue } from './InteractionVarsEditor'
 import { ItemFormEditor } from './ItemFormEditor'
 import { EntityEffectFormEditor } from './EntityEffectFormEditor'
+import { ProjectileFormEditor } from './ProjectileFormEditor'
 import { detectAssetKind } from './assetTypeRegistry'
 
 type Tab = 'json' | 'form' | 'vars'
@@ -721,6 +722,14 @@ export function AssetSidePanel(props: Props) {
             case 'entity-effect':
               return (
                 <EntityEffectFormEditor
+                  json={currentFormJson}
+                  onChange={canEdit ? handleFormChange : () => {}}
+                  readOnly={!canEdit}
+                />
+              )
+            case 'projectile':
+              return (
+                <ProjectileFormEditor
                   json={currentFormJson}
                   onChange={canEdit ? handleFormChange : () => {}}
                   readOnly={!canEdit}
