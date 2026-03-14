@@ -2,49 +2,9 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, Field
 
-
-SourceType = Literal["folder", "zip"]
-
-
-class PackSource(BaseModel):
-    sourceType: SourceType
-    path: str
-
-
-class WorkspaceDefaults(BaseModel):
-    vanilla: PackSource
-
-
-class WorkspaceConfig(BaseModel):
-    schemaVersion: int = 1
-    workspace: dict = Field(default_factory=dict)
-    defaults: WorkspaceDefaults
-
-
-class WorkspaceOpenRequest(BaseModel):
-    rootPath: str
-
-
-class WorkspaceOpenResponse(BaseModel):
-    workspaceId: str
-    rootPath: str
-    projectsDir: str
-    defaults: WorkspaceDefaults
-
-
-class ProjectInfo(BaseModel):
-    projectId: str
-    displayName: str | None = None
-    rootPath: str
-    assetsWritePath: str
-    status: Literal["ready", "invalid"] = "ready"
-    errorMessage: str | None = None
-
-
-class WorkspaceProjectsResponse(BaseModel):
-    projects: list[ProjectInfo]
+from backend.core.models.workspace import PackSource, SourceType
 
 
 class ProjectConfigProject(BaseModel):
@@ -92,24 +52,6 @@ class ProjectOpenResponse(BaseModel):
     projectId: str
     rootPath: str
     assetsWritePath: str
-
-
-class AssetPutRequest(BaseModel):
-    model_config = ConfigDict(populate_by_name=True)
-    payload: dict = Field(..., alias="json")
-    mode: Literal["override", "copy"] = "override"
-    newId: str | None = None
-
-
-class AssetPutResponse(BaseModel):
-    ok: bool = True
-    assetKey: str
-    resolvedPath: str
-    origin: Literal["project"] = "project"
-
-
-class OkResponse(BaseModel):
-    ok: bool = True
 
 
 class ProjectLayersPutRequest(BaseModel):
@@ -186,14 +128,3 @@ class ModifiedAssetsResponse(BaseModel):
     projectId: str
     count: int
     entries: list[ModifiedAssetEntry]
-
-
-class GraphNode(BaseModel):
-    id: str
-    label: str
-    title: str | None = None
-    group: str | None = None
-    path: str | None = None
-    state: Literal["vanilla", "local"]
-    isModifiedRoot: bool = False
-    modificationKind: Literal["override", "new"] | None = None
