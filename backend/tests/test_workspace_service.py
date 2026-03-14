@@ -1,18 +1,19 @@
 from __future__ import annotations
 
 import tempfile
-import unittest
 from pathlib import Path
 from unittest.mock import patch
 
 from fastapi import HTTPException
 
+import pytest
 from backend.core.io import read_json, write_json
 from backend.core.models import PackSource, ProjectCreateRequest
-from backend.core.workspace_service import create_project, list_projects
+from backend.core.project_create_service import create_project
+from backend.core.workspace_service import list_projects
 
 
-class CreateProjectTests(unittest.TestCase):
+class CreateProjectTests:
     def make_request(self, target_dir: Path) -> ProjectCreateRequest:
         return ProjectCreateRequest(
             projectId="demo-project",
@@ -28,15 +29,15 @@ class CreateProjectTests(unittest.TestCase):
 
             response = create_project(workspace_root, self.make_request(project_root))
 
-            self.assertEqual(response.projectId, "demo-project")
-            self.assertTrue((project_root / "Common").is_dir())
-            self.assertTrue((project_root / "Server").is_dir())
-            self.assertTrue((project_root / "manifest.json").is_file())
-            self.assertTrue((project_root / "has.project.json").is_file())
+            assert response.projectId == "demo-project"
+            assert (project_root / "Common").is_dir()
+            assert (project_root / "Server").is_dir()
+            assert (project_root / "manifest.json").is_file()
+            assert (project_root / "has.project.json").is_file()
 
             manifest = read_json(project_root / "manifest.json")
-            self.assertEqual(manifest["Group"], "demo-project")
-            self.assertEqual(manifest["Name"], "Demo Project")
+            assert manifest["Group"] == "demo-project"
+            assert manifest["Name"] == "Demo Project"
 
     def test_create_project_does_not_overwrite_existing_project_files(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -46,12 +47,12 @@ class CreateProjectTests(unittest.TestCase):
             existing_manifest = {"Group": "existing", "Name": "Existing"}
             write_json(project_root / "manifest.json", existing_manifest)
 
-            with self.assertRaises(HTTPException) as ctx:
+            with pytest.raises(HTTPException) as exc_info:
                 create_project(workspace_root, self.make_request(project_root))
 
-            self.assertEqual(ctx.exception.status_code, 409)
-            self.assertEqual(read_json(project_root / "manifest.json"), existing_manifest)
-            self.assertFalse((project_root / "has.project.json").exists())
+            assert exc_info.value.status_code == 409
+            assert read_json(project_root / "manifest.json") == existing_manifest
+            assert not (project_root / "has.project.json").exists()
 
     def test_create_project_rolls_back_partial_write_on_failure(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -65,12 +66,12 @@ class CreateProjectTests(unittest.TestCase):
                     raise OSError("simulated write failure")
                 real_write_json(path, data)
 
-            with patch("backend.core.workspace_service.write_json", side_effect=flaky_write_json):
-                with self.assertRaises(HTTPException) as ctx:
+            with patch("backend.core.project_create_service.write_json", side_effect=flaky_write_json):
+                with pytest.raises(HTTPException) as exc_info:
                     create_project(workspace_root, self.make_request(project_root))
 
-            self.assertEqual(ctx.exception.status_code, 500)
-            self.assertFalse(project_root.exists())
+            assert exc_info.value.status_code == 500
+            assert not project_root.exists()
 
     def test_list_projects_includes_invalid_entries_with_status(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -85,10 +86,7 @@ class CreateProjectTests(unittest.TestCase):
             projects = list_projects(workspace_root)
             by_id = {project.projectId: project for project in projects}
 
-            self.assertEqual(by_id["demo-project"].status, "ready")
-            self.assertEqual(by_id["broken-project"].status, "invalid")
-            self.assertTrue(by_id["broken-project"].errorMessage)
+            assert by_id["demo-project"].status == "ready"
+            assert by_id["broken-project"].status == "invalid"
+            assert by_id["broken-project"].errorMessage
 
-
-if __name__ == "__main__":
-    unittest.main()

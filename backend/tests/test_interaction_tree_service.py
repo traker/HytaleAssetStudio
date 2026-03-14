@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import tempfile
-import unittest
 from pathlib import Path
 
+import pytest
 from backend.core.interaction_tree_service import build_interaction_tree
 from backend.core.io import write_json
 from backend.core.models import PackSource, ProjectConfig, ProjectConfigProject
@@ -11,12 +11,12 @@ from backend.core.pydantic_compat import model_dump
 from backend.core.state import PROJECT_INDEX, PROJECT_INDEX_FINGERPRINT
 
 
-class InteractionTreeServiceTests(unittest.TestCase):
-    def setUp(self) -> None:
+class InteractionTreeServiceTests:
+    def setup_method(self) -> None:
         PROJECT_INDEX.clear()
         PROJECT_INDEX_FINGERPRINT.clear()
 
-    def tearDown(self) -> None:
+    def teardown_method(self) -> None:
         PROJECT_INDEX.clear()
         PROJECT_INDEX_FINGERPRINT.clear()
 
@@ -62,9 +62,9 @@ class InteractionTreeServiceTests(unittest.TestCase):
             tree = build_interaction_tree("interaction-tests", "server:ParallelTest", workspace_root)
             edge_types = {(edge["from"], edge["type"]) for edge in tree["edges"]}
 
-            self.assertIn(("internal:root", "child"), edge_types)
-            self.assertIn(("internal:root", "fork"), edge_types)
-            self.assertIn(("internal:root", "next"), edge_types)
+            assert ("internal:root", "child") in edge_types
+            assert ("internal:root", "fork") in edge_types
+            assert ("internal:root", "next") in edge_types
 
     def test_build_interaction_tree_exposes_external_refs_as_ref_nodes(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -92,13 +92,10 @@ class InteractionTreeServiceTests(unittest.TestCase):
                 for edge in tree["edges"]
             }
 
-            self.assertIn("server:SharedFollowup", nodes_by_id)
-            self.assertEqual(nodes_by_id["server:SharedFollowup"]["type"], "_ref")
-            self.assertEqual(nodes_by_id["server:SharedFollowup"]["rawFields"], {"ServerId": "SharedFollowup"})
-            self.assertIn(
-                ("internal:root", "server:SharedFollowup", "next"),
-                edge_targets,
-            )
+            assert "server:SharedFollowup" in nodes_by_id
+            assert nodes_by_id["server:SharedFollowup"]["type"] == "_ref"
+            assert nodes_by_id["server:SharedFollowup"]["rawFields"] == {"ServerId": "SharedFollowup"}
+            assert ("internal:root", "server:SharedFollowup", "next") in edge_targets
 
     def test_build_interaction_tree_preserves_projectile_collision_and_ground_edges(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -116,8 +113,8 @@ class InteractionTreeServiceTests(unittest.TestCase):
             tree = build_interaction_tree("interaction-tests", "server:ProjectileTest", workspace_root)
             edge_types = {(edge["from"], edge["type"]) for edge in tree["edges"]}
 
-            self.assertIn(("internal:root", "collisionNext"), edge_types)
-            self.assertIn(("internal:root", "groundNext"), edge_types)
+            assert ("internal:root", "collisionNext") in edge_types
+            assert ("internal:root", "groundNext") in edge_types
 
     def test_build_interaction_tree_preserves_wielding_blocked_edges(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -135,8 +132,8 @@ class InteractionTreeServiceTests(unittest.TestCase):
             tree = build_interaction_tree("interaction-tests", "server:WieldingTest", workspace_root)
             edge_types = {(edge["from"], edge["type"]) for edge in tree["edges"]}
 
-            self.assertIn(("internal:root", "next"), edge_types)
-            self.assertIn(("internal:root", "blocked"), edge_types)
+            assert ("internal:root", "next") in edge_types
+            assert ("internal:root", "blocked") in edge_types
 
     def test_build_interaction_tree_preserves_selector_hit_containers(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -156,9 +153,9 @@ class InteractionTreeServiceTests(unittest.TestCase):
             tree = build_interaction_tree("interaction-tests", "server:SelectorTest", workspace_root)
             edge_types = {(edge["from"], edge["type"]) for edge in tree["edges"]}
 
-            self.assertIn(("internal:root", "hitEntity"), edge_types)
-            self.assertIn(("internal:root", "hitBlock"), edge_types)
-            self.assertIn(("internal:root", "hitNothing"), edge_types)
+            assert ("internal:root", "hitEntity") in edge_types
+            assert ("internal:root", "hitBlock") in edge_types
+            assert ("internal:root", "hitNothing") in edge_types
 
     def test_build_interaction_tree_preserves_parallel_children_wrapped_in_anonymous_containers(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -195,22 +192,8 @@ class InteractionTreeServiceTests(unittest.TestCase):
                 for edge in tree["edges"]
             }
 
-            self.assertIn(
-                (
-                    "internal:root",
-                    "internal:root/Interactions/0/Interactions/0",
-                    "child",
-                ),
-                edge_targets,
-            )
-            self.assertIn(
-                (
-                    "internal:root",
-                    "internal:root/Interactions/1/Interactions/0",
-                    "child",
-                ),
-                edge_targets,
-            )
+            assert ( "internal:root", "internal:root/Interactions/0/Interactions/0", "child", ) in edge_targets
+            assert ( "internal:root", "internal:root/Interactions/1/Interactions/0", "child", ) in edge_targets
 
     def test_build_interaction_tree_does_not_duplicate_charging_step_edges(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -241,36 +224,9 @@ class InteractionTreeServiceTests(unittest.TestCase):
                 key = (edge["from"], edge["to"], edge["type"])
                 edge_counts[key] = edge_counts.get(key, 0) + 1
 
-            self.assertEqual(
-                edge_counts.get(
-                    (
-                        "internal:root/Next/0.1",
-                        "internal:root/Next/0.1/Failed",
-                        "failed",
-                    )
-                ),
-                1,
-            )
-            self.assertEqual(
-                edge_counts.get(
-                    (
-                        "internal:root/Next/0.3",
-                        "internal:root/Next/0.3/Next",
-                        "next",
-                    )
-                ),
-                1,
-            )
-            self.assertEqual(
-                edge_counts.get(
-                    (
-                        "internal:root/Next/0.3",
-                        "internal:root/Next/0.3/Failed",
-                        "failed",
-                    )
-                ),
-                1,
-            )
+            assert edge_counts.get( ( "internal:root/Next/0.1", "internal:root/Next/0.1/Failed", "failed", ) ) == 1
+            assert edge_counts.get( ( "internal:root/Next/0.3", "internal:root/Next/0.3/Next", "next", ) ) == 1
+            assert edge_counts.get( ( "internal:root/Next/0.3", "internal:root/Next/0.3/Failed", "failed", ) ) == 1
 
     def test_build_interaction_tree_preserves_charging_entrypoints_and_failed_branch(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -294,18 +250,9 @@ class InteractionTreeServiceTests(unittest.TestCase):
                 for edge in tree["edges"]
             }
 
-            self.assertIn(
-                ("internal:root", "internal:root/Next/0.1", "next"),
-                edge_targets,
-            )
-            self.assertIn(
-                ("internal:root", "internal:root/Next/0.35", "next"),
-                edge_targets,
-            )
-            self.assertIn(
-                ("internal:root", "internal:root/Failed", "failed"),
-                edge_targets,
-            )
+            assert ("internal:root", "internal:root/Next/0.1", "next") in edge_targets
+            assert ("internal:root", "internal:root/Next/0.35", "next") in edge_targets
+            assert ("internal:root", "internal:root/Failed", "failed") in edge_targets
 
     def test_build_interaction_tree_preserves_replace_next_and_default_value_branches(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -340,22 +287,10 @@ class InteractionTreeServiceTests(unittest.TestCase):
                 for edge in tree["edges"]
             }
 
-            self.assertIn(
-                ("internal:root", "internal:root/Next", "next"),
-                edge_targets,
-            )
-            self.assertIn(
-                ("internal:root", "server:ReplaceFallback", "replace"),
-                edge_targets,
-            )
-            self.assertNotIn(
-                ("internal:root", "server:ReplaceFallback", "child"),
-                edge_targets,
-            )
-            self.assertIn(
-                ("internal:root", "internal:root/DefaultValue/Interactions/1", "replace"),
-                edge_targets,
-            )
+            assert ("internal:root", "internal:root/Next", "next") in edge_targets
+            assert ("internal:root", "server:ReplaceFallback", "replace") in edge_targets
+            assert ("internal:root", "server:ReplaceFallback", "child") not in edge_targets
+            assert ("internal:root", "internal:root/DefaultValue/Interactions/1", "replace") in edge_targets
 
     def test_build_interaction_tree_keeps_replace_nodes_connected_inside_parallel_wrappers(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -423,23 +358,8 @@ class InteractionTreeServiceTests(unittest.TestCase):
                 for edge in tree["edges"]
             }
 
-            self.assertIn(
-                ("internal:root", "internal:root/Next", "next"),
-                edge_targets,
-            )
-            self.assertIn(
-                ("internal:root", "internal:root/Failed", "failed"),
-                edge_targets,
-            )
-            self.assertIn(
-                ("internal:root/Next", "internal:root/Next/Interactions/0/Interactions/0", "child"),
-                edge_targets,
-            )
-            self.assertIn(
-                ("internal:root/Next", "internal:root/Next/Interactions/1/Interactions/0", "child"),
-                edge_targets,
-            )
+            assert ("internal:root", "internal:root/Next", "next") in edge_targets
+            assert ("internal:root", "internal:root/Failed", "failed") in edge_targets
+            assert ("internal:root/Next", "internal:root/Next/Interactions/0/Interactions/0", "child") in edge_targets
+            assert ("internal:root/Next", "internal:root/Next/Interactions/1/Interactions/0", "child") in edge_targets
 
-
-if __name__ == "__main__":
-    unittest.main()

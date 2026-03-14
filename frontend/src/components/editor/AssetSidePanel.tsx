@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from 'react'
+import { Suspense, lazy, useEffect, useMemo, useState } from 'react'
 
-import Editor from '@monaco-editor/react'
+const MonacoEditor = lazy(() => import('@monaco-editor/react'))
 
 import { HasApiError, hasApi } from '../../api'
 import type { AssetGetResponse } from '../../api'
@@ -618,7 +618,8 @@ export function AssetSidePanel(props: Props) {
                     overflow: 'hidden',
                   }}
                 >
-                  <Editor
+                  <Suspense fallback={<div style={{ color: '#666', padding: 12, fontSize: 12 }}>Loading editor…</div>}>
+                  <MonacoEditor
                     height="100%"
                     defaultLanguage="json"
                     theme="vs-dark"
@@ -636,6 +637,7 @@ export function AssetSidePanel(props: Props) {
                       domReadOnly: true,
                     }}
                   />
+                  </Suspense>
                 </div>
               </div>
             )}
@@ -674,7 +676,8 @@ export function AssetSidePanel(props: Props) {
                 overflow: 'hidden',
               }}
             >
-              <Editor
+              <Suspense fallback={<div style={{ color: '#666', padding: 12, fontSize: 12 }}>Loading editor…</div>}>
+              <MonacoEditor
                 height="100%"
                 defaultLanguage="json"
                 theme="vs-dark"
@@ -693,6 +696,7 @@ export function AssetSidePanel(props: Props) {
                   domReadOnly: !canEdit,
                 }}
               />
+              </Suspense>
             </div>
           </div>
         )}

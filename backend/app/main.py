@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import time
 
 from fastapi import FastAPI
@@ -20,10 +21,19 @@ logger = logging.getLogger("uvicorn.error")
 
 app = FastAPI(title="Hytale Asset Studio API", version="0.1.0")
 
+# Dev origins: 127.0.0.1 / localhost on the default Vite port.
+# For multi-machine deployments set HAS_ALLOWED_ORIGINS (comma-separated).
+_allowed_origins_env = os.getenv("HAS_ALLOWED_ORIGINS", "")
+_CORS_ORIGINS: list[str] = (
+    [o.strip() for o in _allowed_origins_env.split(",") if o.strip()]
+    if _allowed_origins_env
+    else ["http://127.0.0.1:5173", "http://localhost:5173"]
+)
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
+    allow_origins=_CORS_ORIGINS,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )

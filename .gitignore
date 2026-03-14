@@ -25,6 +25,7 @@ Thumbs.db
 
 # Hytale Asset Studio local caches
 .studio_cache/
+.tmp/
 archived*
 !archived_task/
 !archived_task/**

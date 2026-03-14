@@ -25,7 +25,7 @@ import { InteractionPalette, DRAG_MIME } from '../../components/editor/Interacti
 import { InteractionFormPanel } from '../../components/editor/InteractionFormPanel'
 import { InteractionNode, type InteractionNodeData } from '../../components/graph/InteractionNode'
 import { getColorForEdgeType } from '../../components/graph/colors'
-import { layoutGraph } from '../../components/graph/layoutDagre'
+import { layoutGraph, MAX_DAGRE_NODES } from '../../components/graph/layoutDagre'
 import { exportInteractionTree } from '../../components/graph/interactionExport'
 
 type Props = {
@@ -64,7 +64,7 @@ function edgeTypeToSourceHandle(edgeType: string): string {
   return EDGE_TYPE_BY_SOURCE_HANDLE[edgeType] ?? (edgeType === 'failed' ? 'failed' : edgeType === 'next' ? 'next' : 'child')
 }
 
-function toFlow(data: InteractionTreeResponse): { nodes: Node[]; edges: Edge[] } {
+function toFlow(data: InteractionTreeResponse): { nodes: Node[]; edges: Edge[]; truncatedAt?: number } {
   const rootNodeIds = new Set(data.nodes.filter((n) => n.type === 'Root').map((n) => n.id))
 
   const nodes: Node[] = data.nodes.map((n) => ({
@@ -122,6 +122,7 @@ function InteractionTreeEditorInner(props: Props) {
 
   const [status, setStatus] = useState<Status>({ kind: 'idle' })
   const [error, setError] = useState<string | null>(null)
+  const [truncationWarning, setTruncationWarning] = useState<string | null>(null)
   const [nodes, setNodes] = useState<Node[]>([])
   const [edges, setEdges] = useState<Edge[]>([])
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
@@ -206,6 +207,11 @@ function InteractionTreeEditorInner(props: Props) {
         baseEdgesRef.current = flow.edges
         setNodes(flow.nodes)
         setEdges(flow.edges)
+        setTruncationWarning(
+          flow.truncatedAt != null
+            ? `⚠ Graph truncated to ${MAX_DAGRE_NODES} nodes (${flow.truncatedAt} total)`
+            : null,
+        )
         setStatus({ kind: 'idle', message: `Loaded: ${data.nodes.length} nodes, ${data.edges.length} edges` })
         setTimeout(() => setStatus({ kind: 'idle' }), 1500)
       } catch (e) {
@@ -478,6 +484,7 @@ function InteractionTreeEditorInner(props: Props) {
               </div>
             )}
             {status.message && <p style={{ marginTop: 8, opacity: 0.8, fontSize: 12 }}>{status.message}</p>}
+            {truncationWarning && <p style={{ marginTop: 6, color: '#FF9500', fontSize: 11 }}>{truncationWarning}</p>}
             {error && <p style={{ marginTop: 8, color: '#FF6B6B', fontSize: 12 }}>{error}</p>}
             {saveStatus === 'error' && saveError && (
               <p style={{ marginTop: 6, color: '#FF6B6B', fontSize: 11 }}>{saveError}</p>

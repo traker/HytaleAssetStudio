@@ -1,22 +1,15 @@
 import { useState } from 'react'
 import { HasApiError, hasApi } from '../api'
-import type { ProjectInfo, WorkspaceOpenResponse } from '../api'
+import { useWorkspace } from '../context/WorkspaceContext'
 import { PathInput } from '../components/ui/PathInput'
 
 type Props = {
-  workspaceRoot: string
-  onWorkspaceRootChange: (v: string) => void
-  onOpen: () => void
-  isBusy: boolean
-  error: string | null
-  workspace: WorkspaceOpenResponse | null
-  projects: ProjectInfo[]
   onSelectProject: (id: string) => void
   onProjectCreated: (projectId: string) => void
 }
 
-export function HomePage(props: Props) {
-  const { workspaceRoot, onWorkspaceRootChange, onOpen, isBusy, error, workspace, projects, onSelectProject, onProjectCreated } = props
+export function HomePage({ onSelectProject, onProjectCreated }: Props) {
+  const { workspaceRoot, setWorkspaceRoot, workspace, projects, isBusy, error, openWorkspace } = useWorkspace()
 
   // ── New project form state ──
   const [showCreate, setShowCreate] = useState(false)
@@ -81,16 +74,16 @@ export function HomePage(props: Props) {
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 4 }}>
           <PathInput
             value={workspaceRoot}
-            onChange={onWorkspaceRootChange}
+            onChange={setWorkspaceRoot}
             placeholder="K:/hytale-asset-studio-workspace"
             sourceType="folder"
             disabled={isBusy}
             style={{ flex: 1 }}
-            onKeyDown={(e) => e.key === 'Enter' && !isBusy && onOpen()}
+            onKeyDown={(e) => e.key === 'Enter' && !isBusy && openWorkspace()}
           />
           <button
             className="btn btn-primary"
-            onClick={onOpen}
+            onClick={openWorkspace}
             disabled={isBusy || workspaceRoot.trim().length === 0}
             style={{ flexShrink: 0 }}
           >

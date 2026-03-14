@@ -1,3 +1,16 @@
+- 2026-03-14 - Clôture complète de `STABILSTAGE2` — Lots 4 et 5 terminés
+	- **Lot 4 — Frontend qualité et performance** : tous les 7 items terminés
+		- `4.1` `.tmp/` ajouté au `.gitignore`
+		- `4.2` `openapi-typescript` + script `npm run codegen` dans `package.json`
+		- `4.3` Monaco Editor lazy-chargé dans `AssetSidePanel.tsx` (2 usages, `<Suspense>`)
+		- `4.4` `activeWorkspaceId` → `sessionStorage` dans `http.ts`
+		- `4.5` Guard `MAX_DAGRE_NODES = 200` dans `layoutDagre.ts`, warning UI dans les 3 vues graphe
+		- `4.6` `formStyles.ts` créé — styles centralisés pour `InteractionFormPanel` et `interactionFormTypeSections`
+		- `4.7` `WorkspaceContext.tsx` créé — `App.tsx` refactorisé en `AppShell` + `WorkspaceProvider`, `HomePage.tsx` 9 props → 2 props
+	- **Lot 5 — Tests et couverture** : tous les 2 items terminés
+		- `5.1` 7 fichiers de tests migrés de `unittest` → `pytest` (script `scripts/convert_tests.py`), `pytest.ini` créé, `requirements.txt` mis à jour
+		- `5.2` `backend/tests/test_routes.py` créé (4 tests : health, open valid, open 422, projects 404)
+	- **Vérification finale** : `python -m pytest -v` → **41 passed**, `npm run build` → OK (528 modules)
 - 2026-03-13 - Cloture complete et archivage de `INTERACTIONEDITOR1`
 	- `INTERACTIONEDITOR1.md`
 		- ajout d'une section de cloture finale declarant le chantier termine

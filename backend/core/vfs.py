@@ -3,14 +3,18 @@ from __future__ import annotations
 import json
 import time
 import zipfile
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
+
+import threading
 
 from backend.core.errors import http_error
 from backend.core.perf import record_duration
 
 
 _MOUNT_FILE_LIST_CACHE: dict[tuple[str, str, str], tuple[str, list[str]]] = {}
+# Single-process only — see state.py NOTE.
+_VFS_CACHE_LOCK: threading.Lock = threading.Lock()
 
 
 def _norm(p: str) -> str:
@@ -38,7 +42,7 @@ def _mount_listing_signature(source_type: str, root: Path, prefix: str) -> str:
     return "folder:" + "|".join(parts)
 
 
-@dataclass(frozen=True)
+@dataclass(eq=False)
 class Mount:
     mount_id: str
     origin: str  # vanilla|dependency|project
@@ -46,17 +50,38 @@ class Mount:
     root: Path
     prefix: str  # '' or 'Assets'
 
-    _zip: zipfile.ZipFile | None = None
-    _zip_names: set[str] | None = None
+    # Mutable internal state — not part of constructor/repr/comparison.
+    _zip: zipfile.ZipFile | None = field(default=None, init=False, repr=False, compare=False)
+    _zip_names: set[str] | None = field(default=None, init=False, repr=False, compare=False)
+
+    def __hash__(self) -> int:
+        return hash(self.mount_id)
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, Mount):
+            return NotImplemented
+        return self.mount_id == other.mount_id
+
+    def close(self) -> None:
+        """Close the underlying ZipFile handle if open. Safe to call multiple times."""
+        if self._zip is not None:
+            try:
+                self._zip.close()
+            except Exception:
+                pass
+            self._zip = None
+        self._zip_names = None
+
+    def __del__(self) -> None:
+        self.close()
 
     def _ensure_zip(self) -> None:
         if self.source_type != "zip":
             return
         if self._zip is None:
-            object.__setattr__(self, "_zip", zipfile.ZipFile(self.root))
+            self._zip = zipfile.ZipFile(self.root)
         if self._zip_names is None:
-            names = {n for n in self._zip.namelist() if not n.endswith("/")}
-            object.__setattr__(self, "_zip_names", names)
+            self._zip_names = {n for n in self._zip.namelist() if not n.endswith("/")}
 
     def vfs_to_native(self, vfs_path: str) -> str:
         vfs_path = _norm(vfs_path)
@@ -83,7 +108,8 @@ class Mount:
                 return (self.root / native).read_text(encoding="utf-8", errors="ignore")
             if self.source_type == "zip":
                 self._ensure_zip()
-                assert self._zip is not None
+                if self._zip is None:
+                    raise http_error(500, "VFS_ERROR", "Zip handle not initialized", {"mount": self.mount_id})
                 return self._zip.read(native).decode("utf-8", errors="ignore")
             raise http_error(500, "VFS_UNSUPPORTED", "Unsupported mount source type", {"sourceType": self.source_type})
         finally:
@@ -98,7 +124,8 @@ class Mount:
                 return (self.root / native).read_bytes()
             if self.source_type == "zip":
                 self._ensure_zip()
-                assert self._zip is not None
+                if self._zip is None:
+                    raise http_error(500, "VFS_ERROR", "Zip handle not initialized", {"mount": self.mount_id})
                 return self._zip.read(native)
             raise http_error(500, "VFS_UNSUPPORTED", "Unsupported mount source type", {"sourceType": self.source_type})
         finally:
@@ -127,7 +154,8 @@ class Mount:
                 rel = str(p.relative_to(base)).replace("\\", "/")
                 files.append(rel)
             if use_cache and signature is not None:
-                _MOUNT_FILE_LIST_CACHE[cache_key] = (signature, list(files))
+                with _VFS_CACHE_LOCK:
+                    _MOUNT_FILE_LIST_CACHE[cache_key] = (signature, list(files))
             record_duration("vfs.list_files", (time.perf_counter() - start) * 1000.0)
             return files
 
@@ -145,7 +173,8 @@ class Mount:
                 else:
                     out.append(n)
             if use_cache and signature is not None:
-                _MOUNT_FILE_LIST_CACHE[cache_key] = (signature, list(out))
+                with _VFS_CACHE_LOCK:
+                    _MOUNT_FILE_LIST_CACHE[cache_key] = (signature, list(out))
             record_duration("vfs.list_files", (time.perf_counter() - start) * 1000.0)
             return out
 

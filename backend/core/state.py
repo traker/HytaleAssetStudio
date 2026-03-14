@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import threading
 from dataclasses import dataclass
 
 
@@ -31,6 +32,8 @@ class ProjectIndexState:
 
 
 # In-memory cache (MVP)
+# NOTE: single-process only — uvicorn --workers N > 1 is not supported
+# (all caches live in-memory and are not shared across processes).
 PROJECT_INDEX: dict[str, ProjectIndexState] = {}
 PROJECT_INDEX_FINGERPRINT: dict[str, str] = {}
 
@@ -38,3 +41,8 @@ PROJECT_INDEX_FINGERPRINT: dict[str, str] = {}
 # This avoids falling back silently to HAS_WORKSPACE_ROOT for subsequent
 # workspace/project-scoped requests.
 WORKSPACE_ROOT_BY_ID: dict[str, str] = {}
+
+# Locks protecting concurrent writes on caches from multiple threads
+# (e.g. Starlette threadpool handlers, background tasks).
+_INDEX_LOCK: threading.Lock = threading.Lock()
+_WORKSPACE_LOCK: threading.Lock = threading.Lock()

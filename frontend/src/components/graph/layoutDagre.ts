@@ -6,6 +6,11 @@ import { measureSync } from '../../perf/audit'
 const LAYOUT_CACHE_LIMIT = 24
 const layoutCache = new Map<string, Map<string, { x: number; y: number }>>()
 
+/** Maximum nodes passed to Dagre before truncating the graph.
+ *  Beyond this limit the synchronous Dagre layout freezes the main thread.
+ *  TODO: consider offloading to a Web Worker for large graphs. */
+export const MAX_DAGRE_NODES = 200
+
 const NODE_WIDTH = 260
 const NODE_HEIGHT_BASE = 80   // header + label + path
 const NODE_HEIGHT_DEP_ROW = 26 // per outgoing dep row
@@ -58,17 +63,28 @@ function setCachedLayout(key: string, positions: Map<string, { x: number; y: num
   }
 }
 
-export function layoutGraph<TNode extends Node>(nodes: TNode[], edges: Edge[], direction: 'TB' | 'LR' = 'LR'): { nodes: TNode[]; edges: Edge[] } {
+export function layoutGraph<TNode extends Node>(nodes: TNode[], edges: Edge[], direction: 'TB' | 'LR' = 'LR'): { nodes: TNode[]; edges: Edge[]; truncatedAt?: number } {
   return measureSync('graph.layout_dagre', () => {
-    const cacheKey = makeLayoutCacheKey(nodes, edges, direction)
+    let truncatedAt: number | undefined
+    let layoutNodes = nodes
+    let layoutEdges = edges
+
+    if (nodes.length > MAX_DAGRE_NODES) {
+      truncatedAt = nodes.length
+      layoutNodes = nodes.slice(0, MAX_DAGRE_NODES)
+      const visibleIds = new Set(layoutNodes.map((n) => n.id))
+      layoutEdges = edges.filter((e) => visibleIds.has(e.source) && visibleIds.has(e.target))
+    }
+
+    const cacheKey = makeLayoutCacheKey(layoutNodes, layoutEdges, direction)
     const cachedPositions = getCachedLayout(cacheKey)
     if (cachedPositions) {
-      for (const node of nodes) {
+      for (const node of layoutNodes) {
         const position = cachedPositions.get(node.id)
         if (!position) continue
         node.position = position
       }
-      return { nodes, edges }
+      return { nodes: layoutNodes, edges: layoutEdges, truncatedAt }
     }
 
     const dagreGraph = new dagre.graphlib.Graph()
@@ -76,11 +92,11 @@ export function layoutGraph<TNode extends Node>(nodes: TNode[], edges: Edge[], d
 
     dagreGraph.setGraph({ rankdir: direction, nodesep: 60, ranksep: 140 })
 
-    for (const node of nodes) {
+    for (const node of layoutNodes) {
       const h = estimateNodeHeight(node)
       dagreGraph.setNode(node.id, { width: NODE_WIDTH, height: h })
     }
-    for (const edge of edges) {
+    for (const edge of layoutEdges) {
       dagreGraph.setEdge(edge.source, edge.target)
     }
 
@@ -88,7 +104,7 @@ export function layoutGraph<TNode extends Node>(nodes: TNode[], edges: Edge[], d
 
     const positions = new Map<string, { x: number; y: number }>()
 
-    for (const node of nodes) {
+    for (const node of layoutNodes) {
       const p = dagreGraph.node(node.id)
       const position = { x: p.x - NODE_WIDTH / 2, y: p.y - p.height / 2 }
       node.position = position
@@ -97,6 +113,6 @@ export function layoutGraph<TNode extends Node>(nodes: TNode[], edges: Edge[], d
 
     setCachedLayout(cacheKey, positions)
 
-    return { nodes, edges }
+    return { nodes: layoutNodes, edges: layoutEdges, truncatedAt }
   }, { direction, nodes: nodes.length, edges: edges.length })
 }

@@ -26,7 +26,9 @@ from backend.core.models import (
 from backend.core.io import write_json
 from backend.core.pydantic_compat import model_dump
 from backend.core.project_service import load_project_config, save_project_config
-from backend.core.workspace_service import create_project, import_pack, open_project, resolve_workspace_root
+from backend.core.import_service import import_pack
+from backend.core.project_create_service import create_project
+from backend.core.workspace_service import open_project, resolve_workspace_root
 
 router = APIRouter(prefix="/api/v1", tags=["projects"])
 

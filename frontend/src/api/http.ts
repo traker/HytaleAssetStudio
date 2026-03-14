@@ -10,6 +10,8 @@ import { logPerf, measureAsync, isPerfAuditEnabled } from '../perf/audit'
 
 export class HasApiError extends Error {
   status: number
+  /** Structured error code from the backend (e.g. 'WORKSPACE_NOT_FOUND'). */
+  code: string | undefined
   payload?: HasErrorPayload | unknown
 
   constructor(message: string, status: number, payload?: HasErrorPayload | unknown) {
@@ -17,19 +19,28 @@ export class HasApiError extends Error {
     this.name = 'HasApiError'
     this.status = status
     this.payload = payload
+    this.code =
+      typeof payload === 'object' && payload && 'error' in payload
+        ? (payload as HasErrorPayload).error.code
+        : undefined
   }
 }
 
-let activeWorkspaceId: string | null = null
+const WS_ID_KEY = 'has_workspace_id'
 
 export function setApiWorkspaceId(workspaceId: string | null): void {
-  activeWorkspaceId = workspaceId
+  if (workspaceId === null) {
+    sessionStorage.removeItem(WS_ID_KEY)
+  } else {
+    sessionStorage.setItem(WS_ID_KEY, workspaceId)
+  }
 }
 
 function buildHeaders(init?: RequestInit): HeadersInit {
+  const wsId = sessionStorage.getItem(WS_ID_KEY)
   return {
     ...(init?.body ? { 'Content-Type': 'application/json' } : {}),
-    ...(activeWorkspaceId ? { 'X-HAS-Workspace-Id': activeWorkspaceId } : {}),
+    ...(wsId ? { 'X-HAS-Workspace-Id': wsId } : {}),
     ...(init?.headers ?? {}),
   }
 }
@@ -68,7 +79,11 @@ export async function httpFetch(input: RequestInfo | URL, init?: RequestInit): P
     const msg = (() => {
       if (typeof payload === 'object' && payload) {
         if ('error' in payload) {
-          return (payload as HasErrorPayload).error.message
+          const errPayload = payload as HasErrorPayload
+          if (errPayload.error.code === 'WORKSPACE_NOT_FOUND') {
+            return 'Session expirée — le serveur a redémarré. Veuillez rouvrir le workspace.'
+          }
+          return errPayload.error.message
         }
         if ('detail' in payload) {
           const detail = (payload as { detail?: unknown }).detail

@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 import tempfile
-import unittest
 from pathlib import Path
 
 from fastapi import HTTPException
 
+import pytest
 from backend.core.asset_service import read_server_json
 from backend.core.graph_service import build_focus_graph
 from backend.core.index_service import ensure_index
@@ -15,12 +15,12 @@ from backend.routes.index_graph import _build_search_results
 from backend.core.state import PROJECT_INDEX, PROJECT_INDEX_FINGERPRINT
 
 
-class CollisionResolutionTests(unittest.TestCase):
-    def setUp(self) -> None:
+class CollisionResolutionTests:
+    def setup_method(self) -> None:
         PROJECT_INDEX.clear()
         PROJECT_INDEX_FINGERPRINT.clear()
 
-    def tearDown(self) -> None:
+    def teardown_method(self) -> None:
         PROJECT_INDEX.clear()
         PROJECT_INDEX_FINGERPRINT.clear()
 
@@ -58,9 +58,9 @@ class CollisionResolutionTests(unittest.TestCase):
             index = ensure_index(cfg.project.id, cfg)
             results = _build_search_results(index, "Shared", 10)
 
-            self.assertEqual(len(results), 2)
-            self.assertTrue(all(r["ambiguous"] for r in results))
-            self.assertTrue(all(r["assetKey"].startswith("server-path:") for r in results))
+            assert len(results) == 2
+            assert all(r["ambiguous"] for r in results)
+            assert all(r["assetKey"].startswith("server-path:") for r in results)
 
     def test_read_server_json_supports_server_path_key(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -73,8 +73,8 @@ class CollisionResolutionTests(unittest.TestCase):
 
             response = read_server_json(cfg, "server-path:Server/Items/Weapon/Shared.json")
 
-            self.assertEqual(response["resolvedPath"], "Server/Items/Weapon/Shared.json")
-            self.assertEqual(response["json"]["Power"], 10)
+            assert response["resolvedPath"] == "Server/Items/Weapon/Shared.json"
+            assert response["json"]["Power"] == 10
 
     def test_read_server_json_returns_structured_error_for_ambiguous_server_id(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -84,15 +84,12 @@ class CollisionResolutionTests(unittest.TestCase):
             write_json(vanilla_root / "Server" / "Items" / "Weapon" / "Shared.json", {"Id": "Shared", "Power": 10})
             write_json(vanilla_root / "Server" / "Items" / "Tools" / "Shared.json", {"Id": "Shared", "Power": 3})
 
-            with self.assertRaises(HTTPException) as ctx:
+            with pytest.raises(HTTPException) as exc_info:
                 read_server_json(cfg, "server:Shared")
 
-            self.assertEqual(ctx.exception.status_code, 409)
-            self.assertEqual(ctx.exception.detail["error"]["code"], "ID_AMBIGUOUS")
-            self.assertEqual(
-                ctx.exception.detail["error"]["details"]["paths"],
-                ["Server/Items/Tools/Shared.json", "Server/Items/Weapon/Shared.json"],
-            )
+            assert exc_info.value.status_code == 409
+            assert exc_info.value.detail["error"]["code"] == "ID_AMBIGUOUS"
+            assert exc_info.value.detail["error"]["details"]["paths"] == ["Server/Items/Tools/Shared.json", "Server/Items/Weapon/Shared.json"]
 
     def test_build_focus_graph_accepts_server_path_root(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -109,8 +106,5 @@ class CollisionResolutionTests(unittest.TestCase):
             graph = build_focus_graph(cfg, "server-path:Server/Items/Weapon/Shared.json", 1)
             node_ids = {node["id"] for node in graph["nodes"]}
 
-            self.assertIn("server-path:Server/Items/Weapon/Shared.json", node_ids)
+            assert "server-path:Server/Items/Weapon/Shared.json" in node_ids
 
-
-if __name__ == "__main__":
-    unittest.main()

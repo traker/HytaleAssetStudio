@@ -11,7 +11,7 @@ from backend.core.errors import http_error
 from backend.core.io import read_json, write_json
 from backend.core.models import ProjectConfig
 from backend.core.perf import timed
-from backend.core.state import PROJECT_INDEX, PROJECT_INDEX_FINGERPRINT, ProjectIndexState
+from backend.core.state import PROJECT_INDEX, PROJECT_INDEX_FINGERPRINT, ProjectIndexState, _INDEX_LOCK
 from backend.core.vfs import Mount, mount_from_source
 
 
@@ -222,8 +222,9 @@ def rebuild_project_index(project_id: str, cfg: ProjectConfig) -> ProjectIndexSt
             lower_layer_server_ids=lower_layer_server_ids,
         )
 
-        PROJECT_INDEX[project_id] = state
-        PROJECT_INDEX_FINGERPRINT[project_id] = fingerprint
+        with _INDEX_LOCK:
+            PROJECT_INDEX[project_id] = state
+            PROJECT_INDEX_FINGERPRINT[project_id] = fingerprint
 
         # Best-effort disk cache (does not break runtime if it fails)
         try:
@@ -244,41 +245,44 @@ def rebuild_project_index(project_id: str, cfg: ProjectConfig) -> ProjectIndexSt
 
 
 def invalidate_project_index(project_id: str) -> None:
-    PROJECT_INDEX.pop(project_id, None)
-    PROJECT_INDEX_FINGERPRINT.pop(project_id, None)
+    with _INDEX_LOCK:
+        PROJECT_INDEX.pop(project_id, None)
+        PROJECT_INDEX_FINGERPRINT.pop(project_id, None)
 
 
 def apply_project_server_write_to_index(project_id: str, cfg: ProjectConfig, vfs_path: str) -> None:
-    state = PROJECT_INDEX.get(project_id)
-    if state is None:
-        return
-
     normalized_path = vfs_path.replace("\\", "/").lstrip("/")
     server_id = Path(normalized_path).stem
+    # Compute fingerprint outside the lock to avoid holding it during I/O.
+    new_fingerprint = _index_fingerprint(cfg)
+    with _INDEX_LOCK:
+        state = PROJECT_INDEX.get(project_id)
+        if state is None:
+            return
 
-    state.effective_mount_by_vfs_path[normalized_path] = "project"
-    state.origin_by_vfs_path[normalized_path] = "project"
+        state.effective_mount_by_vfs_path[normalized_path] = "project"
+        state.origin_by_vfs_path[normalized_path] = "project"
 
-    if normalized_path.lower().startswith("server/") and normalized_path.lower().endswith(".json"):
-        state.origin_by_server_path[normalized_path] = "project"
-        paths = list(state.server_id_to_all_paths.get(server_id, []))
-        if normalized_path not in paths:
-            paths.append(normalized_path)
-            paths.sort()
-            state.server_id_to_all_paths[server_id] = paths
-            state.server_json_count = len(
-                [
-                    path
-                    for path in state.effective_mount_by_vfs_path
-                    if path.lower().startswith("server/") and path.lower().endswith(".json")
-                ]
-            )
-        if len(state.server_id_to_all_paths[server_id]) == 1:
-            state.server_id_to_path[server_id] = normalized_path
-        else:
-            state.server_id_to_path.pop(server_id, None)
+        if normalized_path.lower().startswith("server/") and normalized_path.lower().endswith(".json"):
+            state.origin_by_server_path[normalized_path] = "project"
+            paths = list(state.server_id_to_all_paths.get(server_id, []))
+            if normalized_path not in paths:
+                paths.append(normalized_path)
+                paths.sort()
+                state.server_id_to_all_paths[server_id] = paths
+                state.server_json_count = len(
+                    [
+                        path
+                        for path in state.effective_mount_by_vfs_path
+                        if path.lower().startswith("server/") and path.lower().endswith(".json")
+                    ]
+                )
+            if len(state.server_id_to_all_paths[server_id]) == 1:
+                state.server_id_to_path[server_id] = normalized_path
+            else:
+                state.server_id_to_path.pop(server_id, None)
 
-    PROJECT_INDEX_FINGERPRINT[project_id] = _index_fingerprint(cfg)
+        PROJECT_INDEX_FINGERPRINT[project_id] = new_fingerprint
 
 
 def ensure_index(project_id: str, cfg: ProjectConfig) -> ProjectIndexState:
@@ -293,13 +297,15 @@ def ensure_index(project_id: str, cfg: ProjectConfig) -> ProjectIndexState:
                 return PROJECT_INDEX[project_id]
 
             logger.info("index_cache memory fingerprint mismatch; rebuilding", extra={"projectId": project_id})
-            PROJECT_INDEX.pop(project_id, None)
-            PROJECT_INDEX_FINGERPRINT.pop(project_id, None)
+            with _INDEX_LOCK:
+                PROJECT_INDEX.pop(project_id, None)
+                PROJECT_INDEX_FINGERPRINT.pop(project_id, None)
 
         cached = _load_index_cache(cfg, fingerprint)
         if cached is not None:
-            PROJECT_INDEX[project_id] = cached
-            PROJECT_INDEX_FINGERPRINT[project_id] = fingerprint
+            with _INDEX_LOCK:
+                PROJECT_INDEX[project_id] = cached
+                PROJECT_INDEX_FINGERPRINT[project_id] = fingerprint
             logger.info(
                 "index_cache hit (disk)",
                 extra={

@@ -8,6 +8,7 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
+    "codegen": "openapi-typescript http://localhost:8000/openapi.json -o src/api/generated.ts",
     "test:interaction-contract": "tsc -p tsconfig.interaction-contract.json && node ./.tmp/interaction-contract/scripts/interaction-contract.test.js"
   },
   "dependencies": {
@@ -29,6 +30,7 @@
     "eslint-plugin-react-hooks": "^7.0.1",
     "eslint-plugin-react-refresh": "^0.4.24",
     "globals": "^16.5.0",
+    "openapi-typescript": "^7.8.0",
     "typescript": "~5.9.3",
     "typescript-eslint": "^8.48.0",
     "vite": "^7.3.1"

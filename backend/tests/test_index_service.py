@@ -2,21 +2,21 @@ from __future__ import annotations
 
 import tempfile
 import time
-import unittest
 from pathlib import Path
 
+import pytest
 from backend.core.index_service import ensure_index, rebuild_project_index
 from backend.core.io import write_json
 from backend.core.models import PackSource, ProjectConfig, ProjectConfigProject
 from backend.core.state import PROJECT_INDEX, PROJECT_INDEX_FINGERPRINT
 
 
-class IndexServiceCacheTests(unittest.TestCase):
-    def setUp(self) -> None:
+class IndexServiceCacheTests:
+    def setup_method(self) -> None:
         PROJECT_INDEX.clear()
         PROJECT_INDEX_FINGERPRINT.clear()
 
-    def tearDown(self) -> None:
+    def teardown_method(self) -> None:
         PROJECT_INDEX.clear()
         PROJECT_INDEX_FINGERPRINT.clear()
 
@@ -50,13 +50,13 @@ class IndexServiceCacheTests(unittest.TestCase):
             write_json(vanilla_root / "Server" / "Items" / "Sword.json", {"Id": "Sword"})
 
             state1 = ensure_index(cfg.project.id, cfg)
-            self.assertEqual(state1.server_json_count, 1)
+            assert state1.server_json_count == 1
 
             time.sleep(0.01)
             write_json(project_root / "Server" / "Items" / "Axe.json", {"Id": "Axe"})
 
             state2 = ensure_index(cfg.project.id, cfg)
-            self.assertEqual(state2.server_json_count, 2)
+            assert state2.server_json_count == 2
 
     def test_ensure_index_invalidates_disk_cache_when_project_files_change(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -73,7 +73,7 @@ class IndexServiceCacheTests(unittest.TestCase):
             write_json(project_root / "Server" / "Items" / "Axe.json", {"Id": "Axe"})
 
             state = ensure_index(cfg.project.id, cfg)
-            self.assertEqual(state.server_json_count, 2)
+            assert state.server_json_count == 2
 
     def test_index_tracks_lower_layer_presence_for_modification_classification(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -85,10 +85,7 @@ class IndexServiceCacheTests(unittest.TestCase):
 
             state = ensure_index(cfg.project.id, cfg)
 
-            self.assertTrue(state.lower_layer_server_ids.get("Sword"))
-            self.assertTrue(state.lower_layer_vfs_paths.get("Server/Items/Sword.json"))
-            self.assertTrue(state.lower_layer_vfs_paths.get("Common/Icons/Sword.png"))
+            assert state.lower_layer_server_ids.get("Sword")
+            assert state.lower_layer_vfs_paths.get("Server/Items/Sword.json")
+            assert state.lower_layer_vfs_paths.get("Common/Icons/Sword.png")
 
-
-if __name__ == "__main__":
-    unittest.main()

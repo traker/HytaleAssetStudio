@@ -21,7 +21,7 @@ import { BlueprintNode } from '../../components/graph/BlueprintNode'
 import type { BlueprintNodeData, OutgoingDep } from '../../components/graph/blueprintTypes'
 import { getBlueprintNodeDisplay, isInteractionBlueprintGroup } from '../../components/graph/blueprintTypes'
 import { getColorForGroup, getColorForEdgeType } from '../../components/graph/colors'
-import { layoutGraph } from '../../components/graph/layoutDagre'
+import { layoutGraph, MAX_DAGRE_NODES } from '../../components/graph/layoutDagre'
 import { measureAsync, measureSync, schedulePaintMeasure } from '../../perf/audit'
 
 type Props = {
@@ -50,7 +50,7 @@ function toFlow(
   data: ProjectGraphResponse,
   rootId: string,
   onSelectNode: (sourceId: string, targetId: string) => void,
-): { nodes: Node<BlueprintNodeData>[]; edges: Edge[] } {
+): { nodes: Node<BlueprintNodeData>[]; edges: Edge[]; truncatedAt?: number } {
   return measureSync('graph.to_flow', () => {
     // Build a quick lookup: id → { label, group }
     const nodeInfoMap = new Map(data.nodes.map((n) => [n.id, { label: n.label, group: n.group ?? 'json_data' }]))
@@ -122,6 +122,7 @@ export function ProjectGraphEditor(props: Props) {
 
   const [status, setStatus] = useState<Status>({ kind: 'idle' })
   const [error, setError] = useState<string | null>(null)
+  const [truncationWarning, setTruncationWarning] = useState<string | null>(null)
 
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
   const [activeHighlight, setActiveHighlight] = useState<{ edgeIds: Set<string>; nodeIds: Set<string> } | null>(null)
@@ -202,6 +203,11 @@ export function ProjectGraphEditor(props: Props) {
       baseEdgesRef.current = flow.edges
       setNodes(flow.nodes)
       setEdges(flow.edges)
+      setTruncationWarning(
+        flow.truncatedAt != null
+          ? `⚠ Graph truncated to ${MAX_DAGRE_NODES} nodes (${flow.truncatedAt} total — increase depth or narrow search)`
+          : null,
+      )
       setStatus({ kind: 'idle', message: `Loaded: ${data.nodes.length} nodes, ${data.edges.length} edges` })
       setTimeout(() => setStatus({ kind: 'idle' }), 1500)
     } catch (e) {
@@ -497,6 +503,7 @@ export function ProjectGraphEditor(props: Props) {
           </div>
 
           {status.message && <p style={{ marginTop: 10, opacity: 0.8 }}>{status.message}</p>}
+          {truncationWarning && <p style={{ marginTop: 8, color: '#FF9500', fontSize: 11 }}>{truncationWarning}</p>}
           {error && <p style={{ marginTop: 8, color: '#FF6B6B' }}>{error}</p>}
         </Panel>
       </ReactFlow>

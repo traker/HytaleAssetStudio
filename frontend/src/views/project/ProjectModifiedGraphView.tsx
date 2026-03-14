@@ -19,7 +19,7 @@ import { BlueprintNode } from '../../components/graph/BlueprintNode'
 import type { BlueprintNodeData, OutgoingDep } from '../../components/graph/blueprintTypes'
 import { getBlueprintNodeDisplay, isInteractionBlueprintGroup } from '../../components/graph/blueprintTypes'
 import { getColorForEdgeType } from '../../components/graph/colors'
-import { layoutGraph } from '../../components/graph/layoutDagre'
+import { layoutGraph, MAX_DAGRE_NODES } from '../../components/graph/layoutDagre'
 import { measureAsync, measureSync, schedulePaintMeasure } from '../../perf/audit'
 
 const SEMANTIC_EDGE_TYPES = new Set([
@@ -152,6 +152,7 @@ export function ProjectModifiedGraphView(props: Props) {
   const [loading, setLoading] = useState(false)
   const [expandLoading, setExpandLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [truncationWarning, setTruncationWarning] = useState<string | null>(null)
   const [modifiedEntries, setModifiedEntries] = useState<ModifiedAssetEntry[]>([])
 
   // Raw accumulated data (grows on expand clicks)
@@ -298,7 +299,7 @@ export function ProjectModifiedGraphView(props: Props) {
       return
     }
 
-    const { nodes: fn, edges: fe } = toFlow(
+    const { nodes: fn, edges: fe, truncatedAt } = toFlow(
       rawNodesRef.current,
       rawEdgesRef.current,
       modifiedIdSetRef.current,
@@ -309,6 +310,11 @@ export function ProjectModifiedGraphView(props: Props) {
     baseEdgesRef.current = fe
     setNodes(fn)
     setEdges(fe)
+    setTruncationWarning(
+      truncatedAt != null
+        ? `⚠ Graph truncated to ${MAX_DAGRE_NODES} nodes (${truncatedAt} total)`
+        : null,
+    )
     setRebuildTick((t) => t + 1)
   }, [handleSelectNode])
 
@@ -578,6 +584,9 @@ export function ProjectModifiedGraphView(props: Props) {
             <span style={{ color: '#e06c75' }}>{error}</span>
           ) : (
             <>
+              {truncationWarning && (
+                <div style={{ color: '#FF9500', marginBottom: 4, fontSize: 10 }}>{truncationWarning}</div>
+              )}
               <span style={{ color: '#FF9500' }}>
                 {modifiedIdSetRef.current.size} modified
               </span>

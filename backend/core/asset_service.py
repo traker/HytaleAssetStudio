@@ -31,6 +31,7 @@ def resolve_server_json(
     cfg: ProjectConfig,
     asset_key: str,
     index=None,
+    mounts: list[Mount] | None = None,
 ) -> ResolvedServerJson:
     # Ensure index present (memory or disk cache or rebuild)
     if index is None:
@@ -64,7 +65,8 @@ def resolve_server_json(
     if not mount_id:
         raise http_error(500, "MOUNT_MISSING", "Index is missing mount for resolved path", {"path": vfs_path})
 
-    mounts = build_mounts(cfg)
+    if mounts is None:
+        mounts = build_mounts(cfg)
     mounts_by_id = {m.mount_id: m for m in mounts}
     mount = mounts_by_id[mount_id]
 
@@ -96,7 +98,8 @@ def write_server_json_copy(cfg: ProjectConfig, asset_key: str, new_id: str, payl
         raise http_error(422, "ID_INVALID", "newId must be a valid server asset ID (alphanumeric + underscore)", {"newId": new_id})
 
     index = ensure_index(cfg.project.id, cfg)
-    resolved = resolve_server_json(cfg, asset_key, index=index)
+    mounts = build_mounts(cfg)
+    resolved = resolve_server_json(cfg, asset_key, index=index, mounts=mounts)
 
     if not resolved.vfs_path.lower().startswith("server/"):
         raise http_error(500, "RESOLVE_INVALID", "Resolved path is not under Server/", {"path": resolved.vfs_path})
@@ -200,8 +203,8 @@ def resolve_common_resource(cfg: ProjectConfig, asset_key: str) -> ResolvedCommo
     if not mount_id:
         raise http_error(404, "RESOURCE_NOT_FOUND", "Common resource not found", {"path": vfs_path})
 
-    mounts = build_mounts(cfg)
-    mounts_by_id = {m.mount_id: m for m in mounts}
+    res_mounts = build_mounts(cfg)
+    mounts_by_id = {m.mount_id: m for m in res_mounts}
     mount = mounts_by_id[mount_id]
 
     origin = index.origin_by_vfs_path.get(vfs_path, "vanilla")

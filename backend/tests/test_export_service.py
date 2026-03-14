@@ -1,18 +1,18 @@
 from __future__ import annotations
 
 import tempfile
-import unittest
 import zipfile
 from pathlib import Path
 
 from fastapi import HTTPException
 
+import pytest
 from backend.core.export_service import export_project_zip
 from backend.core.io import write_json
 from backend.core.models import PackSource, ProjectConfig, ProjectConfigProject
 
 
-class ExportProjectZipTests(unittest.TestCase):
+class ExportProjectZipTests:
     def make_config(self, project_root: Path) -> ProjectConfig:
         return ProjectConfig(
             project=ProjectConfigProject(
@@ -41,10 +41,10 @@ class ExportProjectZipTests(unittest.TestCase):
             project_root.mkdir(parents=True)
             cfg = self.make_config(project_root)
 
-            with self.assertRaises(HTTPException) as ctx:
+            with pytest.raises(HTTPException) as exc_info:
                 export_project_zip(cfg, str(project_root / "out.zip"))
 
-            self.assertEqual(ctx.exception.status_code, 422)
+            assert exc_info.value.status_code == 422
 
     def test_export_whitelist_excludes_studio_internal_files(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -67,14 +67,7 @@ class ExportProjectZipTests(unittest.TestCase):
             with zipfile.ZipFile(output_path, "r") as archive:
                 names = sorted(archive.namelist())
 
-            self.assertEqual(
-                names,
-                [
-                    "Common/Icons/Sword.png",
-                    "Server/Items/Sword.json",
-                    "manifest.json",
-                ],
-            )
+            assert names == [ "Common/Icons/Sword.png", "Server/Items/Sword.json", "manifest.json", ]
 
     def test_export_keeps_only_pack_paths(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -92,10 +85,7 @@ class ExportProjectZipTests(unittest.TestCase):
             with zipfile.ZipFile(output_path, "r") as archive:
                 names = sorted(archive.namelist())
 
-            self.assertNotIn("README.json", names)
-            self.assertIn("Server/Root.json", names)
-            self.assertIn("manifest.json", names)
+            assert "README.json" not in names
+            assert "Server/Root.json" in names
+            assert "manifest.json" in names
 
-
-if __name__ == "__main__":
-    unittest.main()

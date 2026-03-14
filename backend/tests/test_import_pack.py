@@ -1,18 +1,18 @@
 from __future__ import annotations
 
 import tempfile
-import unittest
 from pathlib import Path
 
 from fastapi import HTTPException
 
+import pytest
 from backend.core.config import Settings
 from backend.core.io import read_json, write_json
 from backend.core.models import ImportPackNewProject, ImportPackRequest, PackSource
-from backend.core.workspace_service import import_pack
+from backend.core.import_service import import_pack
 
 
-class ImportPackTests(unittest.TestCase):
+class ImportPackTests:
     def make_settings(self, workspace_root: Path) -> Settings:
         return Settings(
             workspace_root=workspace_root,
@@ -65,13 +65,13 @@ class ImportPackTests(unittest.TestCase):
 
             manifest_path = workspace_root / "projects" / response.projectId / "manifest.json"
             manifest = read_json(manifest_path)
-            self.assertEqual(manifest["Group"], "legacy.group")
-            self.assertEqual(manifest["Name"], "Legacy Pack")
-            self.assertEqual(manifest["Version"], "2.5.1")
-            self.assertEqual(manifest["Description"], "Imported manifest")
-            self.assertEqual(manifest["Authors"][0]["Name"], "Guill")
-            self.assertTrue(manifest["IncludesAssetPack"])
-            self.assertTrue(manifest["DisabledByDefault"])
+            assert manifest["Group"] == "legacy.group"
+            assert manifest["Name"] == "Legacy Pack"
+            assert manifest["Version"] == "2.5.1"
+            assert manifest["Description"] == "Imported manifest"
+            assert manifest["Authors"][0]["Name"] == "Guill"
+            assert manifest["IncludesAssetPack"]
+            assert manifest["DisabledByDefault"]
 
     def test_import_pack_rejects_invalid_manifest_json(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -80,12 +80,12 @@ class ImportPackTests(unittest.TestCase):
 
             (pack_root / "manifest.json").write_text("{ invalid json", encoding="utf-8")
 
-            with self.assertRaises(HTTPException) as ctx:
+            with pytest.raises(HTTPException) as exc_info:
                 import_pack(settings, self.make_request(pack_root))
 
-            self.assertEqual(ctx.exception.status_code, 422)
-            self.assertEqual(ctx.exception.detail["error"]["code"], "MANIFEST_INVALID")
-            self.assertEqual(list((workspace_root / "projects").iterdir()), [])
+            assert exc_info.value.status_code == 422
+            assert exc_info.value.detail["error"]["code"] == "MANIFEST_INVALID"
+            assert list((workspace_root / "projects").iterdir()) == []
 
     def test_import_pack_without_manifest_keeps_default_project_manifest(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -98,9 +98,6 @@ class ImportPackTests(unittest.TestCase):
             )
 
             manifest = read_json(workspace_root / "projects" / response.projectId / "manifest.json")
-            self.assertEqual(manifest["Group"], "override-pack")
-            self.assertEqual(manifest["Name"], "Override Pack")
+            assert manifest["Group"] == "override-pack"
+            assert manifest["Name"] == "Override Pack"
 
-
-if __name__ == "__main__":
-    unittest.main()
