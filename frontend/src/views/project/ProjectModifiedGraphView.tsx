@@ -193,6 +193,7 @@ export function ProjectModifiedGraphView(props: Props) {
   const previousSelectedNodeIdRef = useRef<string | null>(null)
   const previousActiveHighlightRef = useRef<HighlightState | null>(null)
   const reactFlowInstanceRef = useRef<{ fitView: (opts?: { nodes?: Array<{ id: string }>, padding?: number, duration?: number }) => void } | null>(null)
+  const pendingFocusRef = useRef<string | null>(null)
 
   const modifiedRootNodes = rawNodesRef.current.filter((node) => node.isModifiedRoot)
   const newRootCount = modifiedRootNodes.filter((node) => node.modificationKind === 'new').length
@@ -222,18 +223,12 @@ export function ProjectModifiedGraphView(props: Props) {
 
   const handleModifiedEntryClick = useCallback((entry: ModifiedAssetEntry) => {
     if (!entry.assetKey) return
-    setSelectedNodeId(entry.assetKey)
-    setActiveHighlight(null)
     const nodeId = entry.assetKey
     if (rawNodesRef.current.some((n) => n.id === nodeId)) {
-      setTimeout(() => {
-        reactFlowInstanceRef.current?.fitView({
-          nodes: [{ id: nodeId }] as { id: string }[],
-          padding: 0.5,
-          duration: 500,
-        })
-      }, 50)
+      pendingFocusRef.current = nodeId
     }
+    setSelectedNodeId(nodeId)
+    setActiveHighlight(null)
   }, [])
 
   // ── Sync isSelected + isConnected on nodes, animate highlighted edges ─────
@@ -300,6 +295,19 @@ export function ProjectModifiedGraphView(props: Props) {
   // rebuildTick ensures this re-runs after an expand merges new edges into baseEdgesRef
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedNodeId, activeHighlight, rebuildTick])
+
+  // Focus graph on a node requested from the list (runs after nodes state is updated)
+  useEffect(() => {
+    const id = pendingFocusRef.current
+    if (!id) return
+    pendingFocusRef.current = null
+    reactFlowInstanceRef.current?.fitView({
+      nodes: [{ id }] as { id: string }[],
+      padding: 0.5,
+      duration: 500,
+    })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [nodes])
 
   // dep-ref click from inside a BlueprintNode
   const handleSelectNode = useCallback((sourceId: string, targetId: string) => {
