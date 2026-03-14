@@ -48,7 +48,7 @@ export function ProjectConfigView(props: Props) {
         setDraftManifest(clone(mfst))
       } catch (e) {
         if (cancelled) return
-        setError(e instanceof HasApiError ? e.message : 'Unexpected error')
+        setError(e instanceof HasApiError ? e.message : 'Unable to load project settings.')
       } finally {
         if (!cancelled) setStatus({ kind: 'idle' })
       }
@@ -140,10 +140,10 @@ export function ProjectConfigView(props: Props) {
     setManifestStatus({})
     try {
       await hasApi.projectPutManifest(props.projectId, draftManifest)
-      setManifestStatus({ message: 'Manifest saved' })
+      setManifestStatus({ message: 'Manifest saved.' })
       setTimeout(() => setManifestStatus({}), 1500)
     } catch (e) {
-      setManifestStatus({ error: e instanceof HasApiError ? e.message : 'Failed to save manifest' })
+      setManifestStatus({ error: e instanceof HasApiError ? e.message : 'Unable to save manifest.' })
     }
   }
 
@@ -170,11 +170,11 @@ export function ProjectConfigView(props: Props) {
       setConfig(cfg)
       setDraftVanilla(clone(cfg.vanilla))
       setDraftLayers(clone(cfg.layers ?? []))
-      setStatus({ kind: 'idle', message: 'Saved' })
+      setStatus({ kind: 'idle', message: 'Project settings saved.' })
       setTimeout(() => setStatus({ kind: 'idle' }), 1200)
     } catch (e) {
       setStatus({ kind: 'idle' })
-      setError(e instanceof HasApiError ? e.message : 'Unexpected error')
+      setError(e instanceof HasApiError ? e.message : 'Unable to save project settings.')
     }
   }
 
@@ -189,11 +189,11 @@ export function ProjectConfigView(props: Props) {
         return
       }
       await hasApi.exportZip(props.projectId, { outputPath: out })
-      setStatus({ kind: 'idle', message: 'Exported' })
+      setStatus({ kind: 'idle', message: 'Project exported.' })
       setTimeout(() => setStatus({ kind: 'idle' }), 1200)
     } catch (e) {
       setStatus({ kind: 'idle' })
-      setError(e instanceof HasApiError ? e.message : 'Unexpected error')
+      setError(e instanceof HasApiError ? e.message : 'Unable to export project.')
     }
   }
 
@@ -219,6 +219,25 @@ export function ProjectConfigView(props: Props) {
         </button>
       </div>
 
+      <div
+        className="card"
+        style={{
+          marginBottom: 16,
+          borderColor: '#2f3d52',
+          background: 'rgba(19, 24, 36, 0.78)',
+        }}
+      >
+        <p className="section-title" style={{ marginBottom: 10 }}>Interactions Workflow</p>
+        <div style={{ fontSize: 13, color: '#ccd5df', lineHeight: 1.6 }}>
+          The Interactions view opens from a selected item, not directly from the project dashboard.
+        </div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 12 }}>
+          <span style={{ fontSize: 11, color: '#8aa4b8', border: '1px solid #33485d', borderRadius: 999, padding: '4px 8px' }}>1. Open Items Graph</span>
+          <span style={{ fontSize: 11, color: '#8aa4b8', border: '1px solid #33485d', borderRadius: 999, padding: '4px 8px' }}>2. Select an item asset</span>
+          <span style={{ fontSize: 11, color: '#8aa4b8', border: '1px solid #33485d', borderRadius: 999, padding: '4px 8px' }}>3. Use Open Interactions</span>
+        </div>
+      </div>
+
       {/* ── Config card ── */}
       <div className="card" style={{ marginBottom: 16 }}>
         <p className="section-title" style={{ marginBottom: 16 }}>Project configuration — {props.projectId}</p>
@@ -227,7 +246,7 @@ export function ProjectConfigView(props: Props) {
         {status.message && <p className="success-msg">{status.message}</p>}
 
         {!config || !draftVanilla ? (
-          <p style={{ color: '#555', fontSize: 13 }}>{status.kind === 'loading' ? 'Loading…' : 'No config loaded.'}</p>
+          <p style={{ color: '#555', fontSize: 13 }}>{status.kind === 'loading' ? 'Loading project settings…' : 'Project settings are unavailable.'}</p>
         ) : (
           <>
             {/* Layers */}

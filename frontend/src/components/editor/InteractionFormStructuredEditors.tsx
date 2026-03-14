@@ -51,26 +51,56 @@ function FieldSection({
   title,
   description,
   children,
+  collapsible = false,
+  defaultCollapsed = false,
 }: {
   title: string
   description?: string
   children: React.ReactNode
+  collapsible?: boolean
+  defaultCollapsed?: boolean
 }) {
+  const [collapsed, setCollapsed] = useState(defaultCollapsed)
+
   return (
     <div
       style={{
-        marginBottom: 12,
-        padding: '10px 10px 2px',
+        marginBottom: 14,
+        padding: '12px 12px 4px',
         border: '1px solid #2b2b3f',
         borderRadius: 6,
         background: 'rgba(25, 25, 40, 0.55)',
       }}
     >
-      <div style={{ fontSize: 10, color: '#8d8db4', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 700 }}>
-        {title}
-      </div>
-      {description && <div style={{ fontSize: 10, color: '#666', marginBottom: 8 }}>{description}</div>}
-      {children}
+      {collapsible ? (
+        <button
+          type="button"
+          onClick={() => setCollapsed((value) => !value)}
+          style={{
+            width: '100%',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 10,
+            background: 'transparent',
+            border: 'none',
+            cursor: 'pointer',
+            padding: 0,
+            marginBottom: collapsed ? 0 : 8,
+          }}
+        >
+          <span style={{ fontSize: 11, color: '#9da5ca', textTransform: 'uppercase', letterSpacing: '0.07em', fontWeight: 700, textAlign: 'left' }}>
+            {title}
+          </span>
+          <span style={{ fontSize: 11, color: '#747ca0', flexShrink: 0 }}>{collapsed ? '▸' : '▾'}</span>
+        </button>
+      ) : (
+        <div style={{ fontSize: 11, color: '#9da5ca', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.07em', fontWeight: 700 }}>
+          {title}
+        </div>
+      )}
+      {!collapsed && description && <div style={{ fontSize: 11, color: '#666', marginBottom: 9, lineHeight: 1.45 }}>{description}</div>}
+      {!collapsed && children}
     </div>
   )
 }
@@ -398,7 +428,7 @@ export function HitEntityRulesEditor({
   }
 
   return (
-    <FieldSection title="HitEntityRules" description="Conditional entity-targeting rules. These remain form-edited for now and are not yet mapped as first-class graph branches.">
+    <FieldSection title="HitEntityRules" description="Conditional entity-targeting rules. These remain form-edited for now and are not yet mapped as first-class graph branches." collapsible defaultCollapsed>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         {entries.length === 0 && <div style={{ fontSize: 11, color: '#555', fontStyle: 'italic' }}>No hit-entity rules yet.</div>}
         {entries.map((entry, index) => (

@@ -19,7 +19,8 @@ import { BlueprintNode } from '../../components/graph/BlueprintNode'
 import type { BlueprintNodeData, OutgoingDep } from '../../components/graph/blueprintTypes'
 import { getBlueprintNodeDisplay, isInteractionBlueprintGroup } from '../../components/graph/blueprintTypes'
 import { getColorForGroup, getColorForEdgeType } from '../../components/graph/colors'
-import { layoutGraph, layoutGraphElk, MAX_DAGRE_NODES } from '../../components/graph/layoutDagre'
+import { formatGraphTruncationWarning, layoutGraph, layoutGraphElk } from '../../components/graph/layoutDagre'
+import { UnsavedChangesDialog } from '../../components/ui/UnsavedChangesDialog'
 import { measureAsync, measureSync, schedulePaintMeasure } from '../../perf/audit'
 import { useLayoutEngine } from '../../hooks/useLayoutEngine'
 
@@ -37,6 +38,41 @@ type Props = {
 type HighlightState = {
   edgeIds: Set<string>
   nodeIds: Set<string>
+}
+
+type PendingViewportAction = { kind: 'fit-all' } | { kind: 'focus-node'; id: string }
+
+function isExpandableNodeId(nodeId: string): boolean {
+  return nodeId.startsWith('server:') || nodeId.startsWith('server-path:')
+}
+
+function hasLoadedChildren(nodeId: string, rawEdges: RawEdge[]): boolean {
+  return rawEdges.some((edge) => edge.from === nodeId)
+}
+
+function computeNodeDepthsFromRoots(rootIds: string[], rawEdges: RawEdge[]): Map<string, number> {
+  const outgoingMap = new Map<string, string[]>()
+  for (const edge of rawEdges) {
+    const list = outgoingMap.get(edge.from)
+    if (list) list.push(edge.to)
+    else outgoingMap.set(edge.from, [edge.to])
+  }
+
+  const depths = new Map<string, number>()
+  const queue = [...rootIds]
+  for (const rootId of rootIds) depths.set(rootId, 0)
+
+  while (queue.length > 0) {
+    const current = queue.shift()!
+    const nextDepth = (depths.get(current) ?? 0) + 1
+    for (const targetId of outgoingMap.get(current) ?? []) {
+      if (depths.has(targetId)) continue
+      depths.set(targetId, nextDepth)
+      queue.push(targetId)
+    }
+  }
+
+  return depths
 }
 
 function resolveEntryModificationKind(entry: ModifiedAssetEntry): 'override' | 'new' {
@@ -71,6 +107,42 @@ function computeIsolatedSubgraph(rootId: string, edges: RawEdge[]): Set<string> 
   return nodeIds
 }
 
+function collectVisibleSubgraph(
+  rawNodes: RawNode[],
+  rawEdges: RawEdge[],
+  rootIds: string[],
+  collapsedNodeIds: Set<string>,
+  revealedChildIdsBySource: Map<string, Set<string>>,
+): { nodes: RawNode[]; edges: RawEdge[] } {
+  const nodeById = new Map(rawNodes.map((node) => [node.id, node]))
+  const outgoingMap = new Map<string, RawEdge[]>()
+  for (const edge of rawEdges) {
+    const list = outgoingMap.get(edge.from)
+    if (list) list.push(edge)
+    else outgoingMap.set(edge.from, [edge])
+  }
+
+  const visibleNodeIds = new Set<string>()
+  const queue = rootIds.filter((rootId) => nodeById.has(rootId))
+  queue.forEach((rootId) => visibleNodeIds.add(rootId))
+
+  while (queue.length > 0) {
+    const current = queue.shift()!
+    for (const edge of outgoingMap.get(current) ?? []) {
+      const isExplicitlyRevealed = revealedChildIdsBySource.get(current)?.has(edge.to) === true
+      if (collapsedNodeIds.has(current) && !isExplicitlyRevealed) continue
+      if (!nodeById.has(edge.to) || visibleNodeIds.has(edge.to)) continue
+      visibleNodeIds.add(edge.to)
+      queue.push(edge.to)
+    }
+  }
+
+  return {
+    nodes: rawNodes.filter((node) => visibleNodeIds.has(node.id)),
+    edges: rawEdges.filter((edge) => visibleNodeIds.has(edge.from) && visibleNodeIds.has(edge.to)),
+  }
+}
+
 function buildFlowSignature(rawNodes: RawNode[], rawEdges: RawEdge[], modifiedIdSet: Set<string>): string {
   const nodePart = rawNodes
     .map((node) => `${node.id}|${node.path ?? ''}|${node.group ?? ''}|${node.state}|${node.modificationKind ?? ''}|${modifiedIdSet.has(node.id) ? '1' : '0'}`)
@@ -81,7 +153,12 @@ function buildFlowSignature(rawNodes: RawNode[], rawEdges: RawEdge[], modifiedId
   return `${nodePart}#${edgePart}`
 }
 
-function collectAffectedNodeIds(previousSelectedNodeId: string | null, previousHighlight: HighlightState | null, nextSelectedNodeId: string | null, nextHighlight: HighlightState | null): Set<string> {
+function collectAffectedNodeIds(
+  previousSelectedNodeId: string | null,
+  nextSelectedNodeId: string | null,
+  previousHighlight: HighlightState | null,
+  nextHighlight: HighlightState | null,
+): Set<string> {
   const ids = new Set<string>()
   if (previousSelectedNodeId) ids.add(previousSelectedNodeId)
   if (nextSelectedNodeId) ids.add(nextSelectedNodeId)
@@ -99,20 +176,24 @@ function collectAffectedEdgeIds(previousHighlight: HighlightState | null, nextHi
 
 // ── Build ReactFlow nodes+edges from raw API data ─────────────────────────────
 function toFlow(
-  rawNodes: RawNode[],
-  rawEdges: RawEdge[],
+  visibleNodes: RawNode[],
+  visibleEdges: RawEdge[],
+  dependencyNodes: RawNode[],
+  dependencyEdges: RawEdge[],
   modifiedIdSet: Set<string>,
   onSelectNode: (src: string, tgt: string) => void,
+  onToggleExpand: (nodeId: string) => void,
+  collapsedNodeIds: Set<string>,
 ) {
   return measureSync('graph.modified_to_flow', () => {
     const nodeById = new Map<string, RawNode>()
-    for (const node of rawNodes) {
+    for (const node of dependencyNodes) {
       nodeById.set(node.id, node)
     }
 
     const outgoingMap = new Map<string, OutgoingDep[]>()
-    for (const n of rawNodes) outgoingMap.set(n.id, [])
-    for (const e of rawEdges) {
+    for (const n of dependencyNodes) outgoingMap.set(n.id, [])
+    for (const e of dependencyEdges) {
       const list = outgoingMap.get(e.from) ?? []
       const target = nodeById.get(e.to)
       list.push({
@@ -124,7 +205,7 @@ function toFlow(
       outgoingMap.set(e.from, list)
     }
 
-    const nodes: Array<Node<BlueprintNodeData>> = rawNodes.map((n) => ({
+    const nodes: Array<Node<BlueprintNodeData>> = visibleNodes.map((n) => ({
       id: n.id,
       type: 'blueprint',
       position: { x: 0, y: 0 },
@@ -138,10 +219,13 @@ function toFlow(
         nodeId: n.id,
         outgoing: outgoingMap.get(n.id) ?? [],
         onSelectNode,
+        canToggleExpand: isExpandableNodeId(n.id) && hasLoadedChildren(n.id, dependencyEdges),
+        isExpanded: hasLoadedChildren(n.id, dependencyEdges) && !collapsedNodeIds.has(n.id),
+        onToggleExpand,
       },
     }))
 
-    const edges: Edge[] = rawEdges.map((e) => {
+    const edges: Edge[] = visibleEdges.map((e) => {
       const color = getColorForEdgeType(e.type)
       const showLabel = SEMANTIC_EDGE_TYPES.has(e.type)
       return {
@@ -159,7 +243,7 @@ function toFlow(
     })
 
     return layoutGraph(nodes, edges, 'LR')
-  }, { nodes: rawNodes.length, edges: rawEdges.length, modifiedRoots: modifiedIdSet.size })
+  }, { nodes: visibleNodes.length, edges: visibleEdges.length, modifiedRoots: modifiedIdSet.size })
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -180,6 +264,9 @@ export function ProjectModifiedGraphView(props: Props) {
   const rawEdgesRef = useRef<RawEdge[]>([])
   const modifiedIdSetRef = useRef<Set<string>>(new Set())
   const expandedNodeIdsRef = useRef<Set<string>>(new Set())
+  const collapsedNodeIdsRef = useRef<Set<string>>(new Set())
+  const revealedChildIdsRef = useRef<Map<string, Set<string>>>(new Map())
+  const visibleNodeIdsRef = useRef<Set<string>>(new Set())
 
   const [nodes, setNodes] = useState<Array<Node<BlueprintNodeData>>>([])
   const [edges, setEdges] = useState<Edge[]>([])
@@ -207,6 +294,10 @@ export function ProjectModifiedGraphView(props: Props) {
 
   // Selected node + side panel
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
+  const selectedNodeIdRef = useRef<string | null>(null)
+  const [assetPanelDirty, setAssetPanelDirty] = useState(false)
+  const assetPanelDirtyRef = useRef(false)
+  const [showUnsavedDialog, setShowUnsavedDialog] = useState(false)
   const [asset, setAsset] = useState<AssetGetResponse | null>(null)
   const [assetLoading, setAssetLoading] = useState(false)
   const [assetError, setAssetError] = useState<string | null>(null)
@@ -218,7 +309,8 @@ export function ProjectModifiedGraphView(props: Props) {
   const previousSelectedNodeIdRef = useRef<string | null>(null)
   const previousActiveHighlightRef = useRef<HighlightState | null>(null)
   const reactFlowInstanceRef = useRef<{ fitView: (opts?: { nodes?: Array<{ id: string }>, padding?: number, duration?: number }) => void } | null>(null)
-  const pendingFocusRef = useRef<string | null>(null)
+  const pendingViewportActionRef = useRef<PendingViewportAction | null>(null)
+  const pendingAssetActionRef = useRef<(() => void) | null>(null)
 
   const modifiedRootNodes = rawNodesRef.current.filter((node) => node.isModifiedRoot)
   const newRootCount = modifiedRootNodes.filter((node) => node.modificationKind === 'new').length
@@ -267,40 +359,84 @@ export function ProjectModifiedGraphView(props: Props) {
     })
   }, [visibleModifiedEntries, filterText, filterGroup, entryGroupMap])
 
+  const currentAssetLabel = asset?.resolvedPath
+    ?? nodes.find((node) => node.id === selectedNodeId)?.data.path
+    ?? nodes.find((node) => node.id === selectedNodeId)?.data.label
+    ?? selectedNodeId
+
+  useEffect(() => {
+    selectedNodeIdRef.current = selectedNodeId
+  }, [selectedNodeId])
+
+  useEffect(() => {
+    assetPanelDirtyRef.current = assetPanelDirty
+  }, [assetPanelDirty])
+
+  const requestAssetPanelAction = useCallback((action: () => void) => {
+    if (!selectedNodeIdRef.current || !assetPanelDirtyRef.current) {
+      action()
+      return
+    }
+    pendingAssetActionRef.current = action
+    setShowUnsavedDialog(true)
+  }, [])
+
+  const confirmDiscardAssetChanges = useCallback(() => {
+    setShowUnsavedDialog(false)
+    setAssetPanelDirty(false)
+    assetPanelDirtyRef.current = false
+    const action = pendingAssetActionRef.current
+    pendingAssetActionRef.current = null
+    action?.()
+  }, [])
+
+  const cancelDiscardAssetChanges = useCallback(() => {
+    setShowUnsavedDialog(false)
+    pendingAssetActionRef.current = null
+  }, [])
+
   const handleModifiedEntryClick = useCallback((entry: ModifiedAssetEntry) => {
     if (!entry.assetKey) return
     const assetKey = entry.assetKey
-
-    // Clear any active isolation so the full graph is visible before focusing
-    if (isolatedRootIdRef.current !== null) {
-      isolatedRootIdRef.current = null
-      setIsolatedRootId(null)
-      lastFlowSignatureRef.current = null
-      rebuildFlowRef.current()
-    }
 
     // assetKey from the modified list is always "server-path:…" but the graph node
     // may use "server:SomeId" when the ID is unique — resolve by path or direct match
     const graphNode = rawNodesRef.current.find(
       (n) => n.id === assetKey || (n.path != null && assetKey === `server-path:${n.path}`),
     )
-    if (graphNode) {
-      // Use the graph node's actual ID so the highlight effect updates `nodes`
-      // (which triggers the focus useEffect to call fitView)
-      pendingFocusRef.current = graphNode.id
-      setSelectedNodeId(graphNode.id)
-    } else {
-      setSelectedNodeId(assetKey)
-    }
-    setActiveHighlight(null)
+    requestAssetPanelAction(() => {
+      // Clear any active isolation so the full graph is visible before focusing
+      if (isolatedRootIdRef.current !== null) {
+        isolatedRootIdRef.current = null
+        setIsolatedRootId(null)
+        lastFlowSignatureRef.current = null
+        rebuildFlowRef.current()
+      }
+
+      if (graphNode) {
+        // Use the graph node's actual ID so the highlight effect updates `nodes`
+        // (which triggers the focus useEffect to call fitView)
+        pendingViewportActionRef.current = { kind: 'focus-node', id: graphNode.id }
+        setSelectedNodeId(graphNode.id)
+      } else {
+        pendingViewportActionRef.current = { kind: 'focus-node', id: assetKey }
+        setSelectedNodeId(assetKey)
+      }
+      setActiveHighlight(null)
+    })
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [requestAssetPanelAction])
 
   // ── Sync isSelected + isConnected on nodes, animate highlighted edges ─────
   useEffect(() => {
     const previousSelectedNodeId = previousSelectedNodeIdRef.current
     const previousActiveHighlight = previousActiveHighlightRef.current
-    const affectedNodeIds = collectAffectedNodeIds(previousSelectedNodeId, previousActiveHighlight, selectedNodeId, activeHighlight)
+    const affectedNodeIds = collectAffectedNodeIds(
+      previousSelectedNodeId,
+      selectedNodeId,
+      previousActiveHighlight,
+      activeHighlight,
+    )
     const affectedEdgeIds = collectAffectedEdgeIds(previousActiveHighlight, activeHighlight)
 
     setNodes((prev) => {
@@ -309,7 +445,7 @@ export function ProjectModifiedGraphView(props: Props) {
       const next = prev.map((node) => {
         if (!affectedNodeIds.has(node.id)) return node
         const isSelected = node.id === selectedNodeId
-        const isConnected = activeHighlight?.nodeIds.has(node.id) === true && node.id !== selectedNodeId
+        const isConnected = activeHighlight?.nodeIds.has(node.id) === true
         if (node.data.isSelected === isSelected && node.data.isConnected === isConnected) {
           return node
         }
@@ -342,14 +478,16 @@ export function ProjectModifiedGraphView(props: Props) {
             ...edge,
             animated: true,
             zIndex: 1000,
-            style: { ...(edge.style as object), stroke: '#00D4FF', strokeDasharray: '6 3', strokeWidth: 2.5 },
+            style: {
+              ...(edge.style as object),
+              stroke: '#00D4FF',
+              strokeWidth: 2.5,
+              strokeDasharray: '6 4',
+            },
             markerEnd: { type: 'arrowclosed' as const, color: '#00D4FF' },
           }
         }
-        if (existing && existing.animated === false) {
-          return existing
-        }
-        changed = true
+        if (existing !== edge) changed = true
         return edge
       })
       return changed ? next : prev
@@ -361,13 +499,17 @@ export function ProjectModifiedGraphView(props: Props) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedNodeId, activeHighlight, rebuildTick])
 
-  // Focus graph on a node requested from the list (runs after nodes state is updated)
+  // Apply only explicit viewport actions after nodes state is updated.
   useEffect(() => {
-    const id = pendingFocusRef.current
-    if (!id) return
-    pendingFocusRef.current = null
+    const action = pendingViewportActionRef.current
+    if (!action) return
+    pendingViewportActionRef.current = null
+    if (action.kind === 'fit-all') {
+      reactFlowInstanceRef.current?.fitView({ padding: 0.15, duration: 400 })
+      return
+    }
     reactFlowInstanceRef.current?.fitView({
-      nodes: [{ id }] as { id: string }[],
+      nodes: [{ id: action.id }] as { id: string }[],
       padding: 0.5,
       duration: 500,
     })
@@ -376,26 +518,52 @@ export function ProjectModifiedGraphView(props: Props) {
 
   // dep-ref click from inside a BlueprintNode
   const handleSelectNode = useCallback((sourceId: string, targetId: string) => {
-    setSelectedNodeId(targetId)
-    const matchingEdges = baseEdgesRef.current.filter(
-      (e) => e.source === sourceId && e.target === targetId,
-    )
-    setActiveHighlight({
-      edgeIds: new Set(matchingEdges.map((e) => e.id)),
-      nodeIds: new Set([targetId]),
+    requestAssetPanelAction(() => {
+      const matchingEdges = rawEdgesRef.current.filter(
+        (e) => e.from === sourceId && e.to === targetId,
+      )
+      setSelectedNodeId(targetId)
+      setActiveHighlight({
+        edgeIds: new Set(matchingEdges.map((e) => `${e.from}->${e.to}:${e.type}`)),
+        nodeIds: new Set([targetId]),
+      })
+      if (!visibleNodeIdsRef.current.has(targetId)) {
+        if (collapsedNodeIdsRef.current.has(sourceId)) {
+          collapsedNodeIdsRef.current.delete(sourceId)
+          revealedChildIdsRef.current.delete(sourceId)
+          rebuildFlowRef.current()
+        } else if (!expandedNodeIdsRef.current.has(sourceId)) {
+          void expandNode(sourceId)
+        }
+      }
     })
-  }, [])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [requestAssetPanelAction])
 
   // Rebuild ReactFlow display from accumulated raw data
   const rebuildFlow = useCallback(() => {
-    const rootId = isolatedRootIdRef.current
-    let visibleNodes = rawNodesRef.current
-    let visibleEdges = rawEdgesRef.current
-    if (rootId) {
-      const nodeIds = computeIsolatedSubgraph(rootId, rawEdgesRef.current)
-      visibleNodes = rawNodesRef.current.filter((n) => nodeIds.has(n.id))
-      visibleEdges = rawEdgesRef.current.filter((e) => nodeIds.has(e.from) && nodeIds.has(e.to))
-    }
+    const rootIds = isolatedRootIdRef.current
+      ? [isolatedRootIdRef.current]
+      : rawNodesRef.current
+          .filter((node) => node.isModifiedRoot ?? modifiedIdSetRef.current.has(node.id))
+          .map((node) => node.id)
+    const isolated = isolatedRootIdRef.current
+      ? computeIsolatedSubgraph(isolatedRootIdRef.current, rawEdgesRef.current)
+      : null
+    const candidateNodes = isolated
+      ? rawNodesRef.current.filter((n) => isolated.has(n.id))
+      : rawNodesRef.current
+    const candidateEdges = isolated
+      ? rawEdgesRef.current.filter((e) => isolated.has(e.from) && isolated.has(e.to))
+      : rawEdgesRef.current
+    const { nodes: visibleNodes, edges: visibleEdges } = collectVisibleSubgraph(
+      candidateNodes,
+      candidateEdges,
+      rootIds,
+      collapsedNodeIdsRef.current,
+      revealedChildIdsRef.current,
+    )
+    visibleNodeIdsRef.current = new Set(visibleNodes.map((node) => node.id))
     const flowSignature = buildFlowSignature(visibleNodes, visibleEdges, modifiedIdSetRef.current)
     if (lastFlowSignatureRef.current === flowSignature) {
       return
@@ -404,8 +572,31 @@ export function ProjectModifiedGraphView(props: Props) {
     const { nodes: fn, edges: fe, truncatedAt } = toFlow(
       visibleNodes,
       visibleEdges,
+      candidateNodes,
+      candidateEdges,
       modifiedIdSetRef.current,
       handleSelectNode,
+      (nodeId: string) => {
+        if (!nodeId) return
+        const childrenAlreadyLoaded = hasLoadedChildren(nodeId, rawEdgesRef.current)
+        if (collapsedNodeIdsRef.current.has(nodeId)) {
+          if (childrenAlreadyLoaded) {
+            collapsedNodeIdsRef.current.delete(nodeId)
+            rebuildFlowRef.current()
+          } else {
+            void expandNode(nodeId)
+          }
+          return
+        }
+        if (childrenAlreadyLoaded) {
+          collapsedNodeIdsRef.current.add(nodeId)
+          revealedChildIdsRef.current.delete(nodeId)
+          rebuildFlowRef.current()
+          return
+        }
+        void expandNode(nodeId)
+      },
+      collapsedNodeIdsRef.current,
     )
     lastFlowSignatureRef.current = flowSignature
     graphPaintStartedAtRef.current = performance.now()
@@ -416,7 +607,10 @@ export function ProjectModifiedGraphView(props: Props) {
     setEdges(fe)
     setTruncationWarning(
       truncatedAt != null
-        ? `⚠ Graph truncated to ${MAX_DAGRE_NODES} nodes (${truncatedAt} total)`
+        ? formatGraphTruncationWarning(
+            truncatedAt,
+            'Lower depth or isolate one modified root from the list to inspect more.',
+          )
         : null,
     )
     setRebuildTick((t) => t + 1)
@@ -456,23 +650,23 @@ export function ProjectModifiedGraphView(props: Props) {
     isolatedRootIdRef.current = selectedNodeId
     setIsolatedRootId(selectedNodeId)
     lastFlowSignatureRef.current = null
-    rebuildFlow()
-  }, [selectedNodeId, rebuildFlow])
+    rebuildFlowRef.current()
+  }, [selectedNodeId])
 
   const clearIsolation = useCallback(() => {
     isolatedRootIdRef.current = null
     setIsolatedRootId(null)
     lastFlowSignatureRef.current = null
-    rebuildFlow()
-  }, [rebuildFlow])
+    rebuildFlowRef.current()
+  }, [])
 
   // ── Soft graph refresh after a save (keeps current selection) ────────────
   const softReloadGraph = useCallback(async () => {
     try {
       const [graphResp, modifiedResp] = await Promise.all([
-        measureAsync('view.modified_graph.fetch_graph', () => hasApi.projectGraphModified(props.projectId, depth), {
+        measureAsync('view.modified_graph.fetch_graph', () => hasApi.projectGraphModified(props.projectId, depth + 1), {
           projectId: props.projectId,
-          depth,
+          depth: depth + 1,
         }),
         measureAsync('view.modified_graph.fetch_list', () => hasApi.projectModified(props.projectId), {
           projectId: props.projectId,
@@ -482,13 +676,27 @@ export function ProjectModifiedGraphView(props: Props) {
       rawEdgesRef.current = graphResp.edges
       modifiedIdSetRef.current = new Set(graphResp.modifiedIds ?? [])
       expandedNodeIdsRef.current = new Set(graphResp.modifiedIds ?? [])
+      collapsedNodeIdsRef.current = new Set()
+      revealedChildIdsRef.current = new Map()
+      visibleNodeIdsRef.current = new Set()
+      const modifiedRoots = rawNodesRef.current
+        .filter((node) => node.isModifiedRoot ?? modifiedIdSetRef.current.has(node.id))
+        .map((node) => node.id)
+      const nodeDepths = computeNodeDepthsFromRoots(modifiedRoots, graphResp.edges)
+      collapsedNodeIdsRef.current = new Set(
+        Array.from(nodeDepths.entries())
+          .filter(([, nodeDepth]) => nodeDepth === depth)
+          .map(([nodeId]) => nodeId)
+          .filter((nodeId) => hasLoadedChildren(nodeId, graphResp.edges)),
+      )
       setModifiedEntries(modifiedResp.entries)
-      rebuildFlow()
+      pendingViewportActionRef.current = { kind: 'fit-all' }
+      rebuildFlowRef.current()
       setError(null)
     } catch (e) {
       setError(e instanceof HasApiError ? e.message : 'Failed to refresh modified graph')
     }
-  }, [props.projectId, depth, rebuildFlow])
+  }, [props.projectId, depth])
 
   const handleAssetRefresh = useCallback(async (nextSelectedNodeId?: string) => {
     if (nextSelectedNodeId) {
@@ -515,6 +723,9 @@ export function ProjectModifiedGraphView(props: Props) {
       rawEdgesRef.current = []
       modifiedIdSetRef.current = new Set()
       expandedNodeIdsRef.current = new Set()
+      collapsedNodeIdsRef.current = new Set()
+      revealedChildIdsRef.current = new Map()
+      visibleNodeIdsRef.current = new Set()
       lastFlowSignatureRef.current = null
       setModifiedEntries([])
       setNodes([])
@@ -524,9 +735,9 @@ export function ProjectModifiedGraphView(props: Props) {
     ;(async () => {
       try {
         const [graphResp, modifiedResp] = await Promise.all([
-          measureAsync('view.modified_graph.fetch_graph', () => hasApi.projectGraphModified(props.projectId, depth), {
+          measureAsync('view.modified_graph.fetch_graph', () => hasApi.projectGraphModified(props.projectId, depth + 1), {
             projectId: props.projectId,
-            depth,
+            depth: depth + 1,
           }),
           measureAsync('view.modified_graph.fetch_list', () => hasApi.projectModified(props.projectId), {
             projectId: props.projectId,
@@ -538,10 +749,24 @@ export function ProjectModifiedGraphView(props: Props) {
         modifiedIdSetRef.current = new Set(graphResp.modifiedIds ?? [])
         // Modified roots were already traversed by the BFS
         expandedNodeIdsRef.current = new Set(graphResp.modifiedIds ?? [])
+        collapsedNodeIdsRef.current = new Set()
+        revealedChildIdsRef.current = new Map()
+        visibleNodeIdsRef.current = new Set()
+        const modifiedRoots = rawNodesRef.current
+          .filter((node) => node.isModifiedRoot ?? modifiedIdSetRef.current.has(node.id))
+          .map((node) => node.id)
+        const nodeDepths = computeNodeDepthsFromRoots(modifiedRoots, graphResp.edges)
+        collapsedNodeIdsRef.current = new Set(
+          Array.from(nodeDepths.entries())
+            .filter(([, nodeDepth]) => nodeDepth === depth)
+            .map(([nodeId]) => nodeId)
+            .filter((nodeId) => hasLoadedChildren(nodeId, graphResp.edges)),
+        )
         setModifiedEntries(modifiedResp.entries)
-        rebuildFlow()
+        pendingViewportActionRef.current = { kind: 'fit-all' }
+        rebuildFlowRef.current()
 
-        if (selectedNodeId && !graphResp.nodes.some((node) => node.id === selectedNodeId)) {
+        if (selectedNodeIdRef.current && !graphResp.nodes.some((node) => node.id === selectedNodeIdRef.current)) {
           setSelectedNodeId(null)
           setActiveHighlight(null)
         }
@@ -556,7 +781,7 @@ export function ProjectModifiedGraphView(props: Props) {
     return () => {
       cancelled = true
     }
-  }, [props.projectId, depth, rebuildFlow])
+  }, [props.projectId, depth])
 
   // ── Expand a node (load its depth-1 subgraph and merge) ───────────────────
   const expandNode = useCallback(
@@ -565,7 +790,7 @@ export function ProjectModifiedGraphView(props: Props) {
       if (!nodeId.startsWith('server:') && !nodeId.startsWith('server-path:')) return
       setExpandLoading(true)
       try {
-        const resp = await measureAsync('view.modified_graph.expand', () => hasApi.projectGraph(props.projectId, nodeId, 1), {
+        const resp = await measureAsync('view.modified_graph.expand', () => hasApi.projectGraph(props.projectId, nodeId, 2), {
           projectId: props.projectId,
           nodeId,
         })
@@ -588,7 +813,15 @@ export function ProjectModifiedGraphView(props: Props) {
           }
         }
         expandedNodeIdsRef.current.add(nodeId)
-        if (changed) rebuildFlow()
+        collapsedNodeIdsRef.current.delete(nodeId)
+        revealedChildIdsRef.current.delete(nodeId)
+        for (const edge of rawEdgesRef.current) {
+          if (edge.from === nodeId && hasLoadedChildren(edge.to, rawEdgesRef.current)) {
+            collapsedNodeIdsRef.current.add(edge.to)
+          }
+        }
+        if (changed) rebuildFlowRef.current()
+        else rebuildFlowRef.current()
         setError(null)
       } catch (e) {
         expandedNodeIdsRef.current.delete(nodeId)
@@ -597,7 +830,7 @@ export function ProjectModifiedGraphView(props: Props) {
         setExpandLoading(false)
       }
     },
-    [props.projectId, rebuildFlow],
+    [props.projectId],
   )
 
   // ── Asset load for side panel ──────────────────────────────────────────────
@@ -771,7 +1004,7 @@ export function ProjectModifiedGraphView(props: Props) {
               )}
               {depth === 0 && nodes.length > 0 && (
                 <div style={{ color: '#444', marginTop: 3, fontSize: 10 }}>
-                  Click a node to reveal its children
+                  Use the plus/minus control on a node to reveal or hide its children
                 </div>
               )}
             </>
@@ -950,31 +1183,29 @@ export function ProjectModifiedGraphView(props: Props) {
         edges={edges}
         nodeTypes={nodeTypes}
         onlyRenderVisibleElements
+        elementsSelectable={false}
+        nodesFocusable={false}
+        edgesFocusable={false}
+        autoPanOnNodeFocus={false}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         onInit={(instance) => { reactFlowInstanceRef.current = instance as typeof reactFlowInstanceRef.current }}
         onNodeClick={(_, n) => {
-          setSelectedNodeId(n.id)
-          const connectedEdges = baseEdgesRef.current.filter(
-            (e) => e.source === n.id || e.target === n.id,
-          )
-          const neighborIds = new Set<string>()
-          connectedEdges.forEach((e) => {
-            if (e.source !== n.id) neighborIds.add(e.source)
-            if (e.target !== n.id) neighborIds.add(e.target)
+          requestAssetPanelAction(() => {
+            setSelectedNodeId(n.id)
+            const connectedEdges = baseEdgesRef.current.filter((edge) => edge.source === n.id || edge.target === n.id)
+            const neighborIds = new Set<string>()
+            connectedEdges.forEach((edge) => {
+              if (edge.source !== n.id) neighborIds.add(edge.source)
+              if (edge.target !== n.id) neighborIds.add(edge.target)
+            })
+            setActiveHighlight({ edgeIds: new Set(connectedEdges.map((edge) => edge.id)), nodeIds: neighborIds })
           })
-          setActiveHighlight({
-            edgeIds: new Set(connectedEdges.map((e) => e.id)),
-            nodeIds: neighborIds,
-          })
-          void expandNode(n.id)
         }}
-        onPaneClick={() => {
+        onPaneClick={() => requestAssetPanelAction(() => {
           setSelectedNodeId(null)
           setActiveHighlight(null)
-        }}
-        fitView
-        fitViewOptions={{ padding: 0.15 }}
+        })}
         minZoom={0.05}
         maxZoom={2}
       >
@@ -989,26 +1220,32 @@ export function ProjectModifiedGraphView(props: Props) {
           asset={asset}
           loading={assetLoading}
           error={assetError}
-          onClose={() => {
+          onClose={() => requestAssetPanelAction(() => {
             setSelectedNodeId(null)
             setActiveHighlight(null)
-          }}
+          })}
           onRefresh={handleAssetRefresh}
-          onOpenInteractions={
-            props.onOpenInteractions
-              ? () => {
-                  if (!canOpenInteractions || !selectedNodeId || !selectedNode) return
-                  props.onOpenInteractions?.({
-                    assetKey: selectedNodeId,
-                    display: getBlueprintNodeDisplay(selectedNode.data, selectedNodeId),
-                  })
-                }
-              : undefined
-          }
+          onDirtyChange={setAssetPanelDirty}
+          onOpenInteractions={canOpenInteractions
+            ? () => {
+                if (!selectedNodeId || !selectedNode) return
+                props.onOpenInteractions?.({
+                  assetKey: selectedNodeId,
+                  display: getBlueprintNodeDisplay(selectedNode.data, selectedNodeId),
+                })
+              }
+            : undefined}
           canOpenInteractions={canOpenInteractions}
           onIsolateNode={isolateNodeFromPanel}
         />
       )}
+
+      <UnsavedChangesDialog
+        open={showUnsavedDialog}
+        assetLabel={typeof currentAssetLabel === 'string' ? currentAssetLabel : null}
+        onCancel={cancelDiscardAssetChanges}
+        onDiscard={confirmDiscardAssetChanges}
+      />
     </div>
   )
 }

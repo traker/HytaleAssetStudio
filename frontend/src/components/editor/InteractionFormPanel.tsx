@@ -469,6 +469,7 @@ function ExtraFields({
   const extraKeys = Object.keys(rawFields).filter(
     (k) => k !== 'Type' && !schemaKeys.has(k) && !GRAPH_KEYS.has(k),
   )
+  const [collapsed, setCollapsed] = useState(true)
 
   if (extraKeys.length === 0) return null
 
@@ -480,10 +481,30 @@ function ExtraFields({
         paddingTop: 10,
       }}
     >
-      <div style={{ fontSize: 10, color: '#666', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-        Additional Fields
-      </div>
-      {extraKeys.map((k) => {
+      <button
+        type="button"
+        onClick={() => setCollapsed((value) => !value)}
+        style={{
+          width: '100%',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          background: 'transparent',
+          border: 'none',
+          color: '#7f87a8',
+          cursor: 'pointer',
+          padding: 0,
+          marginBottom: collapsed ? 0 : 8,
+          textTransform: 'uppercase',
+          letterSpacing: '0.06em',
+          fontSize: 10,
+          fontWeight: 700,
+        }}
+      >
+        <span>Additional Fields</span>
+        <span style={{ fontSize: 11 }}>{collapsed ? '▸' : '▾'}</span>
+      </button>
+      {!collapsed && extraKeys.map((k) => {
         const val = rawFields[k]
         const isComplex = typeof val === 'object' && val !== null
         return (
@@ -602,7 +623,7 @@ export function InteractionFormPanel({
       {/* Header */}
       <div
         style={{
-          padding: '10px 12px',
+          padding: '12px 14px',
           borderBottom: '1px solid #333',
           display: 'flex',
           alignItems: 'center',
@@ -614,7 +635,7 @@ export function InteractionFormPanel({
         <div style={{ minWidth: 0 }}>
           <div
             style={{
-              fontSize: 12,
+              fontSize: 14,
               fontWeight: 700,
               color: typeColor,
               whiteSpace: 'nowrap',
@@ -626,7 +647,7 @@ export function InteractionFormPanel({
           </div>
           <div
             style={{
-              fontSize: 10,
+              fontSize: 11,
               color: '#666',
               whiteSpace: 'nowrap',
               overflow: 'hidden',
@@ -671,13 +692,13 @@ export function InteractionFormPanel({
             }}
             style={{
               flex: 1,
-              padding: '7px 0',
+              padding: '9px 0',
               background: 'transparent',
               color: tab === t ? typeColor : '#666',
               border: 'none',
               borderBottom: tab === t ? `2px solid ${typeColor}` : '2px solid transparent',
               cursor: 'pointer',
-              fontSize: 11,
+              fontSize: 12,
               fontWeight: tab === t ? 700 : 400,
               textTransform: 'uppercase',
               letterSpacing: '0.06em',
@@ -689,7 +710,7 @@ export function InteractionFormPanel({
       </div>
 
       {/* Content — key=nodeId forces remount of uncontrolled textareas on node change */}
-      <div key={nodeId} style={{ flex: 1, overflowY: 'auto', padding: 12 }}>
+      <div key={nodeId} style={{ flex: 1, overflowY: 'auto', padding: 14 }}>
         {tab === 'form' ? (
           <>
             {isExternal ? (
@@ -754,7 +775,7 @@ export function InteractionFormPanel({
       {!isExternal && (
         <div
           style={{
-            padding: '10px 12px',
+            padding: '12px 14px',
             borderTop: '1px solid #333',
             display: 'flex',
             gap: 8,
@@ -772,7 +793,7 @@ export function InteractionFormPanel({
               border: 'none',
               borderRadius: 4,
               cursor: dirty ? 'pointer' : 'not-allowed',
-              fontSize: 12,
+              fontSize: 13,
               fontWeight: 700,
               transition: 'background 0.15s',
             }}
@@ -790,7 +811,7 @@ export function InteractionFormPanel({
                 border: '1px solid #55EFC4',
                 borderRadius: 4,
                 cursor: 'pointer',
-                fontSize: 12,
+                fontSize: 13,
                 fontWeight: 700,
               }}
             >

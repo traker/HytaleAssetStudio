@@ -25,8 +25,9 @@ import { InteractionPalette, DRAG_MIME } from './InteractionPalette'
 import { InteractionFormPanel } from './InteractionFormPanel'
 import { InteractionNode, type InteractionNodeData } from '../../components/graph/InteractionNode'
 import { getColorForEdgeType } from '../../components/graph/colors'
-import { layoutGraph, layoutGraphElk, MAX_DAGRE_NODES } from '../../components/graph/layoutDagre'
+import { formatGraphTruncationWarning, layoutGraph, layoutGraphElk } from '../../components/graph/layoutDagre'
 import { exportInteractionTree } from '../../components/graph/interactionExport'
+import { UnsavedChangesDialog } from '../ui/UnsavedChangesDialog'
 import { useAsset } from '../../hooks/useAsset'
 import { useLayoutEngine } from '../../hooks/useLayoutEngine'
 
@@ -34,7 +35,7 @@ type Props = {
   projectId: string
   root: { assetKey: string; display: string }
   onBack: () => void
-  onOpenItem?: (root: { assetKey: string; display: string }) => void
+  onOpenReference?: (root: { assetKey: string; display: string }) => void
 }
 
 type Status = { kind: 'idle' | 'loading'; message?: string }
@@ -128,10 +129,13 @@ function InteractionTreeEditorInner(props: Props) {
   const [nodes, setNodes] = useState<Node[]>([])
   const [edges, setEdges] = useState<Edge[]>([])
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
+  const [assetPanelDirty, setAssetPanelDirty] = useState(false)
+  const [showUnsavedDialog, setShowUnsavedDialog] = useState(false)
   const [activeHighlight, setActiveHighlight] = useState<{ edgeIds: Set<string>; nodeIds: Set<string> } | null>(null)
   const baseEdgesRef = useRef<Edge[]>([])
   const loadSeq = useRef(0)
   const treeRootRef = useRef<string | null>(null)
+  const pendingAssetActionRef = useRef<(() => void) | null>(null)
 
   const [treeReloadTick, setTreeReloadTick] = useState(0)
   const [editMode, setEditMode] = useState(false)
@@ -169,9 +173,9 @@ function InteractionTreeEditorInner(props: Props) {
         activeHighlight?.edgeIds.has(e.id)
           ? {
               ...e,
-              animated: true,
+              animated: false,
               zIndex: 1000,
-              style: { ...(e.style as object), stroke: '#00D4FF', strokeDasharray: '6 3', strokeWidth: 2.5 },
+              style: { ...(e.style as object), stroke: '#00D4FF', strokeWidth: 2.5 },
               markerEnd: { type: 'arrowclosed' as const, color: '#00D4FF' },
             }
           : e,
@@ -228,15 +232,18 @@ function InteractionTreeEditorInner(props: Props) {
         setLayoutTick((t) => t + 1)
         setTruncationWarning(
           flow.truncatedAt != null
-            ? `⚠ Graph truncated to ${MAX_DAGRE_NODES} nodes (${flow.truncatedAt} total)`
+            ? formatGraphTruncationWarning(
+                flow.truncatedAt,
+                'Open a referenced interaction from the side panel to inspect a smaller branch.',
+              )
             : null,
         )
-        setStatus({ kind: 'idle', message: `Loaded: ${data.nodes.length} nodes, ${data.edges.length} edges` })
+        setStatus({ kind: 'idle', message: `Interaction graph ready: ${data.nodes.length} nodes, ${data.edges.length} edges loaded.` })
         setTimeout(() => setStatus({ kind: 'idle' }), 1500)
       } catch (e) {
         if (loadSeq.current !== mySeq) return
         setStatus({ kind: 'idle' })
-        setError(e instanceof HasApiError ? e.message : 'Unexpected error')
+        setError(e instanceof HasApiError ? e.message : 'Unable to load interaction graph.')
       }
     })()
   }, [props.projectId, props.root.assetKey, treeReloadTick])
@@ -251,12 +258,42 @@ function InteractionTreeEditorInner(props: Props) {
   const selectedIsServerAsset = Boolean(
     selectedIsExternal && selectedNodeId && (selectedNodeId.startsWith('server:') || selectedNodeId.startsWith('server-path:')),
   )
+  const canOpenSelectedReference = Boolean(
+    selectedIsServerAsset && selectedNodeId && selectedNodeId !== props.root.assetKey,
+  )
 
   const { asset, loading: assetLoading, error: assetError, reload: reloadAsset } = useAsset(
     props.projectId,
     selectedNodeId,
     selectedIsServerAsset,
   )
+
+  const currentAssetLabel = asset?.resolvedPath
+    ?? (typeof selectedData?.rawFields?.ServerId === 'string' ? selectedData.rawFields.ServerId : null)
+    ?? selectedData?.label
+    ?? selectedNodeId
+
+  const requestAssetPanelAction = useCallback((action: () => void) => {
+    if (!selectedIsServerAsset || !selectedNodeId || !assetPanelDirty) {
+      action()
+      return
+    }
+    pendingAssetActionRef.current = action
+    setShowUnsavedDialog(true)
+  }, [selectedIsServerAsset, selectedNodeId, assetPanelDirty])
+
+  const confirmDiscardAssetChanges = useCallback(() => {
+    setShowUnsavedDialog(false)
+    setAssetPanelDirty(false)
+    const action = pendingAssetActionRef.current
+    pendingAssetActionRef.current = null
+    action?.()
+  }, [])
+
+  const cancelDiscardAssetChanges = useCallback(() => {
+    setShowUnsavedDialog(false)
+    pendingAssetActionRef.current = null
+  }, [])
 
   // ── Edit mode: connect edges ──
   const onConnect = useCallback(
@@ -354,11 +391,11 @@ function InteractionTreeEditorInner(props: Props) {
   // ── Save tree to server ──
   async function handleSaveTree() {
     const root = treeRootRef.current
-    if (!root) { setSaveError('No tree root — reload first'); setSaveStatus('error'); return }
+    if (!root) { setSaveError('Unable to save: reload the interaction tree first.'); setSaveStatus('error'); return }
     setSaveStatus('saving')
     setSaveError(null)
     const { json, errors } = exportInteractionTree(root, nodes, edges)
-    if (!json) { setSaveStatus('error'); setSaveError('Export produced empty result'); return }
+    if (!json) { setSaveStatus('error'); setSaveError('Unable to save: exported tree is empty.'); return }
     if (errors.length > 0) console.warn('[InteractionTree] Export warnings:', errors)
     try {
       await hasApi.assetPut(props.projectId, props.root.assetKey, {
@@ -370,20 +407,22 @@ function InteractionTreeEditorInner(props: Props) {
       setTreeReloadTick((t) => t + 1)
     } catch (e) {
       setSaveStatus('error')
-      setSaveError(e instanceof HasApiError ? e.message : 'Unexpected save error')
+      setSaveError(e instanceof HasApiError ? e.message : 'Unable to save interaction tree.')
     }
   }
 
   const handleNodeClick = useCallback((_: React.MouseEvent, n: Node) => {
-    setSelectedNodeId(n.id)
-    const connectedEdges = baseEdgesRef.current.filter((e) => e.source === n.id || e.target === n.id)
-    const neighborIds = new Set<string>()
-    connectedEdges.forEach((e) => {
-      if (e.source !== n.id) neighborIds.add(e.source)
-      if (e.target !== n.id) neighborIds.add(e.target)
+    requestAssetPanelAction(() => {
+      setSelectedNodeId(n.id)
+      const connectedEdges = baseEdgesRef.current.filter((e) => e.source === n.id || e.target === n.id)
+      const neighborIds = new Set<string>()
+      connectedEdges.forEach((e) => {
+        if (e.source !== n.id) neighborIds.add(e.source)
+        if (e.target !== n.id) neighborIds.add(e.target)
+      })
+      setActiveHighlight({ edgeIds: new Set(connectedEdges.map((e) => e.id)), nodeIds: neighborIds })
     })
-    setActiveHighlight({ edgeIds: new Set(connectedEdges.map((e) => e.id)), nodeIds: neighborIds })
-  }, [])
+  }, [requestAssetPanelAction])
 
   const handleNodeDoubleClick = useCallback((_: React.MouseEvent, n: Node) => {
     const data = n.data as InteractionNodeData | undefined
@@ -391,12 +430,13 @@ function InteractionTreeEditorInner(props: Props) {
       data?.isExternal && (n.id.startsWith('server:') || n.id.startsWith('server-path:')),
     )
     if (!isServerRef) return
+    if (n.id === props.root.assetKey) return
 
     const display = typeof data?.rawFields?.ServerId === 'string' && data.rawFields.ServerId.trim()
       ? data.rawFields.ServerId.trim()
       : data?.label ?? n.id
 
-    props.onOpenItem?.({
+    props.onOpenReference?.({
       assetKey: n.id,
       display,
     })
@@ -404,8 +444,8 @@ function InteractionTreeEditorInner(props: Props) {
 
   const saveLabel =
     saveStatus === 'saving' ? 'Saving…'
-    : saveStatus === 'ok' ? '✓ Saved'
-    : saveStatus === 'error' ? '✗ Error'
+    : saveStatus === 'ok' ? 'Saved'
+    : saveStatus === 'error' ? 'Save failed'
     : 'Save Tree'
 
   const saveColor =
@@ -466,7 +506,17 @@ function InteractionTreeEditorInner(props: Props) {
                 {engine === 'elk' ? 'ELK' : 'Dagre'}
               </button>
               <button
-                onClick={() => { setEditMode((v) => !v); if (editMode) { setSelectedNodeId(null); setActiveHighlight(null) } }}
+                onClick={() => {
+                  if (editMode) {
+                    requestAssetPanelAction(() => {
+                      setEditMode(false)
+                      setSelectedNodeId(null)
+                      setActiveHighlight(null)
+                    })
+                    return
+                  }
+                  setEditMode(true)
+                }}
                 style={{ ...btnStyle(editMode ? '#1a3a1a' : '#2a2a3a'), color: editMode ? '#55EFC4' : '#aaa', borderColor: editMode ? '#55EFC4' : '#555' }}
               >
                 {editMode ? '✏ Edit ON' : '✏ Edit'}
@@ -488,6 +538,11 @@ function InteractionTreeEditorInner(props: Props) {
                 Drag handle → node to connect. Delete removes selected.
               </div>
             )}
+            {!editMode && (
+              <div style={{ marginTop: 6, fontSize: 10, color: '#7f86a3', lineHeight: 1.45 }}>
+                Tip: select another external server reference, then use Open Referenced Interaction in the side panel. Double-click still works.
+              </div>
+            )}
             {status.message && <p style={{ marginTop: 8, opacity: 0.8, fontSize: 12 }}>{status.message}</p>}
             {truncationWarning && <p style={{ marginTop: 6, color: '#FF9500', fontSize: 11 }}>{truncationWarning}</p>}
             {error && <p style={{ marginTop: 8, color: '#FF6B6B', fontSize: 12 }}>{error}</p>}
@@ -507,8 +562,22 @@ function InteractionTreeEditorInner(props: Props) {
             asset={asset}
             loading={assetLoading}
             error={assetError}
-            onClose={() => { setSelectedNodeId(null); setActiveHighlight(null) }}
+            onClose={() => requestAssetPanelAction(() => { setSelectedNodeId(null); setActiveHighlight(null) })}
             onRefresh={() => { reloadAsset(); setTreeReloadTick((t) => t + 1) }}
+            onDirtyChange={setAssetPanelDirty}
+            onOpenLinkedAsset={canOpenSelectedReference
+              ? () => {
+                  const display = typeof selectedData?.rawFields?.ServerId === 'string' && selectedData.rawFields.ServerId.trim()
+                    ? selectedData.rawFields.ServerId.trim()
+                    : selectedData?.label ?? selectedNodeId!
+                  props.onOpenReference?.({
+                    assetKey: selectedNodeId!,
+                    display,
+                  })
+                }
+              : undefined}
+            linkedAssetLabel={typeof currentAssetLabel === 'string' ? currentAssetLabel : undefined}
+            linkedAssetActionLabel="Open Referenced Interaction"
           />
         </div>
       )}
@@ -526,6 +595,13 @@ function InteractionTreeEditorInner(props: Props) {
           />
         </div>
       )}
+
+      <UnsavedChangesDialog
+        open={showUnsavedDialog}
+        assetLabel={typeof currentAssetLabel === 'string' ? currentAssetLabel : null}
+        onCancel={cancelDiscardAssetChanges}
+        onDiscard={confirmDiscardAssetChanges}
+      />
     </div>
   )
 }

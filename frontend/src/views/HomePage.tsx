@@ -16,6 +16,7 @@ export function HomePage({ onSelectProject, onProjectCreated }: Props) {
   const [createId, setCreateId] = useState('')
   const [createName, setCreateName] = useState('')
   const [createDir, setCreateDir] = useState('')
+  const [directoryTouched, setDirectoryTouched] = useState(false)
   const [creating, setCreating] = useState(false)
   const [createError, setCreateError] = useState<string | null>(null)
 
@@ -23,6 +24,7 @@ export function HomePage({ onSelectProject, onProjectCreated }: Props) {
     setCreateId('')
     setCreateName('')
     setCreateDir('')
+    setDirectoryTouched(false)
     setCreateError(null)
     setShowCreate(true)
   }
@@ -35,8 +37,14 @@ export function HomePage({ onSelectProject, onProjectCreated }: Props) {
 
   function handleIdChange(v: string): void {
     setCreateId(v)
-    // Auto-fill dir only while it hasn't been manually edited
-    setCreateDir(deriveDir(v))
+    if (!directoryTouched) {
+      setCreateDir(deriveDir(v))
+    }
+  }
+
+  function handleDirectoryChange(v: string): void {
+    setDirectoryTouched(true)
+    setCreateDir(v)
   }
 
   async function handleCreate(): Promise<void> {
@@ -57,7 +65,7 @@ export function HomePage({ onSelectProject, onProjectCreated }: Props) {
       setShowCreate(false)
       onProjectCreated(res.projectId)
     } catch (e) {
-      setCreateError(e instanceof HasApiError ? e.message : 'Unexpected error')
+      setCreateError(e instanceof HasApiError ? e.message : 'Unable to create project.')
     } finally {
       setCreating(false)
     }
@@ -128,11 +136,16 @@ export function HomePage({ onSelectProject, onProjectCreated }: Props) {
                 <label>Directory *</label>
                 <PathInput
                   value={createDir}
-                  onChange={setCreateDir}
+                  onChange={handleDirectoryChange}
                   placeholder={deriveDir('my-project')}
                   sourceType="folder"
                   disabled={creating}
                 />
+
+                <label></label>
+                <p style={{ margin: 0, fontSize: 12, color: '#7f8a96' }}>
+                  Auto-filled from the project ID until you edit this field manually.
+                </p>
               </div>
 
               {createError && <p className="error-msg">{createError}</p>}

@@ -155,7 +155,7 @@ export function InteractionNode({ data }: Props) {
     : data.isConnected
       ? '#00D4FF66'
       : typeColor
-  const borderWidth = data.isSelected ? 3 : 2
+  const borderWidth = 3
   const boxShadow = data.isSelected ? SELECTED_GLOW : data.isConnected ? '0 0 0 1px #00D4FF33' : undefined
 
   return (
@@ -172,6 +172,7 @@ export function InteractionNode({ data }: Props) {
         color: '#fff',
         fontFamily: 'monospace',
         boxShadow,
+        boxSizing: 'border-box',
       }}
     >
       <Handle type="target" position={Position.Top} style={{ background: '#555', width: 8, height: 8, border: '2px solid #222' }} />

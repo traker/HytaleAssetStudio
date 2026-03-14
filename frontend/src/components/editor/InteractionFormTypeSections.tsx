@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import type { FieldDef } from '../graph/interactionSchemas'
 import {
     HitEntityRulesEditor,
@@ -38,26 +39,56 @@ function FieldSection({
     title,
     description,
     children,
+    collapsible = false,
+    defaultCollapsed = false,
 }: {
     title: string
     description?: string
     children: React.ReactNode
+    collapsible?: boolean
+    defaultCollapsed?: boolean
 }) {
+    const [collapsed, setCollapsed] = useState(defaultCollapsed)
+
     return (
         <div
             style={{
-                marginBottom: 12,
-                padding: '10px 10px 2px',
+                marginBottom: 14,
+                padding: '12px 12px 4px',
                 border: '1px solid #2b2b3f',
                 borderRadius: 6,
                 background: 'rgba(25, 25, 40, 0.55)',
             }}
         >
-            <div style={{ fontSize: 10, color: '#8d8db4', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 700 }}>
-                {title}
-            </div>
-            {description && <div style={{ fontSize: 10, color: '#666', marginBottom: 8 }}>{description}</div>}
-            {children}
+            {collapsible ? (
+                <button
+                    type="button"
+                    onClick={() => setCollapsed((value) => !value)}
+                    style={{
+                        width: '100%',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        gap: 10,
+                        background: 'transparent',
+                        border: 'none',
+                        cursor: 'pointer',
+                        padding: 0,
+                        marginBottom: collapsed ? 0 : 8,
+                    }}
+                >
+                    <span style={{ fontSize: 11, color: '#9da5ca', textTransform: 'uppercase', letterSpacing: '0.07em', fontWeight: 700, textAlign: 'left' }}>
+                        {title}
+                    </span>
+                    <span style={{ fontSize: 11, color: '#747ca0', flexShrink: 0 }}>{collapsed ? '▸' : '▾'}</span>
+                </button>
+            ) : (
+                <div style={{ fontSize: 11, color: '#9da5ca', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.07em', fontWeight: 700 }}>
+                    {title}
+                </div>
+            )}
+            {!collapsed && description && <div style={{ fontSize: 11, color: '#666', marginBottom: 9, lineHeight: 1.45 }}>{description}</div>}
+            {!collapsed && children}
         </div>
     )
 }
@@ -625,6 +656,8 @@ function ReplaceDefaultValueEditor({
         <FieldSection
             title="Default Value"
             description="Vanilla Replace usually stores a fallback payload under DefaultValue.Interactions. Each entry can be a server ref or an inline interaction object."
+            collapsible
+            defaultCollapsed
         >
             <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
                 <button
@@ -1031,7 +1064,7 @@ export function renderTypeSpecificFields(
   "$Comment": "..."
 }' />
                     </FieldSection>
-                    <FieldSection title="Damage Effects" description="Configure knockback plus world-space hit feedback such as sounds and particles.">
+                    <FieldSection title="Damage Effects" description="Configure knockback plus world-space hit feedback such as sounds and particles." collapsible defaultCollapsed>
                         <div style={{ display: 'grid', gap: 8, gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))' }}>
                             <div style={FIELD_WRAP}>
                                 <span style={LABEL_STYLE}>World Sound Event ID</span>

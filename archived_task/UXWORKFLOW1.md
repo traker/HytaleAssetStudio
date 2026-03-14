@@ -362,3 +362,23 @@ Une sous-tache ne passe en `done` que si:
 - le critere d'acceptation de la sous-tache est satisfait
 - la verification associee est notee dans le tracker
 - si la decision impacte le pilotage du produit, `SESSION_RECAP.md` est mis a jour
+
+---
+
+## Cloture
+
+Le chantier `UXWORKFLOW1` est considere termine et clos au `2026-03-14`.
+
+Points actes a la cloture:
+- les ameliorations UX/UI prevues sur la protection du draft, la decouvrabilite du workflow `Items -> Interactions`, la stabilisation principale des graphes, les messages systeme, la creation de projet et la densite initiale du form panel ont ete implementees
+- la preuve technique minimale est acquise avec un build frontend vert sur la derniere version du chantier
+- les incoherences residuelles, ecarts visuels ou raffinements UX restants sont explicitement reportes a un futur plan, plutot que traites par reouverture de `UXWORKFLOW1`
+
+Reste volontairement hors perimetre de cette cloture:
+- la resolution fine des incoherences encore observables a la marge dans certains parcours
+- toute passe supplementaire de polissage visuel ou de validation manuelle exhaustive
+- l'ajout de tests frontend automatises dedies a ces comportements UX
+
+Archivage:
+- ce document est archive dans `archived_task/UXWORKFLOW1.md`
+- le tracker associe est archive dans `archived_task/UXWORKFLOW1_TRACKING.md`

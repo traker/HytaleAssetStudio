@@ -81,6 +81,22 @@ function AppShell() {
               disabled={!interactionRoot}
               title={!interactionRoot ? 'Open from an item node first' : undefined}
             >Interactions</button>
+            {!interactionRoot && (
+              <span
+                style={{
+                  fontSize: 10,
+                  color: '#8c8ca5',
+                  padding: '3px 8px',
+                  borderRadius: 999,
+                  border: '1px solid #2e2e4a',
+                  background: '#171724',
+                  whiteSpace: 'nowrap',
+                }}
+                title="Open Items, select an item, then use Open Interactions"
+              >
+                Pick an item in Items to unlock Interactions
+              </span>
+            )}
             <button className={`top-bar-nav-btn${projectView === 'modified' ? ' active' : ''}`} onClick={() => setProjectView('modified')}>Modified</button>
             <button className="top-bar-nav-btn" onClick={backToHome} style={{ color: '#444' }}>← Projects</button>
           </nav>
@@ -104,7 +120,7 @@ function AppShell() {
               projectId={selectedProjectId}
               root={interactionRoot}
               onBack={() => setProjectView('graph-items')}
-              onOpenItem={(root) => { setItemRoot(root); setProjectView('graph-items') }}
+              onOpenReference={(root) => { setInteractionRoot(root); setProjectView('graph-interactions') }}
             />
           </div>
           <div style={{ display: projectView === 'modified' ? 'flex' : 'none', flex: 1, minHeight: 0 }}>

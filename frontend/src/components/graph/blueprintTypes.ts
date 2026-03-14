@@ -17,6 +17,9 @@ export type BlueprintNodeData = {
   outgoing?: OutgoingDep[]
   nodeId?: string
   onSelectNode?: (sourceId: string, targetId: string) => void
+  canToggleExpand?: boolean
+  isExpanded?: boolean
+  onToggleExpand?: (nodeId: string) => void
 }
 
 export function isInteractionBlueprintGroup(group: string | undefined): boolean {

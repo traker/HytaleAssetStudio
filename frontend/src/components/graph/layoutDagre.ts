@@ -14,6 +14,11 @@ const layoutCache = new Map<string, Map<string, { x: number; y: number }>>()
  *  TODO: consider offloading to a Web Worker for large graphs. */
 export const MAX_DAGRE_NODES = 200
 
+export function formatGraphTruncationWarning(totalNodes: number, nextStep: string): string {
+  const action = nextStep.trim()
+  return `Large graph preview limited to ${MAX_DAGRE_NODES} laid out nodes (${totalNodes} total) to keep navigation responsive.${action ? ` ${action}` : ''}`
+}
+
 const NODE_WIDTH = 260
 const NODE_HEIGHT_BASE = 80   // header + label + path
 const NODE_HEIGHT_DEP_ROW = 26 // per outgoing dep row

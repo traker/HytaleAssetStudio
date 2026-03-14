@@ -38,6 +38,18 @@ type Props = {
   canOpenInteractions?: boolean
   onRefresh?: (nextSelectedNodeId?: string) => void | Promise<void>
   onIsolateNode?: () => void
+  onDirtyChange?: (isDirty: boolean) => void
+  interactionHint?: string
+  onOpenLinkedAsset?: () => void
+  linkedAssetLabel?: string
+  linkedAssetActionLabel?: string
+}
+
+type SaveState = 'idle' | 'saving' | 'saved' | 'error'
+
+function normalizeJsonForCompare(value: unknown): string | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+  return JSON.stringify(value)
 }
 
 export function AssetSidePanel(props: Props) {
@@ -53,7 +65,7 @@ export function AssetSidePanel(props: Props) {
   const [isEditing, setIsEditing] = useState(false)
   const [draft, setDraft] = useState('')
   const [draftError, setDraftError] = useState<string | null>(null)
-  const [saveStatus, setSaveStatus] = useState<{ kind: 'idle' | 'saving'; error?: string }>(
+  const [saveStatus, setSaveStatus] = useState<{ kind: SaveState; error?: string }>(
     { kind: 'idle' },
   )
   const [tab, setTab] = useState<PreviewTab>('json')
@@ -67,6 +79,29 @@ export function AssetSidePanel(props: Props) {
   const [isSaveAsOpen, setIsSaveAsOpen] = useState(false)
   const [newIdDraft, setNewIdDraft] = useState('')
   const [saveAsStatus, setSaveAsStatus] = useState<{ kind: 'idle' | 'saving'; error?: string; success?: string }>({ kind: 'idle' })
+
+  const loadedJsonSignature = useMemo(() => {
+    if (!canEdit || !props.asset || isCommonResource) return null
+    return normalizeJsonForCompare(props.asset.json)
+  }, [canEdit, props.asset, isCommonResource])
+
+  const draftJsonSignature = useMemo(() => {
+    if (!canEdit || !props.asset || isCommonResource) return loadedJsonSignature
+    try {
+      return normalizeJsonForCompare(JSON.parse(draft))
+    } catch {
+      return '__invalid_json__'
+    }
+  }, [canEdit, props.asset, isCommonResource, loadedJsonSignature, draft])
+
+  const isDirty = useMemo(() => {
+    if (!canEdit || !props.asset || isCommonResource) return false
+    return draftJsonSignature !== loadedJsonSignature
+  }, [canEdit, props.asset, isCommonResource, draftJsonSignature, loadedJsonSignature])
+
+  useEffect(() => {
+    props.onDirtyChange?.(isDirty)
+  }, [isDirty, props])
 
   useEffect(() => {
     setIsEditing(canEdit)
@@ -210,11 +245,11 @@ export function AssetSidePanel(props: Props) {
         mode: 'override',
         json: parsed as Record<string, unknown>,
       })
-      setSaveStatus({ kind: 'idle' })
+      setSaveStatus({ kind: 'saved' })
       await props.onRefresh?.(props.selectedNodeId)
     } catch (e) {
       const msg = e instanceof HasApiError ? e.message : 'Unexpected error'
-      setSaveStatus({ kind: 'idle', error: msg })
+      setSaveStatus({ kind: 'error', error: msg })
     }
   }
 
@@ -308,6 +343,15 @@ export function AssetSidePanel(props: Props) {
       : `${resourcePreview.size} B`
     : null
 
+  const panelStatus = useMemo(() => {
+    if (!canEdit || isCommonResource) return null
+    if (saveStatus.kind === 'saving') return { label: 'Saving', color: '#111', background: '#61dafb', border: '#61dafb' }
+    if (saveStatus.kind === 'error') return { label: 'Error', color: '#ffd7d7', background: '#4a2323', border: '#7a3434' }
+    if (isDirty) return { label: 'Unsaved', color: '#111', background: '#ffb347', border: '#ffb347' }
+    if (saveStatus.kind === 'saved') return { label: 'Saved', color: '#dff8ea', background: '#245234', border: '#3b7a52' }
+    return { label: 'Synced', color: '#9ab0bf', background: '#1d2730', border: '#32414d' }
+  }, [canEdit, isCommonResource, saveStatus.kind, isDirty])
+
   function handleFormChange(updated: Record<string, unknown>) {
     setDraft(JSON.stringify(updated, null, 2))
   }
@@ -366,6 +410,27 @@ export function AssetSidePanel(props: Props) {
             key: {props.selectedNodeId}
             {(resourcePreview?.origin ?? props.asset?.origin) ? `  •  origin: ${resourcePreview?.origin ?? props.asset?.origin}` : ''}
           </div>
+          {panelStatus && (
+            <div style={{ marginTop: 6 }}>
+              <span
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  padding: '2px 7px',
+                  borderRadius: 999,
+                  fontSize: 10,
+                  fontWeight: 700,
+                  letterSpacing: '0.05em',
+                  textTransform: 'uppercase',
+                  color: panelStatus.color,
+                  background: panelStatus.background,
+                  border: `1px solid ${panelStatus.border}`,
+                }}
+              >
+                {panelStatus.label}
+              </span>
+            </div>
+          )}
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -389,6 +454,23 @@ export function AssetSidePanel(props: Props) {
               </button>
 
               <button
+                onClick={handleCancel}
+                disabled={saveStatus.kind === 'saving' || !isDirty}
+                style={{
+                  padding: '4px 8px',
+                  background: '#333',
+                  color: '#fff',
+                  border: '1px solid #555',
+                  borderRadius: 4,
+                  cursor: saveStatus.kind !== 'saving' && isDirty ? 'pointer' : 'not-allowed',
+                  opacity: saveStatus.kind !== 'saving' && isDirty ? 1 : 0.6,
+                }}
+                title="Annuler les modifications locales du draft"
+              >
+                Cancel
+              </button>
+
+              <button
                 onClick={() => { setIsSaveAsOpen((v) => !v); setSaveAsStatus({ kind: 'idle' }) }}
                 disabled={saveStatus.kind === 'saving'}
                 style={{
@@ -402,23 +484,6 @@ export function AssetSidePanel(props: Props) {
                 title="Créer une copie avec un nouvel ID"
               >
                 Save as…
-              </button>
-
-              <button
-                onClick={handleCancel}
-                disabled={saveStatus.kind === 'saving'}
-                style={{
-                  padding: '4px 8px',
-                  background: '#333',
-                  color: '#fff',
-                  border: '1px solid #555',
-                  borderRadius: 4,
-                  cursor: saveStatus.kind !== 'saving' ? 'pointer' : 'not-allowed',
-                  opacity: saveStatus.kind !== 'saving' ? 1 : 0.6,
-                }}
-                title="Annuler les modifications"
-              >
-                Cancel
               </button>
             </>
           )}
@@ -440,20 +505,18 @@ export function AssetSidePanel(props: Props) {
             </button>
           )}
 
-          {props.onOpenInteractions && (
+          {props.onOpenInteractions && props.canOpenInteractions && (
             <button
               onClick={props.onOpenInteractions}
-              disabled={!props.canOpenInteractions || props.loading}
               style={{
                 padding: '4px 8px',
                 background: '#333',
                 color: '#fff',
                 border: '1px solid #555',
                 borderRadius: 4,
-                cursor: props.canOpenInteractions && !props.loading ? 'pointer' : 'not-allowed',
-                opacity: props.canOpenInteractions ? 1 : 0.6,
+                cursor: props.loading ? 'wait' : 'pointer',
               }}
-              title={props.canOpenInteractions ? 'Ouvrir l\'éditeur d\'interaction' : 'Sélectionne une interaction dans le graphe'}
+              title="Ouvrir l'éditeur d'interaction"
             >
               Interactions
             </button>
@@ -471,7 +534,7 @@ export function AssetSidePanel(props: Props) {
             }}
             title="Fermer"
           >
-            X
+            Close
           </button>
         </div>
       </div>
@@ -508,6 +571,74 @@ export function AssetSidePanel(props: Props) {
             title="Ouvrir la ressource brute"
           >
             Open raw
+          </button>
+        </div>
+      )}
+
+      {props.onOpenInteractions && props.canOpenInteractions && (
+        <div
+          style={{
+            padding: '9px 12px',
+            borderBottom: '1px solid #333',
+            background: 'rgba(24, 35, 50, 0.9)',
+            flexShrink: 0,
+          }}
+        >
+          <div style={{ fontSize: 10, color: '#7f95a8', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 }}>
+            Workflow
+          </div>
+          <div style={{ fontSize: 12, color: '#d7e0e8', lineHeight: 1.5, marginBottom: 8 }}>
+            {props.interactionHint ?? 'This asset can open the interaction tree.'}
+          </div>
+          <button
+            onClick={props.onOpenInteractions}
+            style={{
+              padding: '6px 10px',
+              background: '#74B9FF',
+              color: '#0e1720',
+              border: '1px solid #74B9FF',
+              borderRadius: 6,
+              cursor: props.loading ? 'wait' : 'pointer',
+              fontSize: 12,
+              fontWeight: 700,
+            }}
+            title="Open the interaction tree for this item"
+          >
+            Open Interactions
+          </button>
+        </div>
+      )}
+
+      {props.onOpenLinkedAsset && (
+        <div
+          style={{
+            padding: '9px 12px',
+            borderBottom: '1px solid #333',
+            background: 'rgba(25, 30, 45, 0.9)',
+            flexShrink: 0,
+          }}
+        >
+          <div style={{ fontSize: 10, color: '#8b93ba', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 }}>
+            Cross Navigation
+          </div>
+          <div style={{ fontSize: 12, color: '#d7dcf3', lineHeight: 1.5, marginBottom: 8 }}>
+            Open this referenced server asset from its dedicated editor. Double-click works too.
+          </div>
+          <button
+            onClick={props.onOpenLinkedAsset}
+            style={{
+              padding: '6px 10px',
+              background: '#8f89ff',
+              color: '#111224',
+              border: '1px solid #8f89ff',
+              borderRadius: 6,
+              cursor: 'pointer',
+              fontSize: 12,
+              fontWeight: 700,
+            }}
+            title={props.linkedAssetLabel ?? 'Open referenced asset'}
+          >
+            {props.linkedAssetActionLabel ?? 'Open Linked Asset'}
           </button>
         </div>
       )}

@@ -46,6 +46,9 @@ function arePropsEqual(prev: Props, next: Props): boolean {
     left.isConnected === right.isConnected &&
     left.nodeId === right.nodeId &&
     left.onSelectNode === right.onSelectNode &&
+    left.canToggleExpand === right.canToggleExpand &&
+    left.isExpanded === right.isExpanded &&
+    left.onToggleExpand === right.onToggleExpand &&
     areOutgoingDepsEqual(left.outgoing, right.outgoing)
   )
 }
@@ -62,7 +65,7 @@ const BlueprintNodeComponent = ({ data }: Props) => {
 
   const selected = data.isSelected
   const connected = data.isConnected
-  const borderWidth = data.isRoot || selected ? 3 : 2
+  const borderWidth = 3
   const borderColor = selected ? SELECTED_BORDER_COLOR : typeColor
 
   return (
@@ -82,6 +85,7 @@ const BlueprintNodeComponent = ({ data }: Props) => {
         contain: 'layout paint style',
         contentVisibility: 'auto',
         containIntrinsicSize: '300px 180px',
+        boxSizing: 'border-box',
       }}
     >
       <Handle type="target" position={Position.Left} style={{ background: '#555', width: 8, height: 8, border: '2px solid #222' }} />
@@ -117,6 +121,28 @@ const BlueprintNodeComponent = ({ data }: Props) => {
             </span>
           )}
         </div>
+        {data.canToggleExpand && data.nodeId && data.onToggleExpand && (
+          <button
+            onClick={(event) => {
+              event.stopPropagation()
+              data.onToggleExpand?.(data.nodeId ?? '')
+            }}
+            style={{
+              border: '1px solid #00000033',
+              background: '#00000022',
+              color: '#111',
+              borderRadius: 4,
+              padding: '1px 6px',
+              fontSize: 10,
+              fontWeight: 'bold',
+              cursor: 'pointer',
+              lineHeight: 1.4,
+            }}
+            title={data.isExpanded ? 'Collapse descendants' : 'Expand descendants'}
+          >
+            {data.isExpanded ? '−' : '+'}
+          </button>
+        )}
       </div>
 
       {/* ── Label ── */}

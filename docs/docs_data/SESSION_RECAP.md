@@ -8,6 +8,49 @@
 	- Pilotage retenu:
 		- priorite initiale sur la confiance utilisateur et la decouvrabilite des workflows avant toute refonte visuelle plus large
 		- chaque sous-tache UX doit etre fermee avec une preuve concrete (build, test manuel, ou observation UI notee dans le tracker)
+	- Avancement lot 1:
+		- `AssetSidePanel.tsx` expose maintenant un vrai etat `dirty` / `saving` / `saved` / `error` / `synced`
+		- un composant `UnsavedChangesDialog` a ete ajoute pour intercepter la perte de draft avant fermeture ou changement de selection
+		- la garde est branchee dans `ProjectGraphEditor`, `ProjectModifiedGraphView` et `InteractionTreeEditor` pour les panneaux assets externes
+		- build frontend valide: `npm --prefix frontend run build`
+		- validation manuelle encore a faire avant de passer les sous-taches 1.1 a 1.3 en `done`
+	- Avancement lot 2:
+		- la top bar affiche maintenant un hint visible quand `Interactions` n'est pas encore debloque
+		- le dashboard projet contient une carte `Interactions Workflow` qui explique le chemin `Items -> selection -> Open Interactions`
+		- `AssetSidePanel.tsx` expose un vrai bloc `Workflow` avec CTA `Open Interactions` plus visible, mais seulement quand l'asset selectionne peut reellement ouvrir une interaction
+		- `InteractionTreeEditor.tsx` expose une action visible d'ouverture de l'interaction referencee pour les refs serveur externes, en plus du double-clic, et la masque quand la cible est deja ouverte
+		- cloture du lot 2 validee apres verification manuelle utilisateur et build frontend OK
+	- Avancement lot 3:
+		- `ProjectGraphEditor.tsx` et `ProjectModifiedGraphView.tsx` ne declenchent plus d'expansion sur simple clic; l'extension locale passe maintenant par un controle explicite `+ / -` dans le noeud
+		- `ProjectGraphEditor.tsx` precharge maintenant `n+1` niveaux tout en affichant `n`, ce qui garde les refs visibles dans les cartes et permet d'ouvrir une branche precise depuis une ref cachee
+		- `ProjectModifiedGraphView.tsx` suit maintenant la meme logique `n+1` affiche `n`, avec refs visibles dans le noeud et revelation ciblee d'une branche cachee au clic
+		- la recherche du graphe items charge maintenant directement le graphe sur selection d'un resultat, avec un message d'aide associe
+		- `ProjectGraphEditor.tsx` et `ProjectModifiedGraphView.tsx` limitent maintenant les `fitView` aux cas explicites pour eviter les sauts de camera pendant l'exploration locale
+		- build frontend valide: `npm --prefix frontend run build`
+	- Avancement lot 4:
+		- `layoutDagre.ts` expose maintenant un helper de warning de troncature qui explique la vraie contrainte technique: la preview de layout est limitee aux `MAX_DAGRE_NODES` premiers noeuds pour garder une navigation fluide
+		- `ProjectGraphEditor.tsx`, `InteractionTreeEditor.tsx` et `ProjectModifiedGraphView.tsx` affichent maintenant des warnings plus actionnables, avec prochaine action adaptee au contexte (`reduce depth`, `open a referenced interaction`, `isolate one modified root`)
+		- `ProjectGraphEditor.tsx`, `InteractionTreeEditor.tsx`, `HomePage.tsx` et `ProjectConfigView.tsx` ont ete harmonises sur une micro-convention simple pour les etats systeme: verbes d'action pour le chargement, succes courts et fallback d'erreur explicites `Unable to ...`
+		- `HomePage.tsx` fiabilise la creation de projet avec un etat `directoryTouched`: le champ `Directory` ne se recompose plus apres une edition manuelle, et l'aide inline explique la regle
+		- build frontend valide: `npm --prefix frontend run build`
+	- Stabilisation complementaire lot 3:
+		- `ProjectModifiedGraphView.tsx` aligné sur le comportement de la vue Items: une simple selection de noeud ne change plus les dependances des callbacks qui pilotent le refetch complet
+		- le reload complet et le `fitView` restent maintenant reserves aux vrais changements de vue (`projectId`, `depth`, focus explicite depuis la liste, refresh volontaire), ce qui evite le reset/recalcul au simple clic
+		- le toggle `+ / -` de `ProjectModifiedGraphView.tsx` ne depend plus de l'historique `expandedNodeIds` pour une branche deja prechargee: une branche connue s'ouvre ou se referme maintenant localement et immediatement
+		- build frontend valide: `npm --prefix frontend run build`
+	- Avancement lot 5:
+		- `formStyles.ts` releve legerement la hierarchie des labels, champs et espacements pour rendre le panel interaction moins compact et plus lisible sur desktop
+		- `InteractionFormPanel.tsx` ajuste header, tabs, padding de contenu et footer, et replie maintenant `Additional Fields` par defaut pour limiter le bruit visuel
+		- `interactionFormTypeSections.tsx` et `InteractionFormStructuredEditors.tsx` supportent maintenant des sections repliables; premier lot applique a `Damage Effects`, `Default Value` et `HitEntityRules`
+		- build frontend valide: `npm --prefix frontend run build`
+	- Avancement lot 6:
+		- `UXWORKFLOW1_TRACKING.md` contient maintenant une checklist de walkthrough manuel en 5 parcours max, chacun rattache aux lots modifies pour servir de support de cloture
+		- la preuve technique minimale du lot 6 est deja renseignee: build frontend vert et rappel des validations manuelles deja obtenues dans la session
+		- la fermeture complete du lot depend maintenant surtout d'une passe manuelle courte sur les 5 parcours listes dans le tracker
+	- Cloture UXWORKFLOW1:
+		- decision prise de clore `UXWORKFLOW1` sans reouvrir ce chantier pour les incoherences residuelles; ces sujets devront etre traites dans un plan futur dedie
+		- le plan et son tracker passent en archive dans `archived_task/`
+		- fichiers modifies couverts par le commit de cloture: `UXWORKFLOW1.md`, `UXWORKFLOW1_TRACKING.md`, `docs/docs_data/SESSION_RECAP.md`
 
 - 2026-03-14 - ASSETFORMS1 complété — Lots 3–6 implémentés (suite de la session précédente)
 	- **Lot 3 — EntityEffectFormEditor + EffectsBlockEditor** (commit `09000c4`)
