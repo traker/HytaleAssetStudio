@@ -223,11 +223,20 @@ export function ProjectModifiedGraphView(props: Props) {
 
   const handleModifiedEntryClick = useCallback((entry: ModifiedAssetEntry) => {
     if (!entry.assetKey) return
-    const nodeId = entry.assetKey
-    if (rawNodesRef.current.some((n) => n.id === nodeId)) {
-      pendingFocusRef.current = nodeId
+    const assetKey = entry.assetKey
+    // assetKey from the modified list is always "server-path:…" but the graph node
+    // may use "server:SomeId" when the ID is unique — resolve by path or direct match
+    const graphNode = rawNodesRef.current.find(
+      (n) => n.id === assetKey || (n.path != null && assetKey === `server-path:${n.path}`),
+    )
+    if (graphNode) {
+      // Use the graph node's actual ID so the highlight effect updates `nodes`
+      // (which triggers the focus useEffect to call fitView)
+      pendingFocusRef.current = graphNode.id
+      setSelectedNodeId(graphNode.id)
+    } else {
+      setSelectedNodeId(assetKey)
     }
-    setSelectedNodeId(nodeId)
     setActiveHighlight(null)
   }, [])
 
