@@ -467,7 +467,7 @@ export function ProjectModifiedGraphView(props: Props) {
     }
     if (selectedNodeId.startsWith('common:')) {
       setAsset(null)
-      setAssetError('Common resource (no server JSON)')
+      setAssetError(null)
       setAssetLoading(false)
       return
     }

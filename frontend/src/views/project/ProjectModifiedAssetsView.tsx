@@ -78,16 +78,7 @@ export function ProjectModifiedAssetsView(props: Props) {
 
   function handleEntryClick(e: ModifiedAssetEntry): void {
     if (!e.assetKey) return
-
-    if (e.kind === 'server-json') {
-      setSelectedNodeId(e.assetKey)
-      return
-    }
-
-    if (e.kind === 'common-resource') {
-      const url = `/api/v1/projects/${encodeURIComponent(props.projectId)}/resource?key=${encodeURIComponent(e.assetKey)}`
-      window.open(url, '_blank', 'noopener,noreferrer')
-    }
+    setSelectedNodeId(e.assetKey)
   }
 
   return (

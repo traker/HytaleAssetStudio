@@ -1,4 +1,4 @@
-import { httpJson, setApiWorkspaceId } from './http'
+import { httpFetch, httpJson, setApiWorkspaceId } from './http'
 import type {
   AssetGetResponse,
   AssetPutRequest,
@@ -97,6 +97,14 @@ export const hasApi = {
       method: 'PUT',
       body: JSON.stringify(body),
     })
+  },
+
+  projectResourceUrl(projectId: string, key: string): string {
+    return `${API_BASE}/projects/${encodeURIComponent(projectId)}/resource${qs({ key })}`
+  },
+
+  projectResourceFetch(projectId: string, key: string): Promise<Response> {
+    return httpFetch(`${API_BASE}/projects/${encodeURIComponent(projectId)}/resource${qs({ key })}`)
   },
 
   exportZip(projectId: string, req: ExportZipRequest): Promise<ExportZipResponse> {

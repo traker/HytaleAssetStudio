@@ -19,16 +19,16 @@ _REL_KEY_TO_EDGE_TYPE: dict[str, str] = {
     "Next": "next",
     "Failed": "failed",
     "Interactions": "child",
-    "ForkInteractions": "child",
-    "BlockedInteractions": "child",
-    "CollisionNext": "next",
-    "GroundNext": "next",
-    "StartInteraction": "child",
-    "CancelInteraction": "child",
+    "ForkInteractions": "fork",
+    "BlockedInteractions": "blocked",
+    "CollisionNext": "collisionNext",
+    "GroundNext": "groundNext",
+    "StartInteraction": "start",
+    "CancelInteraction": "cancel",
     # Selector containers — these wrap { Interactions: [...] }
-    "HitBlock": "child",
-    "HitEntity": "child",
-    "HitNothing": "child",
+    "HitBlock": "hitBlock",
+    "HitEntity": "hitEntity",
+    "HitNothing": "hitNothing",
 }
 
 
@@ -42,6 +42,7 @@ def build_interaction_tree(project_id: str, root_key: str, workspace_root: Path,
 
     nodes_by_id: dict[str, dict] = {}
     edges: list[dict] = []
+    edge_keys: set[tuple[str, str, str]] = set()
 
     def add_node(node: dict) -> None:
         if node["id"] in nodes_by_id:
@@ -49,6 +50,10 @@ def build_interaction_tree(project_id: str, root_key: str, workspace_root: Path,
         nodes_by_id[node["id"]] = node
 
     def add_edge(src: str, dst: str, typ: str) -> None:
+        edge_key = (src, dst, typ)
+        if edge_key in edge_keys:
+            return
+        edge_keys.add(edge_key)
         edges.append({"from": src, "to": dst, "type": typ})
 
     def is_external_server_ref(s: str) -> bool:
@@ -57,6 +62,37 @@ def build_interaction_tree(project_id: str, root_key: str, workspace_root: Path,
 
     def make_node_id(path: str) -> str:
         return f"internal:{path}"
+
+    def collect_relation_refs(value: Any, path: str) -> list[_Ref]:
+        if value is None:
+            return []
+
+        if isinstance(value, str):
+            ref = scan_value(value, path)
+            return [ref] if ref else []
+
+        refs: list[_Ref] = []
+
+        if isinstance(value, list):
+            for i, item in enumerate(value):
+                refs.extend(collect_relation_refs(item, f"{path}/{i}"))
+            return refs
+
+        if isinstance(value, dict):
+            if "Type" in value and isinstance(value["Type"], str):
+                ref = scan_value(value, path)
+                return [ref] if ref else []
+
+            if isinstance(value.get("Interactions"), list):
+                for i, item in enumerate(value["Interactions"]):
+                    refs.extend(collect_relation_refs(item, f"{path}/Interactions/{i}"))
+                return refs
+
+            for sub_key, sub_val in value.items():
+                refs.extend(collect_relation_refs(sub_val, f"{path}/{sub_key}"))
+            return refs
+
+        return []
 
     def scan_value(value: Any, path: str) -> _Ref | None:
         if isinstance(value, dict):
@@ -76,33 +112,12 @@ def build_interaction_tree(project_id: str, root_key: str, workspace_root: Path,
                     if k not in value:
                         continue
                     target = value.get(k)
-                    if target is None:
-                        continue
-                    if isinstance(target, list):
-                        for i, t in enumerate(target):
-                            ref = scan_value(t, f"{path}/{k}/{i}")
-                            if ref:
-                                add_edge(node_id, ref.value, edge_type)
-                    elif isinstance(target, dict) and "Type" not in target:
-                        # Two sub-cases:
-                        # 1. Container with Interactions key: { Interactions: [...] } (HitBlock, HitEntity)
-                        # 2. Time-dict (Charging.Next): { "0": ..., "0.35": ... }
-                        inner = target.get("Interactions")
-                        if isinstance(inner, list):
-                            for i, t in enumerate(inner):
-                                ref = scan_value(t, f"{path}/{k}/Interactions/{i}")
-                                if ref:
-                                    add_edge(node_id, ref.value, edge_type)
-                        else:
-                            # Time-dict or other flat dict—scan each value
-                            for sub_key, sub_val in target.items():
-                                ref = scan_value(sub_val, f"{path}/{k}/{sub_key}")
-                                if ref:
-                                    add_edge(node_id, ref.value, edge_type)
-                    else:
-                        ref = scan_value(target, f"{path}/{k}")
-                        if ref:
-                            add_edge(node_id, ref.value, edge_type)
+                    for ref in collect_relation_refs(target, f"{path}/{k}"):
+                        add_edge(node_id, ref.value, edge_type)
+
+                if value.get("Type") == "Replace" and "DefaultValue" in value:
+                    for ref in collect_relation_refs(value.get("DefaultValue"), f"{path}/DefaultValue"):
+                        add_edge(node_id, ref.value, "replace")
                 return _Ref(kind="node", value=node_id)
 
             # Not a Type node; keep scanning children looking for nodes.
@@ -119,7 +134,7 @@ def build_interaction_tree(project_id: str, root_key: str, workspace_root: Path,
             s = value.strip()
             if is_external_server_ref(s):
                 external_id = f"server:{s}"
-                add_node({"id": external_id, "type": "External", "label": s, "isExternal": True})
+                add_node({"id": external_id, "type": "_ref", "label": s, "isExternal": True, "rawFields": {"ServerId": s}})
                 return _Ref(kind="external", value=external_id)
             return None
 
@@ -181,7 +196,7 @@ def build_interaction_tree(project_id: str, root_key: str, workspace_root: Path,
                 # Map of named entrypoints → server ids (or nested containers). Link root to each referenced interaction.
                 for target_id in collect_external_refs(inter):
                     external_id = f"server:{target_id}"
-                    add_node({"id": external_id, "type": "External", "label": target_id, "isExternal": True})
+                    add_node({"id": external_id, "type": "_ref", "label": target_id, "isExternal": True, "rawFields": {"ServerId": target_id}})
                     add_edge(root_node_id, external_id, "child")
 
     # Safety: don't explode UI if malformed / huge.

@@ -40,10 +40,32 @@ type SaveStatus = 'idle' | 'saving' | 'ok' | 'error'
 const nodeTypes = { interaction: InteractionNode }
 
 const SEMANTIC_EDGE_TYPES = new Set([
-  'next', 'failed', 'replace', 'fork', 'blocked', 'collisionNext', 'groundNext', 'calls',
+  'next', 'failed', 'replace', 'fork', 'blocked', 'collisionNext', 'groundNext', 'start', 'cancel', 'hitBlock', 'hitEntity', 'hitNothing', 'calls', 'child',
 ])
 
+const EDGE_TYPE_BY_SOURCE_HANDLE: Record<string, string> = {
+  failed: 'failed',
+  next: 'next',
+  replace: 'replace',
+  child: 'child',
+  fork: 'fork',
+  blocked: 'blocked',
+  collisionNext: 'collisionNext',
+  groundNext: 'groundNext',
+  start: 'start',
+  cancel: 'cancel',
+  hitBlock: 'hitBlock',
+  hitEntity: 'hitEntity',
+  hitNothing: 'hitNothing',
+}
+
+function edgeTypeToSourceHandle(edgeType: string): string {
+  return EDGE_TYPE_BY_SOURCE_HANDLE[edgeType] ?? (edgeType === 'failed' ? 'failed' : edgeType === 'next' ? 'next' : 'child')
+}
+
 function toFlow(data: InteractionTreeResponse): { nodes: Node[]; edges: Edge[] } {
+  const rootNodeIds = new Set(data.nodes.filter((n) => n.type === 'Root').map((n) => n.id))
+
   const nodes: Node[] = data.nodes.map((n) => ({
     id: n.id,
     type: 'interaction',
@@ -57,7 +79,7 @@ function toFlow(data: InteractionTreeResponse): { nodes: Node[]; edges: Edge[] }
   }))
 
   const edges: Edge[] = data.edges.map((e) => {
-    const sourceHandle = e.type === 'next' ? 'next' : e.type === 'failed' ? 'failed' : 'child'
+    const sourceHandle = rootNodeIds.has(e.from) ? undefined : edgeTypeToSourceHandle(e.type)
     const color = getColorForEdgeType(e.type)
     return {
       id: `${e.from}->${e.to}:${e.type}`,
@@ -234,8 +256,8 @@ function InteractionTreeEditorInner(props: Props) {
   // ── Edit mode: connect edges ──
   const onConnect = useCallback(
     (connection: Connection) => {
-      const handle = connection.sourceHandle
-      const edgeType = handle === 'failed' ? 'failed' : handle === 'child' ? 'child' : 'next'
+      const handle = connection.sourceHandle ?? 'next'
+      const edgeType = EDGE_TYPE_BY_SOURCE_HANDLE[handle] ?? 'next'
       const color = getColorForEdgeType(edgeType)
       const edgeId = `${connection.source}->${connection.target}:${edgeType}:${Date.now()}`
       const newEdge: Edge = {

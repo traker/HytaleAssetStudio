@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test:interaction-contract": "tsc -p tsconfig.interaction-contract.json && node ./.tmp/interaction-contract/scripts/interaction-contract.test.js"
   },
   "dependencies": {
     "@monaco-editor/react": "^4.7.0",

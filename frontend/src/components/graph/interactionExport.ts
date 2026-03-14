@@ -4,9 +4,7 @@
  * Rules:
  * - External nodes (data.isExternal = true) → emitted as a bare server-ID string
  * - Internal nodes (data.isExternal = false) → emitted as an inline object { Type, ...fields }
- * - Edge type "next"  → stored in result["Next"]
- * - Edge type "failed" → stored in result["Failed"]
- * - Edge type "child"  → appended to result["Interactions"]
+ * - Semantic edge types are mapped back to their original Hytale keys/containers
  * - Cycles / multi-parent situations are handled conservatively (emit ref string on revisit)
  *
  * Charging special case: Next is stored as a dict-time in rawFields (key "Next" is already
@@ -50,6 +48,27 @@ export function exportInteractionTree(
     if (typeof dt === 'string') return dt
     if (typeof e.label === 'string') return e.label
     return 'child'
+  }
+
+  const SINGLE_EDGE_KEYS: Record<string, string> = {
+    next: 'Next',
+    failed: 'Failed',
+    collisionNext: 'CollisionNext',
+    groundNext: 'GroundNext',
+    start: 'StartInteraction',
+    cancel: 'CancelInteraction',
+  }
+
+  const LIST_EDGE_KEYS: Record<string, string> = {
+    child: 'Interactions',
+    fork: 'ForkInteractions',
+    blocked: 'BlockedInteractions',
+  }
+
+  const CONTAINER_EDGE_KEYS: Record<string, string> = {
+    hitBlock: 'HitBlock',
+    hitEntity: 'HitEntity',
+    hitNothing: 'HitNothing',
   }
 
   /**
@@ -99,18 +118,29 @@ export function exportInteractionTree(
     // (so the user's graph connections always win over stale rawFields)
     delete result['Next']
     delete result['Failed']
+    delete result['DefaultValue']
     delete result['Interactions']
     delete result['ForkInteractions']
+    delete result['BlockedInteractions']
     delete result['CollisionNext']
     delete result['GroundNext']
     delete result['StartInteraction']
     delete result['CancelInteraction']
+    delete result['HitBlock']
+    delete result['HitEntity']
+    delete result['HitNothing']
 
     const outEdges = edgesBySource.get(nodeId) ?? []
 
-    const nextEdges = outEdges.filter((e) => resolveEdgeType(e) === 'next')
-    const failedEdges = outEdges.filter((e) => resolveEdgeType(e) === 'failed')
-    const childEdges = outEdges.filter((e) => resolveEdgeType(e) === 'child')
+    const edgesByType = new Map<string, Edge[]>()
+    for (const edge of outEdges) {
+      const edgeType = resolveEdgeType(edge)
+      const arr = edgesByType.get(edgeType)
+      if (arr) arr.push(edge)
+      else edgesByType.set(edgeType, [edge])
+    }
+
+    const nextEdges = edgesByType.get('next') ?? []
 
     // "Next" — single or ignored if multiple (ambiguous)
     if (nextEdges.length === 1) {
@@ -125,17 +155,57 @@ export function exportInteractionTree(
       }
     }
 
-    // "Failed"
-    if (failedEdges.length === 1) {
-      result['Failed'] = buildNode(failedEdges[0].target, newAncestors)
-    } else if (failedEdges.length > 1) {
-      errors.push(`Node ${nodeId} has ${failedEdges.length} "failed" edges — only first used`)
-      result['Failed'] = buildNode(failedEdges[0].target, newAncestors)
+    // Other single-edge keys preserve one target each.
+    for (const [edgeType, key] of Object.entries(SINGLE_EDGE_KEYS)) {
+      if (edgeType === 'next') continue
+      const matching = edgesByType.get(edgeType) ?? []
+      if (matching.length === 1) {
+        result[key] = buildNode(matching[0].target, newAncestors)
+      } else if (matching.length > 1) {
+        errors.push(`Node ${nodeId} has ${matching.length} "${edgeType}" edges — only first used`)
+        result[key] = buildNode(matching[0].target, newAncestors)
+      }
     }
 
-    // "Interactions" (child edges)
-    if (childEdges.length > 0) {
-      result['Interactions'] = childEdges.map((e) => buildNode(e.target, newAncestors))
+    // List-like keys preserve all children in order.
+    for (const [edgeType, key] of Object.entries(LIST_EDGE_KEYS)) {
+      const matching = edgesByType.get(edgeType) ?? []
+      if (matching.length > 0) {
+        result[key] = matching.map((e) => buildNode(e.target, newAncestors))
+      }
+    }
+
+    // Selector-like containers preserve their Interactions wrapper.
+    for (const [edgeType, key] of Object.entries(CONTAINER_EDGE_KEYS)) {
+      const matching = edgesByType.get(edgeType) ?? []
+      if (matching.length > 0) {
+        result[key] = {
+          Interactions: matching.map((e) => buildNode(e.target, newAncestors)),
+        }
+      }
+    }
+
+    const replaceEdges = edgesByType.get('replace') ?? []
+    if (replaceEdges.length > 0) {
+      const rawDefaultValue = rawFields['DefaultValue']
+      const defaultValueExtras = (
+        typeof rawDefaultValue === 'object' && rawDefaultValue !== null && !Array.isArray(rawDefaultValue)
+          ? { ...(rawDefaultValue as Record<string, unknown>) }
+          : {}
+      )
+      delete defaultValueExtras['Interactions']
+      result['DefaultValue'] = {
+        ...defaultValueExtras,
+        Interactions: replaceEdges.map((e) => buildNode(e.target, newAncestors)),
+      }
+    } else {
+      const rawDefaultValue = rawFields['DefaultValue']
+      if (typeof rawDefaultValue === 'object' && rawDefaultValue !== null && !Array.isArray(rawDefaultValue)) {
+        const defaultValueObject = rawDefaultValue as Record<string, unknown>
+        if (!('Interactions' in defaultValueObject)) {
+          result['DefaultValue'] = defaultValueObject
+        }
+      }
     }
 
     return result

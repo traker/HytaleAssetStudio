@@ -189,6 +189,38 @@
 		- `python -m unittest backend.tests.test_interaction_tree_service` → OK
 # 📋 Session Recap — Hytale Asset Studio
 
+- 2026-03-14 - `Replace` expose maintenant `DefaultValue` comme vraie branche du graphe
+	- assets vanilla verifies:
+		- les usages observes de `Replace` passent majoritairement par `DefaultValue.Interactions`
+		- ce container melange des refs serveur et des interactions inline selon les cas
+	- `backend/core/interaction_tree_service.py`
+		- le parseur suit maintenant `Replace.DefaultValue` et emet des edges `replace`
+	- `frontend/src/components/graph/interactionSchemas.ts`
+		- `Replace` declare maintenant `DefaultValue` comme branche sortante `replace`
+	- `frontend/src/components/graph/InteractionNode.tsx`
+		- ajout du handle visuel `replace` et detection via `rawFields.DefaultValue`
+	- `frontend/src/components/graph/interactionExport.ts`
+		- l'export reconstruit `DefaultValue.Interactions` a partir des edges `replace`, tout en preservant les extras du container
+	- `frontend/src/components/editor/interactionFormTypeSections.tsx`
+		- le form `Replace` edite maintenant `DefaultValue` en mode guide `None` / `Interactions Container` / `Raw Object`
+		- le mode container utilise une vraie liste de valeurs ref/inline au lieu d'un textarea JSON brut
+	- verification:
+		- `python -m unittest backend.tests.test_interaction_tree_service -v` → OK
+		- `npm --prefix frontend run test:interaction-contract` → OK
+		- `npm --prefix frontend run build` → OK
+
+- 2026-03-14 - Le graphe d'interactions affiche maintenant les refs externes comme noeuds `_ref`
+	- `backend/core/interaction_tree_service.py`
+		- les refs serveur externes detectees dans l'arbre (`Next`, `Failed`, `Interactions`, etc.) sont maintenant publiees avec `type: "_ref"` et `rawFields.ServerId`
+		- cela aligne le contrat backend avec le schema frontend deja present pour les placeholders de reference externe
+	- `backend/tests/test_interaction_tree_service.py`
+		- ajout d'un test de non-regression couvrant une interaction qui pointe par `Next` vers un asset externe resolu depuis un autre layer
+	- verification:
+		- `python -m unittest backend.tests.test_interaction_tree_service -v` → OK
+		- `npm --prefix frontend run build` → OK
+
+# 📋 Session Recap — Hytale Asset Studio
+
 ## 2026-03-12 — Etat + plan + tracker pour le chantier Interaction Editor
 
 **Contexte** : le chantier d'amelioration de l'editeur d'interactions devient suffisamment large pour necessiter un cadrage dedie, separe du simple fil de conversation.

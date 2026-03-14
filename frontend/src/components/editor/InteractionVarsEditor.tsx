@@ -40,7 +40,12 @@ type InteractionInline = {
   [k: string]: unknown
 }
 
-type VarEntry = { Interactions: InteractionInline[] }
+type InteractionValue = string | InteractionInline
+
+type VarEntry = {
+  Interactions: InteractionValue[]
+  [k: string]: unknown
+}
 export type InteractionVarsValue = Record<string, VarEntry>
 
 export type InteractionVarsEditorProps = {
@@ -116,17 +121,323 @@ const REMOVE_BTN: React.CSSProperties = {
 // ─────────────────────────────────────────────────────────────
 
 const KNOWN_INTERACTION_KEYS = new Set([
+  'Type',
   'Parent',
+  'EffectId',
+  'Entity',
+  'Config',
+  'Next',
+  'Interactions',
   'DamageCalculator',
   'DamageEffects',
   'EntityStatsOnHit',
   'StaminaCost',
 ])
 
+const VANILLA_TYPED_INTERACTIONS = ['ApplyEffect', 'Projectile', 'Serial'] as const
+
 function asObj(v: unknown): Record<string, unknown> {
   return typeof v === 'object' && v !== null && !Array.isArray(v)
     ? (v as Record<string, unknown>)
     : {}
+}
+
+function isInteractionInline(v: unknown): v is InteractionInline {
+  return typeof v === 'object' && v !== null && !Array.isArray(v)
+}
+
+function jsonStringify(v: unknown): string {
+  return JSON.stringify(v, null, 2)
+}
+
+function setOptionalRecordValue(
+  source: Record<string, unknown>,
+  key: string,
+  value: unknown,
+): Record<string, unknown> {
+  const updated = { ...source }
+  if (value === undefined || value === null || value === '') delete updated[key]
+  else updated[key] = value
+  return updated
+}
+
+function knownKeysForInteractionType(type: string | undefined): Set<string> {
+  const keys = new Set(KNOWN_INTERACTION_KEYS)
+  if (type === 'ApplyEffect') {
+    keys.add('EffectId')
+    keys.add('Entity')
+  }
+  if (type === 'Projectile') {
+    keys.add('Config')
+    keys.add('Next')
+  }
+  if (type === 'Serial') {
+    keys.add('Interactions')
+  }
+  return keys
+}
+
+function JsonObjectEditor({
+  label,
+  description,
+  value,
+  onChange,
+  placeholder,
+  minHeight = 70,
+}: {
+  label: string
+  description?: string
+  value: unknown
+  onChange: (updated: unknown) => void
+  placeholder: string
+  minHeight?: number
+}) {
+  return (
+    <div>
+      <label style={LABEL}>{label}</label>
+      {description && <div style={{ fontSize: 10, color: '#555', marginBottom: 3 }}>{description}</div>}
+      <textarea
+        rows={4}
+        defaultValue={value === undefined ? '' : jsonStringify(value)}
+        onBlur={(e) => {
+          const raw = e.target.value.trim()
+          if (!raw) {
+            onChange(undefined)
+            return
+          }
+          try {
+            onChange(JSON.parse(raw))
+          } catch {
+            // Ignore invalid JSON while editing.
+          }
+        }}
+        style={{
+          ...INPUT_STYLE,
+          resize: 'vertical',
+          minHeight,
+          lineHeight: 1.4,
+          fontSize: 11,
+        }}
+        placeholder={placeholder}
+        spellCheck={false}
+      />
+    </div>
+  )
+}
+
+function InteractionExtrasEditor({
+  interaction,
+  excludedKeys,
+  onChange,
+}: {
+  interaction: InteractionInline
+  excludedKeys: Set<string>
+  onChange: (updated: InteractionInline) => void
+}) {
+  const extraKeys = Object.keys(interaction).filter((k) => !excludedKeys.has(k))
+
+  return (
+    <>
+      {extraKeys.map((k) => {
+        const val = interaction[k]
+        const isComplex = typeof val === 'object' && val !== null
+        return (
+          <div key={k}>
+            <label style={{ ...LABEL, color: '#666' }}>{k} (extra)</label>
+            {isComplex ? (
+              <textarea
+                rows={3}
+                defaultValue={jsonStringify(val)}
+                onBlur={(e) => {
+                  try { onChange({ ...interaction, [k]: JSON.parse(e.target.value) }) } catch { /* ignore */ }
+                }}
+                style={{
+                  ...INPUT_STYLE,
+                  resize: 'vertical',
+                  minHeight: 50,
+                  lineHeight: 1.4,
+                  fontSize: 11,
+                }}
+                spellCheck={false}
+              />
+            ) : (
+              <input
+                type="text"
+                defaultValue={val === undefined || val === null ? '' : String(val)}
+                onBlur={(e) => onChange({ ...interaction, [k]: e.target.value || undefined })}
+                style={SMALL_INPUT}
+              />
+            )}
+          </div>
+        )
+      })}
+    </>
+  )
+}
+
+function ApplyEffectFields({
+  interaction,
+  onChange,
+}: {
+  interaction: InteractionInline
+  onChange: (updated: InteractionInline) => void
+}) {
+  const effectId = interaction.EffectId
+  const effectIdIsString = typeof effectId === 'string' || effectId === undefined
+  const entity = typeof interaction.Entity === 'string' ? interaction.Entity : ''
+
+  return (
+    <div>
+      <div style={SECTION_LABEL}>Apply Effect</div>
+      <div style={{ display: 'flex', gap: 4, alignItems: 'center', marginBottom: 4 }}>
+        <button
+          type="button"
+          onClick={() => onChange({ ...interaction, EffectId: typeof effectId === 'string' ? effectId : '' })}
+          style={{
+            background: effectIdIsString ? '#22314a' : 'transparent',
+            border: '1px solid #334766',
+            color: effectIdIsString ? '#9fd3ff' : '#6f87a8',
+            borderRadius: 3,
+            cursor: 'pointer',
+            fontSize: 10,
+            padding: '2px 6px',
+          }}
+        >
+          Effect Ref
+        </button>
+        <button
+          type="button"
+          onClick={() => onChange({ ...interaction, EffectId: typeof effectId === 'object' && effectId !== null ? effectId : {} })}
+          style={{
+            background: !effectIdIsString ? '#2f2745' : 'transparent',
+            border: '1px solid #4b3e6b',
+            color: !effectIdIsString ? '#d4c3ff' : '#8a7fb1',
+            borderRadius: 3,
+            cursor: 'pointer',
+            fontSize: 10,
+            padding: '2px 6px',
+          }}
+        >
+          Effect Object
+        </button>
+      </div>
+
+      {effectIdIsString ? (
+        <div style={{ marginBottom: 6 }}>
+          <label style={LABEL}>Effect ID</label>
+          <input
+            type="text"
+            value={typeof effectId === 'string' ? effectId : ''}
+            onChange={(e) => onChange(setOptionalRecordValue(interaction, 'EffectId', e.target.value || undefined) as InteractionInline)}
+            style={SMALL_INPUT}
+            placeholder="Potion_Health"
+          />
+        </div>
+      ) : (
+        <div style={{ marginBottom: 6 }}>
+          <JsonObjectEditor
+            label="EffectId"
+            description="Observed vanilla form for inline effect definitions used by potions and environmental effects."
+            value={effectId}
+            onChange={(updated) => onChange(setOptionalRecordValue(interaction, 'EffectId', updated) as InteractionInline)}
+            placeholder={'{\n  "StatModifiers": { "Health": 40 },\n  "ValueType": "Percent"\n}'}
+          />
+        </div>
+      )}
+
+      <div>
+        <label style={LABEL}>Entity</label>
+        <input
+          type="text"
+          value={entity}
+          onChange={(e) => onChange(setOptionalRecordValue(interaction, 'Entity', e.target.value || undefined) as InteractionInline)}
+          style={SMALL_INPUT}
+          placeholder="Target"
+        />
+      </div>
+    </div>
+  )
+}
+
+function ProjectileFields({
+  interaction,
+  onChange,
+}: {
+  interaction: InteractionInline
+  onChange: (updated: InteractionInline) => void
+}) {
+  const config = typeof interaction.Config === 'string' ? interaction.Config : ''
+  const next = interaction.Next
+
+  return (
+    <div>
+      <div style={SECTION_LABEL}>Projectile</div>
+      <div style={{ marginBottom: 6 }}>
+        <label style={LABEL}>Config</label>
+        <input
+          type="text"
+          value={config}
+          onChange={(e) => onChange(setOptionalRecordValue(interaction, 'Config', e.target.value || undefined) as InteractionInline)}
+          style={SMALL_INPUT}
+          placeholder="Projectile_Config_Bow_Combat"
+        />
+      </div>
+
+      <div>
+        <label style={LABEL}>Next</label>
+        <div style={{ fontSize: 10, color: '#555', marginBottom: 3 }}>Observed vanilla follow-up after projectile launch.</div>
+        <InteractionValueEditor
+          value={typeof next === 'string' || isInteractionInline(next) ? next : ''}
+          onChange={(updated) => onChange(setOptionalRecordValue(interaction, 'Next', updated) as InteractionInline)}
+        />
+      </div>
+    </div>
+  )
+}
+
+function SerialFields({
+  interaction,
+  onChange,
+}: {
+  interaction: InteractionInline
+  onChange: (updated: InteractionInline) => void
+}) {
+  const interactions = Array.isArray(interaction.Interactions)
+    ? interaction.Interactions.filter((entry) => typeof entry === 'string' || isInteractionInline(entry)) as InteractionValue[]
+    : []
+
+  function updateNestedInteraction(index: number, updated: InteractionValue) {
+    const next = interactions.map((entry, entryIndex) => entryIndex === index ? updated : entry)
+    onChange({ ...interaction, Interactions: next })
+  }
+
+  function removeNestedInteraction(index: number) {
+    const next = interactions.filter((_, entryIndex) => entryIndex !== index)
+    onChange(next.length > 0 ? { ...interaction, Interactions: next } : setOptionalRecordValue(interaction, 'Interactions', undefined) as InteractionInline)
+  }
+
+  function addNestedInteraction() {
+    onChange({ ...interaction, Interactions: [...interactions, ''] })
+  }
+
+  return (
+    <div>
+      <div style={SECTION_LABEL}>Serial Interactions</div>
+      {interactions.length === 0 && (
+        <div style={{ color: '#555', fontStyle: 'italic', fontSize: 11, marginBottom: 6 }}>No serial steps.</div>
+      )}
+      {interactions.map((entry, index) => (
+        <div key={`serial-${index}`} style={{ marginBottom: 8, padding: '6px 8px', border: '1px solid #242438', borderRadius: 4 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+            <span style={{ fontSize: 10, color: '#555' }}>Step #{index + 1}</span>
+            <button type="button" onClick={() => removeNestedInteraction(index)} style={{ ...REMOVE_BTN, fontSize: 11 }}>× remove</button>
+          </div>
+          <InteractionValueEditor value={entry} onChange={(updated) => updateNestedInteraction(index, updated)} />
+        </div>
+      ))}
+      <button type="button" onClick={addNestedInteraction} style={ADD_BTN}>+ Add serial step</button>
+    </div>
+  )
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -143,6 +454,8 @@ function InlineInteractionEditor({
   function set<K extends keyof InteractionInline>(k: K, v: InteractionInline[K]) {
     onChange({ ...interaction, [k]: v })
   }
+
+  const interactionType = typeof interaction.Type === 'string' ? interaction.Type : ''
 
   // ── Parent ──────────────────────────────────────────────
   const parent = typeof interaction.Parent === 'string' ? interaction.Parent : ''
@@ -212,11 +525,31 @@ function InlineInteractionEditor({
     set('StaminaCost', Object.keys(updated).length > 0 ? updated : undefined)
   }
 
-  // ── Unknown extra keys ───────────────────────────────────
-  const extraKeys = Object.keys(interaction).filter((k) => !KNOWN_INTERACTION_KEYS.has(k))
+  const knownKeys = knownKeysForInteractionType(interactionType)
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+
+      <div>
+        <label style={LABEL}>Type</label>
+        <input
+          type="text"
+          value={interactionType}
+          onChange={(e) => set('Type', e.target.value || undefined)}
+          style={SMALL_INPUT}
+          list="interaction-vars-vanilla-types"
+          placeholder="Simple"
+        />
+        <datalist id="interaction-vars-vanilla-types">
+          {VANILLA_TYPED_INTERACTIONS.map((typeName) => (
+            <option key={typeName} value={typeName} />
+          ))}
+          <option value="Simple" />
+          <option value="ModifyInventory" />
+          <option value="ChangeStat" />
+          <option value="ResetCooldown" />
+        </datalist>
+      </div>
 
       {/* Parent */}
       <div>
@@ -229,6 +562,18 @@ function InlineInteractionEditor({
           placeholder="Parent interaction ID"
         />
       </div>
+
+      {interactionType === 'ApplyEffect' && (
+        <ApplyEffectFields interaction={interaction} onChange={onChange} />
+      )}
+
+      {interactionType === 'Projectile' && (
+        <ProjectileFields interaction={interaction} onChange={onChange} />
+      )}
+
+      {interactionType === 'Serial' && (
+        <SerialFields interaction={interaction} onChange={onChange} />
+      )}
 
       {/* DamageCalculator.BaseDamage */}
       <div>
@@ -339,39 +684,74 @@ function InlineInteractionEditor({
       </div>
 
       {/* Extra unknown keys */}
-      {extraKeys.map((k) => {
-        const val = interaction[k]
-        const isComplex = typeof val === 'object' && val !== null
-        return (
-          <div key={k}>
-            <label style={{ ...LABEL, color: '#666' }}>{k} (extra)</label>
-            {isComplex ? (
-              <textarea
-                rows={3}
-                defaultValue={JSON.stringify(val, null, 2)}
-                onBlur={(e) => {
-                  try { onChange({ ...interaction, [k]: JSON.parse(e.target.value) }) } catch { /* ignore */ }
-                }}
-                style={{
-                  ...INPUT_STYLE,
-                  resize: 'vertical',
-                  minHeight: 50,
-                  lineHeight: 1.4,
-                  fontSize: 11,
-                }}
-                spellCheck={false}
-              />
-            ) : (
-              <input
-                type="text"
-                defaultValue={val === undefined || val === null ? '' : String(val)}
-                onBlur={(e) => onChange({ ...interaction, [k]: e.target.value || undefined })}
-                style={SMALL_INPUT}
-              />
-            )}
-          </div>
-        )
-      })}
+      <InteractionExtrasEditor interaction={interaction} excludedKeys={knownKeys} onChange={onChange} />
+    </div>
+  )
+}
+
+function InteractionValueEditor({
+  value,
+  onChange,
+}: {
+  value: InteractionValue
+  onChange: (updated: InteractionValue) => void
+}) {
+  const isRef = typeof value === 'string'
+  const interaction = isInteractionInline(value) ? value : {}
+  const interactionType = typeof interaction.Type === 'string' ? interaction.Type : ''
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+        <button
+          type="button"
+          onClick={() => onChange(typeof value === 'string' ? value : '')}
+          style={{
+            background: isRef ? '#22314a' : 'transparent',
+            border: '1px solid #334766',
+            color: isRef ? '#9fd3ff' : '#6f87a8',
+            borderRadius: 3,
+            cursor: 'pointer',
+            fontSize: 10,
+            padding: '2px 6px',
+          }}
+        >
+          Ref
+        </button>
+        <button
+          type="button"
+          onClick={() => onChange(isInteractionInline(value) ? value : { Type: 'Simple' })}
+          style={{
+            background: !isRef ? '#2f2745' : 'transparent',
+            border: '1px solid #4b3e6b',
+            color: !isRef ? '#d4c3ff' : '#8a7fb1',
+            borderRadius: 3,
+            cursor: 'pointer',
+            fontSize: 10,
+            padding: '2px 6px',
+          }}
+        >
+          Inline
+        </button>
+        {!isRef && interactionType && (
+          <span style={{ fontSize: 10, color: '#7a7198' }}>Type: {interactionType}</span>
+        )}
+      </div>
+
+      {isRef ? (
+        <div>
+          <label style={LABEL}>Interaction Reference</label>
+          <input
+            type="text"
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            style={SMALL_INPUT}
+            placeholder="FineCraft_Harmony_Instrument_Primary_Flute"
+          />
+        </div>
+      ) : (
+        <InlineInteractionEditor interaction={interaction} onChange={onChange} />
+      )}
     </div>
   )
 }
@@ -393,11 +773,15 @@ function VarSection({
 }) {
   const [open, setOpen] = useState(true)
 
-  const interactions: InteractionInline[] = Array.isArray(entry.Interactions)
-    ? entry.Interactions
+  const interactions: InteractionValue[] = Array.isArray(entry.Interactions)
+    ? entry.Interactions.filter((interaction) => typeof interaction === 'string' || isInteractionInline(interaction))
     : []
 
-  function updateInteraction(idx: number, updated: InteractionInline) {
+  const extraEntryFields = Object.fromEntries(
+    Object.entries(entry).filter(([key]) => key !== 'Interactions'),
+  )
+
+  function updateInteraction(idx: number, updated: InteractionValue) {
     const next = interactions.map((it, i) => (i === idx ? updated : it))
     onChangeEntry({ ...entry, Interactions: next })
   }
@@ -408,7 +792,7 @@ function VarSection({
   }
 
   function addInteraction() {
-    onChangeEntry({ ...entry, Interactions: [...interactions, { Parent: '' }] })
+    onChangeEntry({ ...entry, Interactions: [...interactions, ''] })
   }
 
   return (
@@ -454,6 +838,38 @@ function VarSection({
       {/* Section body */}
       {open && (
         <div style={{ padding: '8px 12px', background: '#161624' }}>
+          {Object.keys(extraEntryFields).length > 0 && (
+            <div style={{ marginBottom: 8 }}>
+              <label style={{ ...LABEL, color: '#666' }}>Additional Var Entry Fields</label>
+              <textarea
+                rows={3}
+                defaultValue={JSON.stringify(extraEntryFields, null, 2)}
+                onBlur={(e) => {
+                  const raw = e.target.value.trim()
+                  if (!raw) {
+                    onChangeEntry({ Interactions: interactions })
+                    return
+                  }
+                  try {
+                    const parsed = JSON.parse(raw)
+                    if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
+                      onChangeEntry({ ...(parsed as Record<string, unknown>), Interactions: interactions })
+                    }
+                  } catch {
+                    // Ignore invalid JSON while editing.
+                  }
+                }}
+                style={{
+                  ...INPUT_STYLE,
+                  resize: 'vertical',
+                  minHeight: 50,
+                  lineHeight: 1.4,
+                  fontSize: 11,
+                }}
+                spellCheck={false}
+              />
+            </div>
+          )}
           {interactions.length === 0 && (
             <div style={{ color: '#555', fontStyle: 'italic', fontSize: 11 }}>No interactions.</div>
           )}
@@ -467,8 +883,8 @@ function VarSection({
                   </button>
                 </div>
               )}
-              <InlineInteractionEditor
-                interaction={it}
+              <InteractionValueEditor
+                value={it}
                 onChange={(updated) => updateInteraction(idx, updated)}
               />
             </div>
@@ -501,7 +917,7 @@ export function InteractionVarsEditor({ vars, onChange }: InteractionVarsEditorP
 
   function addVar() {
     const name = `NewVar_${Date.now()}`
-    onChange({ ...vars, [name]: { Interactions: [{ Parent: '' }] } })
+    onChange({ ...vars, [name]: { Interactions: [''] } })
   }
 
   return (

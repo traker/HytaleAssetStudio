@@ -33,7 +33,15 @@ export const getColorForInteractionType = (nodeType: string): string => {
   if (t === 'heal')           return '#55EFC4'
   if (t === 'applyforce')     return '#FDCB6E'
   if (t === 'spawnnpc')       return '#74B9FF'
+  if (t === 'teleportinstance' || t === 'teleportconfiginstance') return '#7ed6df'
   if (t === 'placeblock')     return '#4ECDC4'
+  if (t === 'opencontainer' || t === 'openprocessingbench') return '#81ecec'
+  if (t === 'explode')        return '#ff7675'
+  if (t === 'spawnprefab')    return '#a29bfe'
+  if (t === 'spawndrops')     return '#fdcb6e'
+  if (t === 'useentity')      return '#74b9ff'
+  if (t === 'usecoop')        return '#55efc4'
+  if (t === 'resetcooldown')  return '#fab1a0'
   if (t === 'changestat' || t === 'changestathwithmodifier') return '#D4A5A5'
   if (t === 'clearentityeffect') return '#B2BEC3'
   if (t === 'wielding')       return '#FFB347'
@@ -48,8 +56,14 @@ export const getColorForEdgeType = (edgeType: string): string => {
     next: '#F4A261',
     failed: '#FF6B6B',
     replace: '#A29BFE',
+    child: '#74B9FF',
     fork: '#FFE66D',
     blocked: '#888888',
+    start: '#7ed6df',
+    cancel: '#ff7675',
+    hitBlock: '#4ECDC4',
+    hitEntity: '#96CEB4',
+    hitNothing: '#B2BEC3',
     calls: '#74B9FF',
     collisionNext: '#96CEB4',
     groundNext: '#96CEB4',

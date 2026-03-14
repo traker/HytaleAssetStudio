@@ -26,6 +26,14 @@ export function setApiWorkspaceId(workspaceId: string | null): void {
   activeWorkspaceId = workspaceId
 }
 
+function buildHeaders(init?: RequestInit): HeadersInit {
+  return {
+    ...(init?.body ? { 'Content-Type': 'application/json' } : {}),
+    ...(activeWorkspaceId ? { 'X-HAS-Workspace-Id': activeWorkspaceId } : {}),
+    ...(init?.headers ?? {}),
+  }
+}
+
 async function readJsonSafe(res: Response): Promise<unknown> {
   const text = await res.text()
   if (!text) return undefined
@@ -36,16 +44,12 @@ async function readJsonSafe(res: Response): Promise<unknown> {
   }
 }
 
-export async function httpJson<T>(input: RequestInfo | URL, init?: RequestInit): Promise<T> {
+export async function httpFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
   const requestUrl = typeof input === 'string' ? input : input.toString()
   const method = init?.method ?? 'GET'
   const res = await measureAsync(`http.${method}`, async () => fetch(input, {
     ...init,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(activeWorkspaceId ? { 'X-HAS-Workspace-Id': activeWorkspaceId } : {}),
-      ...(init?.headers ?? {}),
-    },
+    headers: buildHeaders(init),
   }), { url: requestUrl })
 
   if (isPerfAuditEnabled()) {
@@ -81,5 +85,10 @@ export async function httpJson<T>(input: RequestInfo | URL, init?: RequestInit):
     throw new HasApiError(msg, res.status, payload)
   }
 
+  return res
+}
+
+export async function httpJson<T>(input: RequestInfo | URL, init?: RequestInit): Promise<T> {
+  const res = await httpFetch(input, init)
   return (await res.json()) as T
 }

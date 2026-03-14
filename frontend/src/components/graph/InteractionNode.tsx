@@ -1,6 +1,7 @@
 import { Handle, Position } from '@xyflow/react'
 
 import { getColorForInteractionType } from './colors'
+import { getSchemaForType } from './interactionSchemas'
 
 export type InteractionNodeData = {
   label: string
@@ -18,8 +19,136 @@ type Props = {
 const SELECTED_BORDER_COLOR = '#00D4FF'
 const SELECTED_GLOW = '0 0 0 2px #00D4FF55, 0 0 12px #00D4FF44'
 
+type HandleSpec = {
+  id: string
+  position: Position
+  style: React.CSSProperties
+  title: string
+}
+
+const BASE_HANDLE_STYLE: React.CSSProperties = {
+  width: 8,
+  height: 8,
+  border: '2px solid #222',
+}
+
+const HANDLE_SPECS: Record<string, HandleSpec> = {
+  failed: {
+    id: 'failed',
+    position: Position.Left,
+    style: { ...BASE_HANDLE_STYLE, background: '#FF6B6B', top: '42%' },
+    title: 'failed',
+  },
+  next: {
+    id: 'next',
+    position: Position.Right,
+    style: { ...BASE_HANDLE_STYLE, background: '#F4A261', top: '32%' },
+    title: 'next',
+  },
+  collisionNext: {
+    id: 'collisionNext',
+    position: Position.Right,
+    style: { ...BASE_HANDLE_STYLE, background: '#96CEB4', top: '55%' },
+    title: 'collisionNext',
+  },
+  groundNext: {
+    id: 'groundNext',
+    position: Position.Right,
+    style: { ...BASE_HANDLE_STYLE, background: '#96CEB4', top: '78%' },
+    title: 'groundNext',
+  },
+  replace: {
+    id: 'replace',
+    position: Position.Bottom,
+    style: { ...BASE_HANDLE_STYLE, background: '#A29BFE', left: '16%' },
+    title: 'replace/default value',
+  },
+  child: {
+    id: 'child',
+    position: Position.Bottom,
+    style: { ...BASE_HANDLE_STYLE, background: '#74B9FF', left: '16%' },
+    title: 'child/interactions',
+  },
+  fork: {
+    id: 'fork',
+    position: Position.Bottom,
+    style: { ...BASE_HANDLE_STYLE, background: '#FFE66D', left: '30%' },
+    title: 'fork',
+  },
+  blocked: {
+    id: 'blocked',
+    position: Position.Bottom,
+    style: { ...BASE_HANDLE_STYLE, background: '#888888', left: '44%' },
+    title: 'blocked',
+  },
+  start: {
+    id: 'start',
+    position: Position.Bottom,
+    style: { ...BASE_HANDLE_STYLE, background: '#7ed6df', left: '58%' },
+    title: 'start',
+  },
+  cancel: {
+    id: 'cancel',
+    position: Position.Bottom,
+    style: { ...BASE_HANDLE_STYLE, background: '#ff7675', left: '72%' },
+    title: 'cancel',
+  },
+  hitBlock: {
+    id: 'hitBlock',
+    position: Position.Bottom,
+    style: { ...BASE_HANDLE_STYLE, background: '#4ECDC4', left: '18%' },
+    title: 'hitBlock',
+  },
+  hitEntity: {
+    id: 'hitEntity',
+    position: Position.Bottom,
+    style: { ...BASE_HANDLE_STYLE, background: '#96CEB4', left: '38%' },
+    title: 'hitEntity',
+  },
+  hitNothing: {
+    id: 'hitNothing',
+    position: Position.Bottom,
+    style: { ...BASE_HANDLE_STYLE, background: '#B2BEC3', left: '58%' },
+    title: 'hitNothing',
+  },
+}
+
+const EDGE_TYPE_ORDER = ['failed', 'next', 'collisionNext', 'groundNext', 'replace', 'child', 'fork', 'blocked', 'start', 'cancel', 'hitBlock', 'hitEntity', 'hitNothing']
+
+const EDGE_TYPE_BY_RAW_FIELD: Record<string, string> = {
+  Failed: 'failed',
+  Next: 'next',
+  CollisionNext: 'collisionNext',
+  GroundNext: 'groundNext',
+  DefaultValue: 'replace',
+  Interactions: 'child',
+  ForkInteractions: 'fork',
+  BlockedInteractions: 'blocked',
+  StartInteraction: 'start',
+  CancelInteraction: 'cancel',
+  HitBlock: 'hitBlock',
+  HitEntity: 'hitEntity',
+  HitNothing: 'hitNothing',
+}
+
+function getOutgoingHandleIds(data: InteractionNodeData): string[] {
+  if (data.nodeType === 'Root') return ['child']
+  if (data.isExternal) return []
+
+  const schema = getSchemaForType(data.nodeType)
+  const supported = new Set<string>(schema ? Object.values(schema.outgoingEdges) : ['failed', 'next', 'child'])
+
+  const rawFields = data.rawFields ?? {}
+  for (const [rawField, edgeType] of Object.entries(EDGE_TYPE_BY_RAW_FIELD)) {
+    if (rawField in rawFields) supported.add(edgeType)
+  }
+
+  return EDGE_TYPE_ORDER.filter((edgeType) => supported.has(edgeType))
+}
+
 export function InteractionNode({ data }: Props) {
   const typeColor = data.isExternal ? '#9B9B9B' : getColorForInteractionType(data.nodeType)
+  const outgoingHandleIds = getOutgoingHandleIds(data)
 
   const borderColor = data.isSelected
     ? SELECTED_BORDER_COLOR
@@ -110,27 +239,20 @@ export function InteractionNode({ data }: Props) {
         )
       })()}
 
-      <Handle
-        id="failed"
-        type="source"
-        position={Position.Left}
-        style={{ background: '#FF6B6B', width: 8, height: 8, border: '2px solid #222' }}
-        title="failed"
-      />
-      <Handle
-        id="next"
-        type="source"
-        position={Position.Right}
-        style={{ background: '#F4A261', width: 8, height: 8, border: '2px solid #222' }}
-        title="next"
-      />
-      <Handle
-        id="child"
-        type="source"
-        position={Position.Bottom}
-        style={{ background: '#74B9FF', width: 8, height: 8, border: '2px solid #222' }}
-        title="child/calls"
-      />
+      {outgoingHandleIds.map((handleId) => {
+        const spec = HANDLE_SPECS[handleId]
+        if (!spec) return null
+        return (
+          <Handle
+            key={spec.id}
+            id={spec.id}
+            type="source"
+            position={spec.position}
+            style={spec.style}
+            title={spec.title}
+          />
+        )
+      })}
     </div>
   )
 }

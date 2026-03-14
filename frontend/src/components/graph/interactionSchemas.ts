@@ -82,7 +82,7 @@ const Parallel: InteractionSchema = {
     { key: 'ForkInteractions', label: 'Fork Interactions', type: 'array-ref' },
     { key: 'Next', label: 'Next', type: 'string-ref' },
   ],
-  outgoingEdges: { Interactions: 'child', ForkInteractions: 'child', Next: 'next' },
+  outgoingEdges: { Interactions: 'child', ForkInteractions: 'fork', Next: 'next' },
 }
 
 const Condition: InteractionSchema = {
@@ -124,6 +124,11 @@ const Charging: InteractionSchema = {
     { key: 'AllowIndefiniteHold', label: 'Allow Indefinite Hold', type: 'boolean' },
     { key: 'DisplayProgress', label: 'Display Progress', type: 'boolean' },
     { key: 'HorizontalSpeedMultiplier', label: 'Horizontal Speed Mult.', type: 'number' },
+    { key: 'Delay', label: 'Delay', type: 'number' },
+    { key: 'FailOnDamage', label: 'Fail On Damage', type: 'boolean' },
+    { key: 'MouseSensitivityAdjustmentTarget', label: 'Mouse Sensitivity Target', type: 'number' },
+    { key: 'MouseSensitivityAdjustmentDuration', label: 'Mouse Sensitivity Duration', type: 'number' },
+    { key: 'Failed', label: 'Failed', type: 'string-ref', description: 'Interaction to execute if charging fails' },
     {
       key: 'Next',
       label: 'Next (time → interaction)',
@@ -131,7 +136,7 @@ const Charging: InteractionSchema = {
       description: 'Keys are time offsets in seconds from hold start. e.g. { "0": "InteractionId", "0.35": { Type: "Replace", ... } }',
     },
   ],
-  outgoingEdges: { Next: 'next' },
+  outgoingEdges: { Next: 'next', Failed: 'failed' },
 }
 
 const Wielding: InteractionSchema = {
@@ -139,12 +144,21 @@ const Wielding: InteractionSchema = {
   label: 'Wielding',
   category: 'control-flow',
   fields: [
-    { key: 'BlockWindow', label: 'Block Window (s)', type: 'number' },
+    { key: 'RunTime', label: 'RunTime (s)', type: 'number' },
+    { key: 'HorizontalSpeedMultiplier', label: 'Horizontal Speed Mult.', type: 'number' },
+    { key: 'CancelOnOtherClick', label: 'Cancel On Other Click', type: 'boolean' },
+    { key: 'FailOnDamage', label: 'Fail On Damage', type: 'boolean' },
     { key: 'Effects', label: 'Effects', type: 'effects' },
+    { key: 'BlockedEffects', label: 'Blocked Effects', type: 'effects' },
+    { key: 'DamageModifiers', label: 'Damage Modifiers', type: 'dict-stat-number', description: '{ Physical: 0.7, Projectile: 0.7 }' },
+    { key: 'AngledWielding', label: 'Angled Wielding', type: 'object', description: '{ Angle, AngleDistance, DamageModifiers, KnockbackModifiers }' },
+    { key: 'StaminaCost', label: 'Stamina Cost', type: 'object', description: '{ Value, CostType }' },
+    { key: 'Forks', label: 'Forks', type: 'object', description: '{ Primary: { Interactions: [...] } }' },
     { key: 'Next', label: 'Next', type: 'string-ref' },
+    { key: 'Failed', label: 'Failed', type: 'string-ref' },
     { key: 'BlockedInteractions', label: 'Blocked Interactions', type: 'array-ref' },
   ],
-  outgoingEdges: { Next: 'next', BlockedInteractions: 'child' },
+  outgoingEdges: { Next: 'next', Failed: 'failed', BlockedInteractions: 'blocked' },
 }
 
 const Replace: InteractionSchema = {
@@ -154,9 +168,10 @@ const Replace: InteractionSchema = {
   fields: [
     { key: 'Var', label: 'Variable Name', type: 'string', required: true, description: 'Variable to substitute (e.g. Swing_Left)' },
     { key: 'DefaultOk', label: 'Default OK (no error if missing)', type: 'boolean' },
-    { key: 'DefaultValue', label: 'Default Value', type: 'object', description: '{ Interactions: [...] }' },
+    { key: 'DefaultValue', label: 'Default Value', type: 'object', description: 'Usually { Interactions: [...] } with refs or inline interactions' },
+    { key: 'Next', label: 'Next', type: 'string-ref', description: 'Optional follow-up interaction after replacement' },
   ],
-  outgoingEdges: {},
+  outgoingEdges: { DefaultValue: 'replace', Next: 'next' },
 }
 
 const Selector: InteractionSchema = {
@@ -165,13 +180,17 @@ const Selector: InteractionSchema = {
   category: 'control-flow',
   fields: [
     { key: 'RunTime', label: 'RunTime (s)', type: 'number' },
+    { key: 'FailOn', label: 'Fail On', type: 'string', description: 'Optional failure condition, e.g. Entity or Block' },
     { key: 'Effects', label: 'Effects', type: 'effects' },
     { key: 'Selector', label: 'Selector Config', type: 'object', description: '{ Id, Direction, MinAngle?, MaxAngle? }' },
     { key: 'HitBlock', label: 'HitBlock', type: 'object', description: '{ Interactions: [...] }' },
     { key: 'HitEntity', label: 'HitEntity', type: 'object', description: '{ Interactions: [...] }' },
+    { key: 'HitNothing', label: 'HitNothing', type: 'object', description: '{ Interactions: [...] }' },
+    { key: 'HitEntityRules', label: 'HitEntityRules', type: 'object', description: '[{ Matchers, Next }]' },
     { key: 'Next', label: 'Next (no hit)', type: 'string-ref' },
+    { key: 'Failed', label: 'Failed', type: 'string-ref' },
   ],
-  outgoingEdges: { Next: 'next' },
+  outgoingEdges: { Next: 'next', Failed: 'failed', HitBlock: 'hitBlock', HitEntity: 'hitEntity', HitNothing: 'hitNothing' },
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -184,10 +203,10 @@ const DamageEntity: InteractionSchema = {
   category: 'entity-action',
   fields: [
     { key: 'Parent', label: 'Parent (DamageEntityParent ID)', type: 'string' },
-    { key: 'DamageCalculator', label: 'Damage Calculator', type: 'object', description: '{ Class: "Light" }' },
+    { key: 'DamageCalculator', label: 'Damage Calculator', type: 'object', description: '{ Type|Class, BaseDamage, RandomPercentageModifier, ... }' },
     { key: 'Effects', label: 'Effects', type: 'effects' },
-    { key: 'DamageEffects', label: 'Damage Effects', type: 'object', description: '{ Knockback, WorldParticles, ... }' },
-    { key: 'EntityStatsOnHit', label: 'Entity Stats On Hit', type: 'object' },
+    { key: 'DamageEffects', label: 'Damage Effects', type: 'object', description: '{ Knockback, WorldSoundEventId, WorldParticles, ... }' },
+    { key: 'EntityStatsOnHit', label: 'Entity Stats On Hit', type: 'object', description: '[{ EntityStatId, Amount }]' },
   ],
   outgoingEdges: {},
 }
@@ -223,10 +242,14 @@ const ChangeStat: InteractionSchema = {
   category: 'entity-action',
   fields: [
     { key: 'Behaviour', label: 'Behaviour', type: 'string', description: 'e.g. Set, Add, Subtract' },
+    { key: 'ValueType', label: 'Value Type', type: 'string', description: 'e.g. Absolute, Percentage, PercentageCurrent' },
     { key: 'StatModifiers', label: 'Stat Modifiers', type: 'dict-stat-number', description: '{ StatId: amount }' },
+    { key: 'RunTime', label: 'RunTime (s)', type: 'number' },
+    { key: 'Effects', label: 'Effects', type: 'effects' },
     { key: 'Next', label: 'Next', type: 'string-ref' },
+    { key: 'Failed', label: 'Failed', type: 'string-ref' },
   ],
-  outgoingEdges: { Next: 'next' },
+  outgoingEdges: { Next: 'next', Failed: 'failed' },
 }
 
 const ChangeStatWithModifier: InteractionSchema = {
@@ -234,8 +257,9 @@ const ChangeStatWithModifier: InteractionSchema = {
   label: 'Change Stat (Modifier)',
   category: 'entity-action',
   fields: [
-    { key: 'Behaviour', label: 'Behaviour', type: 'string' },
-    { key: 'StatModifiers', label: 'Stat Modifiers', type: 'object' },
+    { key: 'InteractionModifierId', label: 'Interaction Modifier ID', type: 'string', description: 'Modifier source applied to the stat deltas' },
+    { key: 'ValueType', label: 'Value Type', type: 'string', description: 'e.g. Absolute, Percentage' },
+    { key: 'StatModifiers', label: 'Stat Modifiers', type: 'dict-stat-number', description: '{ StatId: amount }' },
     { key: 'Next', label: 'Next', type: 'string-ref' },
   ],
   outgoingEdges: { Next: 'next' },
@@ -378,7 +402,7 @@ const Projectile: InteractionSchema = {
     { key: 'GroundNext', label: 'GroundNext', type: 'string-ref', description: 'On ground hit' },
     { key: 'Effects', label: 'Effects', type: 'effects' },
   ],
-  outgoingEdges: { CollisionNext: 'next', GroundNext: 'next' },
+  outgoingEdges: { CollisionNext: 'collisionNext', GroundNext: 'groundNext' },
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -401,11 +425,17 @@ const ModifyInventory: InteractionSchema = {
   label: 'Modify Inventory',
   category: 'inventory',
   fields: [
-    { key: 'Items', label: 'Items', type: 'object', description: 'Items to add/remove' },
-    { key: 'Mode', label: 'Mode', type: 'string', description: 'e.g. Give, Remove, Equip' },
+    { key: 'AdjustHeldItemQuantity', label: 'Adjust Held Item Quantity', type: 'number', description: 'Consume or refund the held stack, e.g. -1' },
+    { key: 'AdjustHeldItemDurability', label: 'Adjust Held Item Durability', type: 'number', description: 'Durability delta applied to the held item' },
+    { key: 'ItemToRemove', label: 'Item To Remove', type: 'object', description: '{ Id, Quantity, ... }' },
+    { key: 'ItemToAdd', label: 'Item To Add', type: 'object', description: '{ Id, Quantity, ... }' },
+    { key: 'BrokenItem', label: 'Broken Item', type: 'string', description: 'Optional replacement item returned when the held item breaks' },
+    { key: 'NotifyOnBreak', label: 'Notify On Break', type: 'boolean' },
+    { key: 'NotifyOnBreakMessage', label: 'Notify On Break Message', type: 'string' },
     { key: 'Next', label: 'Next', type: 'string-ref' },
+    { key: 'Failed', label: 'Failed', type: 'string-ref' },
   ],
-  outgoingEdges: { Next: 'next' },
+  outgoingEdges: { Next: 'next', Failed: 'failed' },
 }
 
 const RefillContainer: InteractionSchema = {
@@ -468,6 +498,11 @@ const StatsCondition: InteractionSchema = {
   category: 'condition',
   fields: [
     { key: 'Costs', label: 'Costs', type: 'dict-stat-number', description: '{ Stamina: 0.1 } — consumed if condition met' },
+    { key: 'ValueType', label: 'Value Type', type: 'string', description: 'e.g. Absolute or Percent' },
+    { key: 'LessThan', label: 'Less Than', type: 'boolean', description: 'Invert the comparison to check if the stat is below the threshold' },
+    { key: 'Lenient', label: 'Lenient', type: 'boolean', description: 'Observed in some assets as an optional relaxed evaluation flag' },
+    { key: 'RunTime', label: 'RunTime (s)', type: 'number' },
+    { key: 'Effects', label: 'Effects', type: 'effects' },
     { key: 'Next', label: 'Next (stats sufficient)', type: 'string-ref' },
     { key: 'Failed', label: 'Failed (insufficient stats)', type: 'string-ref' },
   ],
@@ -479,7 +514,8 @@ const StatsConditionWithModifier: InteractionSchema = {
   label: 'Stats Condition (Modifier)',
   category: 'condition',
   fields: [
-    { key: 'Costs', label: 'Costs', type: 'object', description: 'Stats costs with modifier support' },
+    { key: 'Costs', label: 'Costs', type: 'dict-stat-number', description: 'Base stat costs before the modifier is applied' },
+    { key: 'InteractionModifierId', label: 'Interaction Modifier ID', type: 'string', description: 'Modifier source used to scale the costs' },
     { key: 'Next', label: 'Next', type: 'string-ref' },
     { key: 'Failed', label: 'Failed', type: 'string-ref' },
   ],
@@ -491,12 +527,41 @@ const EffectCondition: InteractionSchema = {
   label: 'Effect Condition',
   category: 'condition',
   fields: [
-    { key: 'EffectId', label: 'Effect ID', type: 'string', required: true },
-    { key: 'Invert', label: 'Invert (true = must NOT have effect)', type: 'boolean' },
+    { key: 'Entity', label: 'Entity', type: 'string', description: 'Optional entity target, e.g. Self or Target' },
+    { key: 'EntityEffectIds', label: 'Entity Effect IDs', type: 'array-string', description: 'Effects to check for on the target entity' },
+    { key: 'Match', label: 'Match', type: 'string', description: 'Any, None or All' },
     { key: 'Next', label: 'Next (condition met)', type: 'string-ref' },
     { key: 'Failed', label: 'Failed (condition not met)', type: 'string-ref' },
   ],
   outgoingEdges: { Next: 'next', Failed: 'failed' },
+}
+
+const MovementCondition: InteractionSchema = {
+  type: 'MovementCondition',
+  label: 'Movement Condition',
+  category: 'condition',
+  fields: [
+    { key: 'ForwardLeft', label: 'Forward Left', type: 'string-ref' },
+    { key: 'Forward', label: 'Forward', type: 'string-ref' },
+    { key: 'ForwardRight', label: 'Forward Right', type: 'string-ref' },
+    { key: 'Left', label: 'Left', type: 'string-ref' },
+    { key: 'Right', label: 'Right', type: 'string-ref' },
+    { key: 'BackLeft', label: 'Back Left', type: 'string-ref' },
+    { key: 'Back', label: 'Back', type: 'string-ref' },
+    { key: 'BackRight', label: 'Back Right', type: 'string-ref' },
+    { key: 'Failed', label: 'Failed', type: 'string-ref' },
+  ],
+  outgoingEdges: {
+    ForwardLeft: 'next',
+    Forward: 'next',
+    ForwardRight: 'next',
+    Left: 'next',
+    Right: 'next',
+    BackLeft: 'next',
+    Back: 'next',
+    BackRight: 'next',
+    Failed: 'failed',
+  },
 }
 
 const PlacementCountCondition: InteractionSchema = {
@@ -522,6 +587,112 @@ const MemoriesCondition: InteractionSchema = {
     { key: 'Failed', label: 'Failed (memory not set)', type: 'string-ref' },
   ],
   outgoingEdges: { Next: 'next', Failed: 'failed' },
+}
+
+const TeleportInstance: InteractionSchema = {
+  type: 'TeleportInstance',
+  label: 'Teleport Instance',
+  category: 'special',
+  fields: [
+    { key: 'InstanceName', label: 'Instance Name', type: 'string', description: 'Destination instance name, e.g. Persistent' },
+    { key: 'InstanceKey', label: 'Instance Key', type: 'string', description: 'Instance identifier used by the portal or destination config' },
+    { key: 'PositionOffset', label: 'Position Offset', type: 'object', description: '{ X, Y, Z } offset applied at the destination' },
+    { key: 'Rotation', label: 'Rotation', type: 'object', description: '{ Yaw } orientation at destination' },
+    { key: 'OriginSource', label: 'Origin Source', type: 'string', description: 'Observed values include Block and Entity' },
+    { key: 'PersonalReturnPoint', label: 'Personal Return Point', type: 'boolean' },
+    { key: 'CloseOnBlockRemove', label: 'Close On Block Remove', type: 'boolean' },
+    { key: 'RemoveBlockAfter', label: 'Remove Block After', type: 'number', description: 'Optional delay before the source block is removed' },
+  ],
+  outgoingEdges: {},
+}
+
+const TeleportConfigInstance: InteractionSchema = {
+  type: 'TeleportConfigInstance',
+  label: 'Teleport Config Instance',
+  category: 'special',
+  fields: [],
+  outgoingEdges: {},
+}
+
+const OpenContainer: InteractionSchema = {
+  type: 'OpenContainer',
+  label: 'Open Container',
+  category: 'ui',
+  fields: [],
+  outgoingEdges: {},
+}
+
+const OpenProcessingBench: InteractionSchema = {
+  type: 'OpenProcessingBench',
+  label: 'Open Processing Bench',
+  category: 'ui',
+  fields: [],
+  outgoingEdges: {},
+}
+
+const Explode: InteractionSchema = {
+  type: 'Explode',
+  label: 'Explode',
+  category: 'special',
+  fields: [
+    { key: 'Parent', label: 'Parent', type: 'string', description: 'Optional shared explosion template to inherit from' },
+    { key: 'RunTime', label: 'RunTime (s)', type: 'number' },
+    { key: 'Effects', label: 'Effects', type: 'object', description: 'Explosion VFX/SFX payload, often with sounds and particles' },
+    { key: 'Config', label: 'Config', type: 'object', description: 'Explosion config: damage, radii, knockback, item tool specs, drop chance' },
+  ],
+  outgoingEdges: {},
+}
+
+const SpawnPrefab: InteractionSchema = {
+  type: 'SpawnPrefab',
+  label: 'Spawn Prefab',
+  category: 'special',
+  fields: [
+    { key: 'PrefabPath', label: 'Prefab Path', type: 'string', required: true, description: 'Relative prefab file path, e.g. Example_Portal1.prefab.json' },
+    { key: 'Offset', label: 'Offset', type: 'object', description: '{ X, Y, Z } offset from the origin source' },
+    { key: 'RotationYaw', label: 'Rotation Yaw', type: 'string', description: 'Observed values include Zero, Ninety, OneEighty, TwoSeventy' },
+    { key: 'OriginSource', label: 'Origin Source', type: 'string', description: 'Observed values include Block and Entity' },
+    { key: 'Force', label: 'Force Placement', type: 'boolean' },
+  ],
+  outgoingEdges: {},
+}
+
+const SpawnDrops: InteractionSchema = {
+  type: 'SpawnDrops',
+  label: 'Spawn Drops',
+  category: 'special',
+  fields: [
+    { key: 'DropList', label: 'Drop List', type: 'string', description: 'Drop table id from Server/Drops, e.g. Drop_Chicken_Produce' },
+  ],
+  outgoingEdges: {},
+}
+
+const UseEntity: InteractionSchema = {
+  type: 'UseEntity',
+  label: 'Use Entity',
+  category: 'entity-action',
+  fields: [
+    { key: 'Failed', label: 'Failed', type: 'string-ref', description: 'Fallback interaction if the target entity has no usable interaction' },
+  ],
+  outgoingEdges: { Failed: 'failed' },
+}
+
+const UseCoop: InteractionSchema = {
+  type: 'UseCoop',
+  label: 'Use Coop',
+  category: 'block-action',
+  fields: [],
+  outgoingEdges: {},
+}
+
+const ResetCooldown: InteractionSchema = {
+  type: 'ResetCooldown',
+  label: 'Reset Cooldown',
+  category: 'special',
+  fields: [
+    { key: 'Cooldown', label: 'Cooldown', type: 'object', description: '{ Id, Cooldown } target cooldown definition to reset or override' },
+  ],
+  outgoingEdges: {},
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -568,7 +739,12 @@ export const INTERACTION_SCHEMAS: InteractionSchema[] = [
   SendMessage, ChainFlag, FirstClick,
   // Conditions
   StatsCondition, StatsConditionWithModifier, EffectCondition,
+  MovementCondition,
   PlacementCountCondition, MemoriesCondition,
+  // Lot 4 coverage
+  TeleportInstance, TeleportConfigInstance,
+  OpenContainer, OpenProcessingBench,
+  Explode, SpawnPrefab, SpawnDrops, UseEntity, UseCoop, ResetCooldown,
   // Special
   ExternalRef,
 ]

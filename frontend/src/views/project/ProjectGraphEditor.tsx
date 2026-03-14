@@ -269,7 +269,7 @@ export function ProjectGraphEditor(props: Props) {
     if (selectedNodeId.startsWith('common:')) {
       setAsset(null)
       setAssetStatus({ kind: 'idle' })
-      setAssetError('Common resource (no server JSON)')
+      setAssetError(null)
       return
     }
 

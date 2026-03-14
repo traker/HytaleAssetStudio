@@ -1,0 +1,21 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "types": ["node"],
+    "skipLibCheck": true,
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    "outDir": "./.tmp/interaction-contract",
+    "rootDir": "./",
+    "verbatimModuleSyntax": true
+  },
+  "include": [
+    "src/components/graph/interactionExport.ts",
+    "scripts/interaction-contract.test.ts"
+  ]
+}
