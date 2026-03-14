@@ -192,6 +192,7 @@ export function ProjectModifiedGraphView(props: Props) {
   const [activeHighlight, setActiveHighlight] = useState<HighlightState | null>(null)
   const previousSelectedNodeIdRef = useRef<string | null>(null)
   const previousActiveHighlightRef = useRef<HighlightState | null>(null)
+  const reactFlowInstanceRef = useRef<{ fitView: (opts?: { nodes?: Array<{ id: string }>, padding?: number, duration?: number }) => void } | null>(null)
 
   const modifiedRootNodes = rawNodesRef.current.filter((node) => node.isModifiedRoot)
   const newRootCount = modifiedRootNodes.filter((node) => node.modificationKind === 'new').length
@@ -223,6 +224,13 @@ export function ProjectModifiedGraphView(props: Props) {
     if (!entry.assetKey) return
     setSelectedNodeId(entry.assetKey)
     setActiveHighlight(null)
+    if (rawNodesRef.current.some((n) => n.id === entry.assetKey)) {
+      reactFlowInstanceRef.current?.fitView({
+        nodes: [{ id: entry.assetKey }] as { id: string }[],
+        padding: 0.4,
+        duration: 400,
+      })
+    }
   }, [])
 
   // ── Sync isSelected + isConnected on nodes, animate highlighted edges ─────
@@ -761,6 +769,7 @@ export function ProjectModifiedGraphView(props: Props) {
         onlyRenderVisibleElements
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
+        onInit={(instance) => { reactFlowInstanceRef.current = instance as typeof reactFlowInstanceRef.current }}
         onNodeClick={(_, n) => {
           setSelectedNodeId(n.id)
           const connectedEdges = baseEdgesRef.current.filter(
