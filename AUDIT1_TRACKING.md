@@ -4,7 +4,7 @@ Document de pilotage pour exécuter le plan défini dans [AUDIT1.md](AUDIT1.md).
 
 ## Mode d'emploi
 
-- Cocher une tâche quand elle est terminée.
+- **Cocher une tâche quand elle est terminée.**
 - Passer le statut d'un lot de `todo` à `in-progress` puis `done`.
 - Noter la preuve de validation après chaque changement significatif.
 - Garder ce fichier factuel : statut, décision, vérification, reste à faire.

@@ -81,6 +81,34 @@ def _extract_interaction_edges(json_obj: dict) -> dict[str, set[str]]:
     return out
 
 
+def _group_for_server_path(vfs_path: str) -> str:
+    """Derive a UI group label from a VFS server path."""
+    p = vfs_path.replace("\\", "/").lower()
+    if "/item/items/" in p:
+        return "item"
+    if "/rootinteractions/" in p:
+        return "rootinteraction"
+    if "/interactions/" in p:
+        return "interaction"
+    if "/effects/" in p:
+        return "effect"
+    if "/projectiles/" in p:
+        return "projectile"
+    if "/particles/" in p:
+        return "particle"
+    if "/sounds/" in p or "/soundevents/" in p:
+        return "sound"
+    if "/models/" in p:
+        return "model"
+    if "/npc/" in p or "/npcs/" in p:
+        return "npc"
+    if "/prefabs/" in p:
+        return "prefab"
+    if "/block/" in p or "/blocks/" in p:
+        return "block"
+    return "json_data"
+
+
 def build_focus_graph(cfg: ProjectConfig, root_key: str, depth: int | None) -> dict:
     with timed("graph.focus"):
         index = ensure_index(cfg.project.id, cfg)
@@ -116,32 +144,6 @@ def build_focus_graph(cfg: ProjectConfig, root_key: str, depth: int | None) -> d
         if len(paths) == 1 and paths[0] == vfs_path:
             return node_key_for_id(stem)
         return f"server-path:{vfs_path}"
-
-    def _group_for_server_path(vfs_path: str) -> str:
-        p = vfs_path.replace("\\", "/").lower()
-        if "/item/items/" in p:
-            return "item"
-        if "/rootinteractions/" in p:
-            return "rootinteraction"
-        if "/interactions/" in p:
-            return "interaction"
-        if "/effects/" in p:
-            return "effect"
-        if "/projectiles/" in p:
-            return "projectile"
-        if "/particles/" in p:
-            return "particle"
-        if "/sounds/" in p or "/soundevents/" in p:
-            return "sound"
-        if "/models/" in p:
-            return "model"
-        if "/npc/" in p or "/npcs/" in p:
-            return "npc"
-        if "/prefabs/" in p:
-            return "prefab"
-        if "/block/" in p or "/blocks/" in p:
-            return "block"
-        return "json_data"
 
     def _group_for_common_path(vfs_path: str) -> str:
         ext = Path(vfs_path).suffix.lower()
@@ -300,32 +302,6 @@ def build_modified_graph(cfg: ProjectConfig, depth: int) -> dict:
         return {"nodes": [], "edges": [], "modifiedIds": []}
 
     unique_ids = set(index.server_id_to_path.keys())
-
-    def _group_for_server_path(vfs_path: str) -> str:
-        p = vfs_path.replace("\\", "/").lower()
-        if "/item/items/" in p:
-            return "item"
-        if "/rootinteractions/" in p:
-            return "rootinteraction"
-        if "/interactions/" in p:
-            return "interaction"
-        if "/effects/" in p:
-            return "effect"
-        if "/projectiles/" in p:
-            return "projectile"
-        if "/particles/" in p:
-            return "particle"
-        if "/sounds/" in p or "/soundevents/" in p:
-            return "sound"
-        if "/models/" in p:
-            return "model"
-        if "/npc/" in p or "/npcs/" in p:
-            return "npc"
-        if "/prefabs/" in p:
-            return "prefab"
-        if "/block/" in p or "/blocks/" in p:
-            return "block"
-        return "json_data"
 
     def _group_for_common_path(vfs_path: str) -> str:
         ext = _Path(vfs_path).suffix.lower()

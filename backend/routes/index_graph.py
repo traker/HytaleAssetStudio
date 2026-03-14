@@ -3,40 +3,12 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, Header, Query
 
 from backend.core.config import Settings, get_settings
-from backend.core.graph_service import build_focus_graph, build_modified_graph
+from backend.core.graph_service import build_focus_graph, build_modified_graph, _group_for_server_path
 from backend.core.index_service import ensure_index, rebuild_project_index
 from backend.core.project_service import load_project_config
 from backend.core.workspace_service import resolve_workspace_root
 
 router = APIRouter(prefix="/api/v1", tags=["index", "graph"])
-
-
-def _group_for_server_path(vfs_path: str) -> str:
-    """Derive a UI group label from a VFS server path."""
-    p = vfs_path.replace("\\", "/").lower()
-    if "/item/items/" in p:
-        return "item"
-    if "/rootinteractions/" in p:
-        return "rootinteraction"
-    if "/interactions/" in p:
-        return "interaction"
-    if "/effects/" in p:
-        return "effect"
-    if "/projectiles/" in p:
-        return "projectile"
-    if "/particles/" in p:
-        return "particle"
-    if "/sounds/" in p or "/soundevents/" in p:
-        return "sound"
-    if "/models/" in p:
-        return "model"
-    if "/npc/" in p or "/npcs/" in p:
-        return "npc"
-    if "/prefabs/" in p:
-        return "prefab"
-    if "/block/" in p or "/blocks/" in p:
-        return "block"
-    return "json_data"
 
 
 def _build_search_results(index, q: str, limit: int) -> list[dict]:
