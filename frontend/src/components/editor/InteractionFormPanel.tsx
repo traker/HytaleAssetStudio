@@ -13,6 +13,7 @@ import { getColorForInteractionType } from '../graph/colors'
 import { getSchemaForType, type FieldDef } from '../graph/interactionSchemas'
 import { renderTypeSpecificFields } from './InteractionFormTypeSections'
 import { FIELD_WRAP, INPUT_STYLE, LABEL_STYLE, TEXTAREA_STYLE } from './formStyles'
+import { EffectsBlockEditor } from './EffectsBlockEditor'
 
 type Tab = 'form' | 'raw'
 
@@ -107,68 +108,16 @@ function renderField(
   }
 
   if (type === 'effects') {
-    // Effects is a special dict with well-known keys
     const eff = (typeof value === 'object' && value !== null && !Array.isArray(value))
       ? (value as Record<string, unknown>)
       : {}
-
-    const effectKeys = [
-      'ItemAnimationId',
-      'WorldSoundEventId',
-      'LocalSoundEventId',
-      'CameraEffect',
-    ]
-
-    const handleEffectChange = (eKey: string, eVal: string) => {
-      const updated = { ...eff }
-      if (eVal.trim() === '') {
-        delete updated[eKey]
-      } else {
-        updated[eKey] = eVal
-      }
-      onChange(key, Object.keys(updated).length === 0 ? undefined : updated)
-    }
-
     return (
       <div key={key} style={{ ...FIELD_WRAP, borderLeft: '2px solid #333', paddingLeft: 8 }}>
         <span style={{ ...LABEL_STYLE, color: '#aaa' }}>Effects</span>
-        {effectKeys.map((ek) => (
-          <div key={ek} style={{ marginBottom: 6 }}>
-            <label style={{ ...LABEL_STYLE, color: '#666' }}>{ek}</label>
-            <input
-              type="text"
-              value={typeof eff[ek] === 'string' ? (eff[ek] as string) : ''}
-              onChange={(e) => handleEffectChange(ek, e.target.value)}
-              style={INPUT_STYLE}
-              placeholder="server ID or value"
-            />
-          </div>
-        ))}
-        {/* Trails needs special treatment as an array */}
-        <div style={{ marginBottom: 4 }}>
-          <label style={{ ...LABEL_STYLE, color: '#666' }}>Trails (JSON array)</label>
-          <textarea
-            rows={2}
-            value={eff['Trails'] !== undefined ? JSON.stringify(eff['Trails'], null, 2) : ''}
-            onChange={(e) => {
-              const v = e.target.value.trim()
-              if (!v) {
-                const copy = { ...eff }
-                delete copy['Trails']
-                onChange(key, Object.keys(copy).length === 0 ? undefined : copy)
-              } else {
-                try {
-                  const parsed = JSON.parse(v)
-                  onChange(key, { ...eff, Trails: parsed })
-                } catch {
-                  // keep as string in error state
-                }
-              }
-            }}
-            style={{ ...TEXTAREA_STYLE, minHeight: 40 }}
-            placeholder='[{ "TrailId": "..." }]'
-          />
-        </div>
+        <EffectsBlockEditor
+          value={eff}
+          onChange={(v) => onChange(key, v)}
+        />
       </div>
     )
   }

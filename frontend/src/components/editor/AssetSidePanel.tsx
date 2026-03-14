@@ -5,7 +5,9 @@ const MonacoEditor = lazy(() => import('@monaco-editor/react'))
 import { HasApiError, hasApi } from '../../api'
 import type { AssetGetResponse } from '../../api'
 import { InteractionVarsEditor, type InteractionVarsValue } from './InteractionVarsEditor'
-import { ItemFormEditor, looksLikeItem } from './ItemFormEditor'
+import { ItemFormEditor } from './ItemFormEditor'
+import { EntityEffectFormEditor } from './EntityEffectFormEditor'
+import { detectAssetKind } from './assetTypeRegistry'
 
 type Tab = 'json' | 'form' | 'vars'
 
@@ -266,10 +268,15 @@ export function AssetSidePanel(props: Props) {
     return 'InteractionVars' in j
   }, [props.asset])
 
-  const hasForm = useMemo(() => {
-    if (!props.asset?.json) return false
-    return looksLikeItem(props.asset.json as Record<string, unknown>)
-  }, [props.asset])
+  const assetKind = useMemo(() => {
+    if (!props.asset?.json) return 'unknown' as const
+    return detectAssetKind(
+      props.asset.json as Record<string, unknown>,
+      props.asset.resolvedPath ?? props.selectedNodeId,
+    )
+  }, [props.asset, props.selectedNodeId])
+
+  const hasForm = assetKind !== 'unknown'
 
   const currentVars = useMemo((): InteractionVarsValue => {
     try {
@@ -701,13 +708,28 @@ export function AssetSidePanel(props: Props) {
           </div>
         )}
 
-        {props.asset && !isCommonResource && tab === 'form' && (
-          <ItemFormEditor
-            json={currentFormJson}
-            onChange={canEdit ? handleFormChange : () => {}}
-            readOnly={!canEdit}
-          />
-        )}
+        {props.asset && !isCommonResource && tab === 'form' && (() => {
+          switch (assetKind) {
+            case 'item':
+              return (
+                <ItemFormEditor
+                  json={currentFormJson}
+                  onChange={canEdit ? handleFormChange : () => {}}
+                  readOnly={!canEdit}
+                />
+              )
+            case 'entity-effect':
+              return (
+                <EntityEffectFormEditor
+                  json={currentFormJson}
+                  onChange={canEdit ? handleFormChange : () => {}}
+                  readOnly={!canEdit}
+                />
+              )
+            default:
+              return null
+          }
+        })()}
 
         {props.asset && !isCommonResource && tab === 'vars' && (
           <div>
