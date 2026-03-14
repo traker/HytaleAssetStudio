@@ -5,7 +5,7 @@ import {
     InteractionMapEditor,
     InteractionValueEditor,
     SelectorBranchEditor,
-} from './interactionFormStructuredEditors'
+} from './InteractionFormStructuredEditors'
 import { FIELD_WRAP, INPUT_STYLE, LABEL_STYLE, TEXTAREA_STYLE } from './formStyles'
 
 type NestedFieldType = 'string' | 'number' | 'boolean'

@@ -11,7 +11,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { getColorForInteractionType } from '../graph/colors'
 import { getSchemaForType, type FieldDef } from '../graph/interactionSchemas'
-import { renderTypeSpecificFields } from './interactionFormTypeSections'
+import { renderTypeSpecificFields } from './InteractionFormTypeSections'
 import { FIELD_WRAP, INPUT_STYLE, LABEL_STYLE, TEXTAREA_STYLE } from './formStyles'
 
 type Tab = 'form' | 'raw'
