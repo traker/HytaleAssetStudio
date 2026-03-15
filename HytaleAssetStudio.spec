@@ -21,6 +21,9 @@ ROOT = Path(SPECPATH)
 # ---------------------------------------------------------------------------
 
 datas = [
+    # VERSION file — read by backend/core/config.py to expose the app version
+    (str(ROOT / "VERSION"), "."),
+
     # React production build — served by FastAPI StaticFiles
     (str(ROOT / "frontend" / "dist"), "frontend/dist"),
 

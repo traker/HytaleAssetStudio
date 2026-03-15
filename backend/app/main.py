@@ -146,7 +146,8 @@ async def perf_audit_middleware(request: Request, call_next):
 
 @app.get("/api/v1/health")
 def health() -> dict:
-    return {"ok": True}
+    from backend.core.config import get_version  # noqa: PLC0415
+    return {"ok": True, "version": get_version()}
 
 
 app.include_router(workspace_router)

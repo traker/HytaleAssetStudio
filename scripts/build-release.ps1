@@ -5,9 +5,11 @@
 .DESCRIPTION
     1. Builds the React frontend (frontend/dist/).
     2. Runs PyInstaller to produce dist/HytaleAssetStudio/ (--onedir).
+    3. Packages the output into a versioned zip:
+       dist/HytaleAssetStudio-v<VERSION>-win64.zip
 
-    The final folder dist/HytaleAssetStudio/ is fully self-contained:
-    copy or zip the whole directory and distribute it.
+    The version is read from the VERSION file at the repository root.
+    The zip is the artifact to distribute.
 
 .PARAMETER SkipFrontendBuild
     Skip `npm run build` (if frontend/dist already up-to-date).
@@ -15,20 +17,36 @@
 .PARAMETER Clean
     Pass --clean to PyInstaller (slower but avoids stale cache issues).
 
+.PARAMETER SkipZip
+    Skip the final zip packaging step (useful for quick local testing).
+
 .EXAMPLE
     .\scripts\build-release.ps1
     .\scripts\build-release.ps1 -SkipFrontendBuild
     .\scripts\build-release.ps1 -Clean
+    .\scripts\build-release.ps1 -SkipZip
 #>
 param(
     [switch]$SkipFrontendBuild,
-    [switch]$Clean
+    [switch]$Clean,
+    [switch]$SkipZip
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
 $Root = Split-Path -Parent $PSScriptRoot   # repo root
+
+# ---------------------------------------------------------------------------
+# Version
+# ---------------------------------------------------------------------------
+$VersionFile = Join-Path $Root "VERSION"
+if (-not (Test-Path $VersionFile)) {
+    Write-Error "VERSION file not found at $VersionFile"
+    exit 1
+}
+$Version = (Get-Content $VersionFile -Raw).Trim()
+Write-Host "==> Building version $Version" -ForegroundColor Cyan
 
 # ---------------------------------------------------------------------------
 # 1. Frontend build
@@ -78,7 +96,7 @@ try {
 }
 
 # ---------------------------------------------------------------------------
-# 3. Report
+# 3. Report + zip packaging
 # ---------------------------------------------------------------------------
 $OutputDir = Join-Path $Root "dist" "HytaleAssetStudio"
 if (Test-Path $OutputDir) {
@@ -87,6 +105,22 @@ if (Test-Path $OutputDir) {
     Write-Host "==> Build successful!" -ForegroundColor Green
     Write-Host "    Output : $OutputDir" -ForegroundColor Green
     Write-Host "    Size   : ${SizeMB} MB" -ForegroundColor Green
+
+    if (-not $SkipZip) {
+        $ZipName = "HytaleAssetStudio-v${Version}-win64.zip"
+        $ZipPath = Join-Path $Root "dist" $ZipName
+
+        Write-Host ""
+        Write-Host "==> Packaging $ZipName ..." -ForegroundColor Cyan
+        if (Test-Path $ZipPath) { Remove-Item $ZipPath -Force }
+
+        # Compress the HytaleAssetStudio/ folder so it unpacks to HytaleAssetStudio\...
+        Compress-Archive -Path $OutputDir -DestinationPath $ZipPath
+        $ZipMB = [math]::Round((Get-Item $ZipPath).Length / 1MB, 1)
+
+        Write-Host "==> Zip ready: $ZipPath (${ZipMB} MB)" -ForegroundColor Green
+    }
+
     Write-Host ""
     Write-Host "    Run the app:" -ForegroundColor Cyan
     Write-Host "      $OutputDir\HytaleAssetStudio.exe" -ForegroundColor Cyan

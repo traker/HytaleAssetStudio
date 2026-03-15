@@ -1,9 +1,28 @@
 from __future__ import annotations
 
 import os
+import sys
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
+
+
+@lru_cache(maxsize=1)
+def get_version() -> str:
+    """Read the version from the VERSION file at the repo root.
+
+    Works in both dev mode (relative to this file) and frozen PyInstaller
+    bundles (sys._MEIPASS contains the VERSION file from spec datas).
+    Falls back to '0.0.0' if the file is missing.
+    """
+    if getattr(sys, "frozen", False):
+        base = Path(sys._MEIPASS)  # type: ignore[attr-defined]
+    else:
+        base = Path(__file__).resolve().parent.parent.parent  # repo root
+    version_file = base / "VERSION"
+    if version_file.is_file():
+        return version_file.read_text(encoding="utf-8").strip()
+    return "0.0.0"
 
 
 DEFAULT_ALLOWED_ORIGINS: tuple[str, ...] = (

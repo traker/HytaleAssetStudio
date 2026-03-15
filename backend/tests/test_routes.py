@@ -23,7 +23,9 @@ def _override_settings(workspace_root: Path) -> Settings:
 def test_health_returns_ok() -> None:
     resp = client.get("/api/v1/health")
     assert resp.status_code == 200
-    assert resp.json() == {"ok": True}
+    data = resp.json()
+    assert data["ok"] is True
+    assert "version" in data
 
 
 def test_health_rejects_non_loopback_client_in_local_only_mode() -> None:
