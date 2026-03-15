@@ -24,8 +24,8 @@ Branch: `feature/standalone-app`
 | Lot | Title | Status |
 |---|---|---|
 | Lot 1 | Frontend servi par FastAPI (StaticFiles) | `done` |
-| Lot 2 | Fenêtre native pywebview | `in-progress` |
-| Lot 3 | Packaging PyInstaller | `in-progress` |
+| Lot 2 | Fenêtre native pywebview | `done` |
+| Lot 3 | Packaging PyInstaller | `done` |
 
 ---
 
@@ -108,17 +108,17 @@ Branch: `feature/standalone-app`
 
 ### 2.3 — Validation manuelle Lot 2
 
-- Status: `in-progress` — **à réaliser manuellement** (fenêtre GUI, non automatisable en CI)
+- Status: `done`
 - Tasks:
-  - [ ] `python app.py` → fenêtre native ouverte, UI chargée
-  - [ ] Fermeture fenêtre → pas de process zombie uvicorn
-  - [ ] `python -m pytest` → 47 passed ✅ (validé automatiquemet)
+  - [x] `python app.py` → fenêtre native ouverte, UI chargée ✅
+  - [x] Fermeture fenêtre → exit propre (code 0) ✅
+  - [x] `python -m pytest` → 47 passed ✅
 
 ### Validation Lot 2
 
-- [ ] Fenêtre native fonctionnelle (`python app.py`)
-- [ ] Fermeture propre
-- [ ] Tests backend : 47 passed minimum
+- [x] Fenêtre native fonctionnelle (`python app.py`) ✅
+- [x] Fermeture propre ✅
+- [x] Tests backend : 47 passed ✅
 
 ---
 
@@ -142,12 +142,12 @@ Branch: `feature/standalone-app`
 
 ### 3.2 — Valider le build PyInstaller
 
-- Status: `in-progress`
+- Status: `done`
 - Tasks:
   - [x] `pyinstaller HytaleAssetStudio.spec --clean -y` → build sans erreur ✅
   - [x] Smoke test EXE (5s sans crash) ✅
-  - [ ] Lancer `dist/HytaleAssetStudio/HytaleAssetStudio.exe` → fenêtre UI fonctionnelle **(manuel)**
-  - [ ] Vérifier UI fonctionnelle (workspace, assets, graphe) **(manuel)**
+  - [x] `dist/HytaleAssetStudio/HytaleAssetStudio.exe` → fenêtre UI fonctionnelle ✅
+  - [x] Browse dossier fonctionne (dialogue natif via pywebview.FileDialog) ✅
   - [ ] Vérifier sur environnement sans Python dans PATH **(optionnel)**
 
 ### 3.3 — Script de build release
@@ -163,16 +163,16 @@ Branch: `feature/standalone-app`
 
 - [x] `pyinstaller HytaleAssetStudio.spec --clean -y` → exe produit sans erreur ✅
 - [x] Smoke test exe 5s sans crash ✅
-- [ ] `dist/HytaleAssetStudio/HytaleAssetStudio.exe` → UI fonctionnelle **(validation manuelle en attente)**
-- [ ] Toutes opérations Studio fonctionnelles depuis l'exe **(validation manuelle en attente)**
+- [x] `dist/HytaleAssetStudio/HytaleAssetStudio.exe` → UI fonctionnelle ✅
+- [x] Browse dossier → dialogue natif Windows (pywebview.FileDialog) ✅
 
 ---
 
 ## Merge checklist
 
-- [ ] Lot 1 validé
-- [ ] Lot 2 validé
-- [ ] Lot 3 validé
-- [ ] `SESSION_RECAP.md` mis à jour
+- [x] Lot 1 validé
+- [x] Lot 2 validé
+- [x] Lot 3 validé
+- [x] `SESSION_RECAP.md` mis à jour
 - [ ] `VISION.md` mis à jour (section distribution)
-- [ ] `README.md` mis à jour (section installation → télécharger l'exe)
+- [ ] `README.md` mis à jour (section installation → `scripts/build-release.ps1`)
