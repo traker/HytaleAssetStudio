@@ -108,3 +108,43 @@ class CollisionResolutionTests:
 
             assert "server-path:Server/Items/Weapon/Shared.json" in node_ids
 
+    def test_build_focus_graph_resolves_item_quality_to_quality_node(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            vanilla_root = root / "vanilla"
+            project_root = root / "project"
+            (vanilla_root / "Common").mkdir(parents=True)
+            (vanilla_root / "Server" / "Item" / "Items" / "Weapon").mkdir(parents=True)
+            (vanilla_root / "Server" / "Item" / "Qualities").mkdir(parents=True)
+            (vanilla_root / "Common" / "UI" / "ItemQualities" / "Tooltips").mkdir(parents=True)
+            (vanilla_root / "Common" / "UI" / "ItemQualities" / "Slots").mkdir(parents=True)
+            (project_root / "Common").mkdir(parents=True)
+            (project_root / "Server").mkdir(parents=True)
+            cfg = self.make_config(project_root, vanilla_root)
+
+            write_json(vanilla_root / "Server" / "Item" / "Items" / "Weapon" / "Sword.json", {"Id": "Sword", "Quality": "Rare"})
+            write_json(
+                vanilla_root / "Server" / "Item" / "Qualities" / "Rare.json",
+                {
+                    "QualityValue": 3,
+                    "ItemTooltipTexture": "UI/ItemQualities/Tooltips/ItemTooltipRare.png",
+                    "ItemTooltipArrowTexture": "UI/ItemQualities/Tooltips/ItemTooltipRareArrow.png",
+                    "SlotTexture": "UI/ItemQualities/Slots/SlotRare.png",
+                },
+            )
+            (vanilla_root / "Common" / "UI" / "ItemQualities" / "Tooltips" / "ItemTooltipRare@2x.png").write_text("png", encoding="utf-8")
+            (vanilla_root / "Common" / "UI" / "ItemQualities" / "Tooltips" / "ItemTooltipRareArrow@2x.png").write_text("png", encoding="utf-8")
+            (vanilla_root / "Common" / "UI" / "ItemQualities" / "Slots" / "SlotRare@2x.png").write_text("png", encoding="utf-8")
+
+            graph = build_focus_graph(cfg, "server:Sword", 2)
+            nodes = {node["id"]: node for node in graph["nodes"]}
+            edges = {(edge["from"], edge["to"], edge["type"]) for edge in graph["edges"]}
+
+            assert "server:Rare" in nodes
+            assert nodes["server:Rare"]["group"] == "quality"
+            assert ("server:Sword", "server:Rare", "quality") in edges
+            assert ("server:Sword", "server:Rare", "ref") not in edges
+            assert ("server:Rare", "common:UI/ItemQualities/Tooltips/ItemTooltipRare@2x.png", "resource") in edges
+            assert ("server:Rare", "common:UI/ItemQualities/Tooltips/ItemTooltipRareArrow@2x.png", "resource") in edges
+            assert ("server:Rare", "common:UI/ItemQualities/Slots/SlotRare@2x.png", "resource") in edges
+

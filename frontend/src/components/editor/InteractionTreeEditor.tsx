@@ -123,7 +123,7 @@ function btnStyle(bg: string): React.CSSProperties {
 function InteractionTreeEditorInner(props: Props) {
   const { screenToFlowPosition } = useReactFlow()
 
-  const [status, setStatus] = useState<Status>({ kind: 'idle' })
+  const [status, setStatus] = useState<Status>({ kind: 'loading' })
   const [error, setError] = useState<string | null>(null)
   const [truncationWarning, setTruncationWarning] = useState<string | null>(null)
   const [nodes, setNodes] = useState<Node[]>([])
@@ -132,7 +132,6 @@ function InteractionTreeEditorInner(props: Props) {
   const [assetPanelDirty, setAssetPanelDirty] = useState(false)
   const [showUnsavedDialog, setShowUnsavedDialog] = useState(false)
   const [activeHighlight, setActiveHighlight] = useState<{ edgeIds: Set<string>; nodeIds: Set<string> } | null>(null)
-  const baseEdgesRef = useRef<Edge[]>([])
   const loadSeq = useRef(0)
   const treeRootRef = useRef<string | null>(null)
   const pendingAssetActionRef = useRef<(() => void) | null>(null)
@@ -156,43 +155,39 @@ function InteractionTreeEditorInner(props: Props) {
     [],
   )
 
-  // Sync isSelected + isConnected + edge highlight
-  useEffect(() => {
-    setNodes((prev) =>
-      prev.map((n) => ({
-        ...n,
+  const renderedNodes = useMemo(
+    () =>
+      nodes.map((node) => ({
+        ...node,
         data: {
-          ...n.data,
-          isSelected: n.id === selectedNodeId,
-          isConnected: activeHighlight?.nodeIds.has(n.id) === true && n.id !== selectedNodeId,
+          ...node.data,
+          isSelected: node.id === selectedNodeId,
+          isConnected: activeHighlight?.nodeIds.has(node.id) === true,
         },
-      }))
-    )
-    setEdges(
-      baseEdgesRef.current.map((e) =>
-        activeHighlight?.edgeIds.has(e.id)
+      })),
+    [nodes, selectedNodeId, activeHighlight],
+  )
+
+  const renderedEdges = useMemo(
+    () =>
+      edges.map((edge) =>
+        activeHighlight?.edgeIds.has(edge.id)
           ? {
-              ...e,
-              animated: false,
+              ...edge,
+              animated: true,
               zIndex: 1000,
-              style: { ...(e.style as object), stroke: '#00D4FF', strokeWidth: 2.5 },
+              style: {
+                ...(edge.style as object),
+                stroke: '#00D4FF',
+                strokeWidth: 2.5,
+                strokeDasharray: '6 4',
+              },
               markerEnd: { type: 'arrowclosed' as const, color: '#00D4FF' },
             }
-          : e,
+          : edge,
       ),
-    )
-  }, [selectedNodeId, activeHighlight])
-
-  // Reset on asset key change
-  useEffect(() => {
-    setSelectedNodeId(null)
-    setActiveHighlight(null)
-    setEditMode(false)
-    setSaveStatus('idle')
-    setSaveError(null)
-    layoutNodesRef.current = []
-    layoutEdgesRef.current = []
-  }, [props.projectId, props.root.assetKey])
+    [edges, activeHighlight],
+  )
 
   // Re-apply layout when engine or data changes
   useEffect(() => {
@@ -208,15 +203,11 @@ function InteractionTreeEditorInner(props: Props) {
     } else {
       applyPositions(layoutGraph(freshNodes, edges, 'TB').nodes)
     }
-  }, [engine, layoutTick]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [engine, layoutTick])
 
   // Load tree
   useEffect(() => {
     const mySeq = ++loadSeq.current
-    setStatus({ kind: 'loading' })
-    setError(null)
-    setNodes([])
-    setEdges([])
 
     ;(async () => {
       try {
@@ -224,7 +215,6 @@ function InteractionTreeEditorInner(props: Props) {
         if (loadSeq.current !== mySeq) return
         treeRootRef.current = data.root
         const flow = toFlow(data)
-        baseEdgesRef.current = flow.edges
         layoutNodesRef.current = flow.nodes
         layoutEdgesRef.current = flow.edges
         setNodes(flow.nodes)
@@ -247,6 +237,14 @@ function InteractionTreeEditorInner(props: Props) {
       }
     })()
   }, [props.projectId, props.root.assetKey, treeReloadTick])
+
+  function reloadTree() {
+    setStatus({ kind: 'loading' })
+    setError(null)
+    setNodes([])
+    setEdges([])
+    setTreeReloadTick((tick) => tick + 1)
+  }
 
   const selectedNode = useMemo(
     () => nodes.find((n) => n.id === selectedNodeId) ?? null,
@@ -314,7 +312,6 @@ function InteractionTreeEditorInner(props: Props) {
         data: { edgeType },
       }
       setEdges((prev) => addEdge(newEdge, prev))
-      baseEdgesRef.current = [...baseEdgesRef.current, newEdge]
     },
     [],
   )
@@ -358,17 +355,9 @@ function InteractionTreeEditorInner(props: Props) {
         setSelectedNodeId(null)
         setActiveHighlight(null)
       }
-      baseEdgesRef.current = baseEdgesRef.current.filter(
-        (e) => !deletedIds.has(e.source) && !deletedIds.has(e.target),
-      )
     },
     [selectedNodeId],
   )
-
-  const onEdgesDelete = useCallback((deleted: Edge[]) => {
-    const deletedIds = new Set(deleted.map((e) => e.id))
-    baseEdgesRef.current = baseEdgesRef.current.filter((e) => !deletedIds.has(e.id))
-  }, [])
 
   // ── Form panel: apply node field edits ──
   function handleNodeApply(updatedFields: Record<string, unknown>) {
@@ -404,7 +393,7 @@ function InteractionTreeEditorInner(props: Props) {
       })
       setSaveStatus('ok')
       setTimeout(() => setSaveStatus('idle'), 2500)
-      setTreeReloadTick((t) => t + 1)
+      reloadTree()
     } catch (e) {
       setSaveStatus('error')
       setSaveError(e instanceof HasApiError ? e.message : 'Unable to save interaction tree.')
@@ -414,7 +403,7 @@ function InteractionTreeEditorInner(props: Props) {
   const handleNodeClick = useCallback((_: React.MouseEvent, n: Node) => {
     requestAssetPanelAction(() => {
       setSelectedNodeId(n.id)
-      const connectedEdges = baseEdgesRef.current.filter((e) => e.source === n.id || e.target === n.id)
+      const connectedEdges = edges.filter((e) => e.source === n.id || e.target === n.id)
       const neighborIds = new Set<string>()
       connectedEdges.forEach((e) => {
         if (e.source !== n.id) neighborIds.add(e.source)
@@ -422,7 +411,7 @@ function InteractionTreeEditorInner(props: Props) {
       })
       setActiveHighlight({ edgeIds: new Set(connectedEdges.map((e) => e.id)), nodeIds: neighborIds })
     })
-  }, [requestAssetPanelAction])
+  }, [edges, requestAssetPanelAction])
 
   const handleNodeDoubleClick = useCallback((_: React.MouseEvent, n: Node) => {
     const data = n.data as InteractionNodeData | undefined
@@ -469,16 +458,19 @@ function InteractionTreeEditorInner(props: Props) {
         onDragOver={editMode ? onDragOver : undefined}
       >
         <ReactFlow
-          nodes={nodes}
-          edges={edges}
+          nodes={renderedNodes}
+          edges={renderedEdges}
           nodeTypes={nodeTypes}
           onNodesChange={onNodesChange}
           onEdgesChange={onEdgesChange}
           onConnect={editMode ? onConnect : undefined}
           onNodesDelete={editMode ? onNodesDelete : undefined}
-          onEdgesDelete={editMode ? onEdgesDelete : undefined}
           onNodeClick={handleNodeClick}
           onNodeDoubleClick={handleNodeDoubleClick}
+          onPaneClick={() => requestAssetPanelAction(() => {
+            setSelectedNodeId(null)
+            setActiveHighlight(null)
+          })}
           nodesConnectable={editMode}
           elementsSelectable={true}
           deleteKeyCode={editMode ? 'Delete' : null}
@@ -563,7 +555,7 @@ function InteractionTreeEditorInner(props: Props) {
             loading={assetLoading}
             error={assetError}
             onClose={() => requestAssetPanelAction(() => { setSelectedNodeId(null); setActiveHighlight(null) })}
-            onRefresh={() => { reloadAsset(); setTreeReloadTick((t) => t + 1) }}
+            onRefresh={() => { reloadAsset(); reloadTree() }}
             onDirtyChange={setAssetPanelDirty}
             onOpenLinkedAsset={canOpenSelectedReference
               ? () => {
@@ -586,6 +578,7 @@ function InteractionTreeEditorInner(props: Props) {
       {showFormPanel && selectedData && (
         <div style={{ position: 'absolute', top: 0, right: 0, height: '100%', width: 420, zIndex: 20, boxShadow: '-4px 0 20px rgba(0,0,0,0.5)' }}>
           <InteractionFormPanel
+            key={selectedNodeId!}
             nodeId={selectedNodeId!}
             nodeType={selectedData.nodeType}
             rawFields={selectedData.rawFields ?? {}}
@@ -613,7 +606,7 @@ function InteractionTreeEditorInner(props: Props) {
 export function InteractionTreeEditor(props: Props) {
   return (
     <ReactFlowProvider>
-      <InteractionTreeEditorInner {...props} />
+      <InteractionTreeEditorInner key={`${props.projectId}:${props.root.assetKey}`} {...props} />
     </ReactFlowProvider>
   )
 }

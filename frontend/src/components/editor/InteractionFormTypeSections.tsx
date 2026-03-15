@@ -1,3 +1,5 @@
+/* eslint-disable react-refresh/only-export-components */
+
 import { useState } from 'react'
 import type { FieldDef } from '../graph/interactionSchemas'
 import {
@@ -384,6 +386,7 @@ function JsonObjectExtrasField({
                             onChange(parsed as Record<string, unknown>)
                         }
                     } catch {
+                        // Ignore invalid JSON while editing.
                     }
                 }}
                 style={TEXTAREA_STYLE}
@@ -720,6 +723,7 @@ function ReplaceDefaultValueEditor({
             ) : mode === 'container' ? (
                 <>
                     <InteractionListEditor
+                        key={`replace-fallback-interactions-${JSON.stringify(obj['Interactions'] ?? [])}`}
                         title="Interactions"
                         description="Ordered fallback interactions used when the InteractionVar is not provided."
                         value={Array.isArray(obj['Interactions']) ? obj['Interactions'] : []}
@@ -747,6 +751,7 @@ function ReplaceDefaultValueEditor({
                                         emitContainer(Array.isArray(obj['Interactions']) ? obj['Interactions'] : [], parsed as Record<string, unknown>)
                                     }
                                 } catch {
+                                    // Ignore invalid JSON while editing.
                                 }
                             }}
                             style={TEXTAREA_STYLE}
@@ -777,6 +782,7 @@ function ReplaceDefaultValueEditor({
                                     onChange(parsed)
                                 }
                             } catch {
+                                // Ignore invalid JSON while editing.
                             }
                         }}
                         style={{ ...TEXTAREA_STYLE, minHeight: 96 }}
@@ -836,10 +842,10 @@ export function renderTypeSpecificFields(
                         fields={selectorFields}
                         onChange={onChange}
                     />
-                    <SelectorBranchEditor title="HitEntity" description="Interactions executed when an entity is hit." value={draft['HitEntity']} onChange={(nextValue) => onChange('HitEntity', nextValue)} />
-                    <SelectorBranchEditor title="HitBlock" description="Interactions executed when a block is hit." value={draft['HitBlock']} onChange={(nextValue) => onChange('HitBlock', nextValue)} />
-                    <SelectorBranchEditor title="HitNothing" description="Interactions executed when nothing is hit." value={draft['HitNothing']} onChange={(nextValue) => onChange('HitNothing', nextValue)} />
-                    <HitEntityRulesEditor value={draft['HitEntityRules']} onChange={(nextValue) => onChange('HitEntityRules', nextValue)} />
+                    <SelectorBranchEditor key={`hit-entity-${JSON.stringify(draft['HitEntity'] ?? null)}`} title="HitEntity" description="Interactions executed when an entity is hit." value={draft['HitEntity']} onChange={(nextValue) => onChange('HitEntity', nextValue)} />
+                    <SelectorBranchEditor key={`hit-block-${JSON.stringify(draft['HitBlock'] ?? null)}`} title="HitBlock" description="Interactions executed when a block is hit." value={draft['HitBlock']} onChange={(nextValue) => onChange('HitBlock', nextValue)} />
+                    <SelectorBranchEditor key={`hit-nothing-${JSON.stringify(draft['HitNothing'] ?? null)}`} title="HitNothing" description="Interactions executed when nothing is hit." value={draft['HitNothing']} onChange={(nextValue) => onChange('HitNothing', nextValue)} />
+                    <HitEntityRulesEditor key={`hit-entity-rules-${JSON.stringify(draft['HitEntityRules'] ?? null)}`} value={draft['HitEntityRules']} onChange={(nextValue) => onChange('HitEntityRules', nextValue)} />
                 </>
             ),
         }
@@ -858,8 +864,8 @@ export function renderTypeSpecificFields(
                     <FieldSection title="Chaining Behavior" description="Configure the combo ID and timing window for this chain.">
                         {chainingFields.map((field) => renderField(field, draft[field.key], onChange))}
                     </FieldSection>
-                    <InteractionListEditor title="Next Steps" description="Ordered combo steps. Each entry can be a server reference or an inline interaction object such as FirstClick." value={draft['Next']} onChange={(nextValue) => onChange('Next', nextValue)} />
-                    <InteractionMapEditor title="Flags" description="Optional flag-triggered combo finishers keyed by ChainFlag name." value={draft['Flags']} onChange={(nextValue) => onChange('Flags', nextValue)} />
+                    <InteractionListEditor key={`chaining-next-${JSON.stringify(draft['Next'] ?? null)}`} title="Next Steps" description="Ordered combo steps. Each entry can be a server reference or an inline interaction object such as FirstClick." value={draft['Next']} onChange={(nextValue) => onChange('Next', nextValue)} />
+                    <InteractionMapEditor key={`chaining-flags-${JSON.stringify(draft['Flags'] ?? null)}`} title="Flags" description="Optional flag-triggered combo finishers keyed by ChainFlag name." value={draft['Flags']} onChange={(nextValue) => onChange('Flags', nextValue)} />
                 </>
             ),
         }
@@ -1094,6 +1100,7 @@ export function renderTypeSpecificFields(
                                         const parsed = JSON.parse(raw)
                                         if (Array.isArray(parsed)) updateDamageEffects({ WorldParticles: parsed })
                                     } catch {
+                                        // Ignore invalid JSON while editing.
                                     }
                                 }}
                                 style={TEXTAREA_STYLE}

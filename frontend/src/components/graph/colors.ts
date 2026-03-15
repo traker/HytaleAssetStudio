@@ -11,6 +11,7 @@ export const getColorForGroup = (group: string): string => {
     rootinteraction: '#FFB347',
     effect: '#D4A5A5',
     projectile: '#FF9FF3',
+    quality: '#E17055',
     npc: '#74B9FF',
     prefab: '#A29BFE',
     json_data: '#9B9B9B',
@@ -67,6 +68,7 @@ export const getColorForEdgeType = (edgeType: string): string => {
     calls: '#74B9FF',
     collisionNext: '#96CEB4',
     groundNext: '#96CEB4',
+    quality: '#E17055',
     ref: '#666666',
     resource: '#96CEB4',
   }

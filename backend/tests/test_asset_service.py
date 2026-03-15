@@ -187,6 +187,31 @@ class AssetCopyTests:
             assert entries["Server/Item/Interactions/Weapons/Sword/Attacks/Primary/Weapon_Sword_Test.json"].modificationKind == "override"
             assert node["modificationKind"] == "override"
 
+    def test_build_modified_graph_resolves_quality_dependency_for_modified_item(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            vanilla_root = root / "vanilla"
+            project_root = root / "project"
+            (vanilla_root / "Common").mkdir(parents=True)
+            (vanilla_root / "Server" / "Item" / "Items" / "Weapon").mkdir(parents=True)
+            (vanilla_root / "Server" / "Item" / "Qualities").mkdir(parents=True)
+            (project_root / "Common").mkdir(parents=True)
+            (project_root / "Server" / "Item" / "Items" / "Weapon").mkdir(parents=True)
+            cfg = self.make_config(project_root, vanilla_root)
+
+            write_json(vanilla_root / "Server" / "Item" / "Items" / "Weapon" / "Sword.json", {"Id": "Sword", "Quality": "Common"})
+            write_json(vanilla_root / "Server" / "Item" / "Qualities" / "Rare.json", {"QualityValue": 3})
+            write_json(project_root / "Server" / "Item" / "Items" / "Weapon" / "Sword.json", {"Id": "Sword", "Quality": "Rare"})
+
+            graph = build_modified_graph(cfg, 1)
+            nodes = {node["id"]: node for node in graph["nodes"]}
+            edges = {(edge["from"], edge["to"], edge["type"]) for edge in graph["edges"]}
+
+            assert "server:Sword" in nodes
+            assert "server:Rare" in nodes
+            assert nodes["server:Rare"]["group"] == "quality"
+            assert ("server:Sword", "server:Rare", "quality") in edges
+
     def test_list_modified_entries_uses_server_path_and_marks_copy_vs_override(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             project_root, vanilla_root = self.setup_pack_roots(tmp)

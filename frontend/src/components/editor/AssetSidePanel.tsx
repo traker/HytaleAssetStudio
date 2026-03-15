@@ -10,6 +10,7 @@ import { EntityEffectFormEditor } from './EntityEffectFormEditor'
 import { ProjectileFormEditor } from './ProjectileFormEditor'
 import { ProjectileConfigFormEditor } from './ProjectileConfigFormEditor'
 import { NPCRoleFormEditor } from './NPCRoleFormEditor'
+import { QualityFormEditor } from './QualityFormEditor'
 import { detectAssetKind } from './assetTypeRegistry'
 
 type Tab = 'json' | 'form' | 'vars'
@@ -52,6 +53,12 @@ function normalizeJsonForCompare(value: unknown): string | null {
   return JSON.stringify(value)
 }
 
+function getCopyableAssetId(selectedNodeId: string): string {
+  if (selectedNodeId.startsWith('server-path:')) return selectedNodeId.slice('server-path:'.length)
+  if (selectedNodeId.startsWith('server:')) return selectedNodeId.slice('server:'.length)
+  return selectedNodeId
+}
+
 export function AssetSidePanel(props: Props) {
   const isCommonResource = props.selectedNodeId.startsWith('common:')
 
@@ -73,6 +80,7 @@ export function AssetSidePanel(props: Props) {
   const [resourcePreview, setResourcePreview] = useState<ResourcePreview | null>(null)
   const [resourceLoading, setResourceLoading] = useState(false)
   const [resourceError, setResourceError] = useState<string | null>(null)
+  const [copyStatus, setCopyStatus] = useState<'idle' | 'copied' | 'error'>('idle')
 
   const title = resourcePreview?.resolvedPath ?? props.asset?.resolvedPath ?? props.selectedNodeId
 
@@ -107,6 +115,7 @@ export function AssetSidePanel(props: Props) {
     setIsEditing(canEdit)
     setDraftError(null)
     setSaveStatus({ kind: 'idle' })
+    setCopyStatus('idle')
     setTab(isCommonResource ? 'preview' : 'json')
     setIsSaveAsOpen(false)
     setNewIdDraft('')
@@ -367,6 +376,71 @@ export function AssetSidePanel(props: Props) {
     }
   }
 
+  async function handleCopySelectedId(): Promise<void> {
+    try {
+      await navigator.clipboard.writeText(getCopyableAssetId(props.selectedNodeId))
+      setCopyStatus('copied')
+      window.setTimeout(() => setCopyStatus('idle'), 1400)
+    } catch {
+      setCopyStatus('error')
+      window.setTimeout(() => setCopyStatus('idle'), 1800)
+    }
+  }
+
+  const actionButtonBase = {
+    padding: '5px 10px',
+    borderRadius: 6,
+    fontSize: 12,
+    fontWeight: 700,
+    lineHeight: 1.2,
+    whiteSpace: 'nowrap' as const,
+  }
+
+  const primaryActionStyle = {
+    ...actionButtonBase,
+    background: '#61dafb',
+    color: '#000',
+    border: 'none',
+  }
+
+  const saveAsActionStyle = {
+    ...actionButtonBase,
+    background: isSaveAsOpen ? '#2a3a2a' : '#1e2e1e',
+    color: '#7ec87e',
+    border: '1px solid #3a5a3a',
+  }
+
+  const neutralActionStyle = {
+    ...actionButtonBase,
+    background: '#2a2a2a',
+    color: '#f2f2f2',
+    border: '1px solid #4d4d4d',
+  }
+
+  const isolateActionStyle = {
+    ...actionButtonBase,
+    background: '#1a1a35',
+    color: '#8877ee',
+    border: '1px solid #4444aa',
+  }
+
+  const closeActionStyle = {
+    ...actionButtonBase,
+    padding: '5px 8px',
+    background: 'transparent',
+    color: '#9aa0b5',
+    border: '1px solid #3d4257',
+  }
+
+  const copyActionStyle = {
+    ...actionButtonBase,
+    padding: '2px 6px',
+    fontSize: 10,
+    background: copyStatus === 'copied' ? '#1f4d35' : copyStatus === 'error' ? '#4a2323' : 'transparent',
+    color: copyStatus === 'copied' ? '#a8f0c5' : copyStatus === 'error' ? '#ffb3b3' : '#8ea0b8',
+    border: copyStatus === 'copied' ? '1px solid #2f7a54' : copyStatus === 'error' ? '1px solid #7a3434' : '1px solid #3a4656',
+  }
+
   return (
     <div
       style={{
@@ -388,12 +462,12 @@ export function AssetSidePanel(props: Props) {
           padding: '10px 12px',
           borderBottom: '1px solid #333',
           display: 'flex',
-          alignItems: 'center',
+          alignItems: 'flex-start',
           justifyContent: 'space-between',
           gap: 10,
         }}
       >
-        <div style={{ minWidth: 0 }}>
+        <div style={{ minWidth: 0, flex: 1 }}>
           <div
             style={{
               fontSize: 12,
@@ -406,9 +480,22 @@ export function AssetSidePanel(props: Props) {
           >
             {title}
           </div>
-          <div style={{ fontSize: 11, color: '#aaa', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-            key: {props.selectedNodeId}
-            {(resourcePreview?.origin ?? props.asset?.origin) ? `  •  origin: ${resourcePreview?.origin ?? props.asset?.origin}` : ''}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0, marginTop: 2 }}>
+            <div style={{ fontSize: 11, color: '#aaa', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0, flex: 1 }}>
+              key: {props.selectedNodeId}
+              {(resourcePreview?.origin ?? props.asset?.origin) ? `  •  origin: ${resourcePreview?.origin ?? props.asset?.origin}` : ''}
+            </div>
+            <button
+              onClick={() => void handleCopySelectedId()}
+              style={{
+                ...copyActionStyle,
+                cursor: 'pointer',
+                flexShrink: 0,
+              }}
+              title="Copier l'ID de l'objet"
+            >
+              {copyStatus === 'copied' ? 'Copied' : copyStatus === 'error' ? 'Retry' : 'Copy ID'}
+            </button>
           </div>
           {panelStatus && (
             <div style={{ marginTop: 6 }}>
@@ -432,19 +519,14 @@ export function AssetSidePanel(props: Props) {
             </div>
           )}
         </div>
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 8, flexShrink: 0 }}>
           {canEdit && isEditing && (
-            <>
+            <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'flex-end', gap: 6, maxWidth: 220 }}>
               <button
                 onClick={handleSave}
                 disabled={saveStatus.kind === 'saving'}
                 style={{
-                  padding: '4px 8px',
-                  background: '#61dafb',
-                  color: '#000',
-                  border: 'none',
-                  borderRadius: 4,
+                  ...primaryActionStyle,
                   cursor: saveStatus.kind !== 'saving' ? 'pointer' : 'not-allowed',
                   opacity: saveStatus.kind !== 'saving' ? 1 : 0.6,
                 }}
@@ -452,90 +534,57 @@ export function AssetSidePanel(props: Props) {
               >
                 {saveStatus.kind === 'saving' ? 'Saving…' : 'Save'}
               </button>
-
-              <button
-                onClick={handleCancel}
-                disabled={saveStatus.kind === 'saving' || !isDirty}
-                style={{
-                  padding: '4px 8px',
-                  background: '#333',
-                  color: '#fff',
-                  border: '1px solid #555',
-                  borderRadius: 4,
-                  cursor: saveStatus.kind !== 'saving' && isDirty ? 'pointer' : 'not-allowed',
-                  opacity: saveStatus.kind !== 'saving' && isDirty ? 1 : 0.6,
-                }}
-                title="Annuler les modifications locales du draft"
-              >
-                Cancel
-              </button>
-
               <button
                 onClick={() => { setIsSaveAsOpen((v) => !v); setSaveAsStatus({ kind: 'idle' }) }}
                 disabled={saveStatus.kind === 'saving'}
                 style={{
-                  padding: '4px 8px',
-                  background: isSaveAsOpen ? '#2a3a2a' : '#1e2e1e',
-                  color: '#7ec87e',
-                  border: '1px solid #3a5a3a',
-                  borderRadius: 4,
-                  cursor: 'pointer',
+                  ...saveAsActionStyle,
+                  cursor: saveStatus.kind !== 'saving' ? 'pointer' : 'not-allowed',
+                  opacity: saveStatus.kind !== 'saving' ? 1 : 0.6,
                 }}
                 title="Créer une copie avec un nouvel ID"
               >
                 Save as…
               </button>
-            </>
+              <button
+                onClick={handleCancel}
+                disabled={saveStatus.kind === 'saving' || !isDirty}
+                style={{
+                  ...neutralActionStyle,
+                  cursor: saveStatus.kind !== 'saving' && isDirty ? 'pointer' : 'not-allowed',
+                  opacity: saveStatus.kind !== 'saving' && isDirty ? 1 : 0.55,
+                }}
+                title="Annuler les modifications locales du draft"
+              >
+                Cancel
+              </button>
+            </div>
           )}
 
-          {props.onIsolateNode && (
+          <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'flex-end', gap: 6, maxWidth: 220 }}>
+            {props.onIsolateNode && (
+              <button
+                onClick={props.onIsolateNode}
+                style={{
+                  ...isolateActionStyle,
+                  cursor: 'pointer',
+                }}
+                title="Isoler ce nœud et ses enfants dans le graphe"
+              >
+                Isolate
+              </button>
+            )}
             <button
-              onClick={props.onIsolateNode}
+              onClick={props.onClose}
               style={{
-                padding: '4px 8px',
-                background: '#1a1a35',
-                color: '#8877ee',
-                border: '1px solid #4444aa',
-                borderRadius: 4,
+                ...closeActionStyle,
                 cursor: 'pointer',
               }}
-              title="Isoler ce nœud et ses enfants dans le graphe"
+              title="Fermer le panneau"
             >
-              Isolate
+              Close
             </button>
-          )}
-
-          {props.onOpenInteractions && props.canOpenInteractions && (
-            <button
-              onClick={props.onOpenInteractions}
-              style={{
-                padding: '4px 8px',
-                background: '#333',
-                color: '#fff',
-                border: '1px solid #555',
-                borderRadius: 4,
-                cursor: props.loading ? 'wait' : 'pointer',
-              }}
-              title="Ouvrir l'éditeur d'interaction"
-            >
-              Interactions
-            </button>
-          )}
-
-          <button
-            onClick={props.onClose}
-            style={{
-              padding: '4px 8px',
-              background: '#333',
-              color: '#fff',
-              border: '1px solid #555',
-              borderRadius: 4,
-              cursor: 'pointer',
-            }}
-            title="Fermer"
-          >
-            Close
-          </button>
+          </div>
         </div>
       </div>
 
@@ -862,6 +911,14 @@ export function AssetSidePanel(props: Props) {
 
         {props.asset && !isCommonResource && tab === 'form' && (() => {
           switch (assetKind) {
+            case 'quality':
+              return (
+                <QualityFormEditor
+                  json={currentFormJson}
+                  onChange={canEdit ? handleFormChange : () => {}}
+                  readOnly={!canEdit}
+                />
+              )
             case 'item':
               return (
                 <ItemFormEditor

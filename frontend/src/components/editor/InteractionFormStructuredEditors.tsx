@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useState } from 'react'
 
 const LABEL_STYLE: React.CSSProperties = {
   display: 'block',
@@ -36,6 +36,13 @@ const FIELD_WRAP: React.CSSProperties = {
 type InteractionListEntry = { id: string; val: unknown }
 type InteractionMapEntry = { id: string; key: string; val: unknown }
 type HitEntityRuleEntry = { id: string; matchers: unknown; next: unknown }
+
+let interactionStructuredEditorSequence = 0
+
+function nextStructuredEditorId(prefix: string): string {
+  interactionStructuredEditorSequence += 1
+  return `${prefix}_${interactionStructuredEditorSequence}`
+}
 
 function dictFromUnknown(val: unknown): Record<string, unknown> {
   return typeof val === 'object' && val !== null && !Array.isArray(val)
@@ -199,15 +206,6 @@ export function InteractionListEditor({
     arrayFromUnknown(raw).map((val, index) => ({ id: `list_${index}`, val }))
 
   const [entries, setEntries] = useState<InteractionListEntry[]>(() => toEntries(value))
-  const prevSig = useRef(JSON.stringify(value))
-
-  useEffect(() => {
-    const sig = JSON.stringify(value)
-    if (sig !== prevSig.current) {
-      prevSig.current = sig
-      setEntries(toEntries(value))
-    }
-  })
 
   function emit(next: InteractionListEntry[]) {
     const list = next.map((entry) => entry.val).filter((entry) => entry !== null && entry !== undefined && entry !== '')
@@ -227,7 +225,7 @@ export function InteractionListEditor({
   }
 
   function addEntry() {
-    setEntries((prev) => [...prev, { id: `list_new_${Date.now()}`, val: '' }])
+    setEntries((prev) => [...prev, { id: nextStructuredEditorId('list_new'), val: '' }])
   }
 
   return (
@@ -262,15 +260,6 @@ export function InteractionMapEditor({
     Object.entries(dictFromUnknown(raw)).map(([key, val], index) => ({ id: `map_${index}_${key}`, key, val }))
 
   const [entries, setEntries] = useState<InteractionMapEntry[]>(() => toEntries(value))
-  const prevSig = useRef(JSON.stringify(value))
-
-  useEffect(() => {
-    const sig = JSON.stringify(value)
-    if (sig !== prevSig.current) {
-      prevSig.current = sig
-      setEntries(toEntries(value))
-    }
-  })
 
   function emit(next: InteractionMapEntry[]) {
     const obj: Record<string, unknown> = {}
@@ -295,7 +284,7 @@ export function InteractionMapEditor({
   }
 
   function addEntry() {
-    setEntries((prev) => [...prev, { id: `map_new_${Date.now()}`, key: '', val: '' }])
+    setEntries((prev) => [...prev, { id: nextStructuredEditorId('map_new'), key: '', val: '' }])
   }
 
   return (
@@ -389,15 +378,6 @@ export function HitEntityRulesEditor({
     })
 
   const [entries, setEntries] = useState<HitEntityRuleEntry[]>(() => toEntries(value))
-  const prevSig = useRef(JSON.stringify(value))
-
-  useEffect(() => {
-    const sig = JSON.stringify(value)
-    if (sig !== prevSig.current) {
-      prevSig.current = sig
-      setEntries(toEntries(value))
-    }
-  })
 
   function emit(next: HitEntityRuleEntry[]) {
     const rules = next
@@ -424,7 +404,7 @@ export function HitEntityRulesEditor({
   }
 
   function addEntry() {
-    setEntries((prev) => [...prev, { id: `rule_new_${Date.now()}`, matchers: [], next: { Interactions: [] } }])
+    setEntries((prev) => [...prev, { id: nextStructuredEditorId('rule_new'), matchers: [], next: { Interactions: [] } }])
   }
 
   return (

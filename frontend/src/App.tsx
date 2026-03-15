@@ -1,7 +1,9 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import './App.css'
 
-import { WorkspaceProvider, useWorkspace } from './context/WorkspaceContext'
+import type { WorkspaceOpenResponse } from './api'
+import { WorkspaceProvider } from './context/WorkspaceContext'
+import { useWorkspace } from './context/useWorkspace'
 import { HomePage } from './views/HomePage'
 import { ProjectConfigView } from './views/ProjectConfigView'
 import { ProjectGraphItemsView } from './views/project/ProjectGraphItemsView'
@@ -11,20 +13,16 @@ import { ProjectModifiedGraphView } from './views/project/ProjectModifiedGraphVi
 type ProjectView = 'config' | 'graph-items' | 'graph-interactions' | 'modified'
 type GraphRoot = { assetKey: string; display: string }
 
-function AppShell() {
-  const { workspace, refreshProjects } = useWorkspace()
+type AppShellContentProps = {
+  workspace: WorkspaceOpenResponse | null
+  refreshProjects: () => Promise<void>
+}
+
+function AppShellContent({ workspace, refreshProjects }: AppShellContentProps) {
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null)
   const [projectView, setProjectView] = useState<ProjectView>('config')
   const [itemRoot, setItemRoot] = useState<GraphRoot | null>(null)
   const [interactionRoot, setInteractionRoot] = useState<GraphRoot | null>(null)
-
-  // Reset navigation when workspace changes (re-open / session expired)
-  useEffect(() => {
-    setSelectedProjectId(null)
-    setProjectView('config')
-    setItemRoot(null)
-    setInteractionRoot(null)
-  }, [workspace])
 
   function selectProject(id: string): void {
     setSelectedProjectId(id)
@@ -126,6 +124,7 @@ function AppShell() {
           <div style={{ display: projectView === 'modified' ? 'flex' : 'none', flex: 1, minHeight: 0 }}>
             <ProjectModifiedGraphView
               projectId={selectedProjectId}
+              isVisible={projectView === 'modified'}
               onBack={() => setProjectView('config')}
               onOpenInteractions={(root) => { setInteractionRoot(root); setProjectView('graph-interactions') }}
             />
@@ -141,6 +140,19 @@ function AppShell() {
         </>
       )}
     </div>
+  )
+}
+
+function AppShell() {
+  const { workspace, refreshProjects } = useWorkspace()
+  const workspaceResetKey = workspace?.workspaceId ?? workspace?.rootPath ?? 'no-workspace'
+
+  return (
+    <AppShellContent
+      key={workspaceResetKey}
+      workspace={workspace}
+      refreshProjects={refreshProjects}
+    />
   )
 }
 

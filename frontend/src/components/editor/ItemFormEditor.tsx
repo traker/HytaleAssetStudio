@@ -97,7 +97,7 @@ const REMOVE_BTN: React.CSSProperties = {
 // Constants
 // ─────────────────────────────────────────────────────────────
 
-export const ITEM_QUALITY_OPTIONS = [
+const ITEM_QUALITY_OPTIONS = [
   'Template', 'Technical', 'Common', 'Uncommon', 'Rare', 'Epic', 'Legendary',
 ]
 
@@ -905,20 +905,6 @@ export type ItemFormEditorProps = {
   onChange: (updated: Record<string, unknown>) => void
   readOnly?: boolean
   projectId?: string
-}
-
-/**
- * Returns true if the JSON looks like an item asset
- * (has Quality or ItemLevel — never present in interaction files).
- */
-export function looksLikeItem(json: Record<string, unknown>): boolean {
-  return (
-    'Quality' in json ||
-    'ItemLevel' in json ||
-    'MaxDurability' in json ||
-    'PlayerAnimationsId' in json ||
-    ('Icon' in json && 'TranslationProperties' in json)
-  )
 }
 
 export function ItemFormEditor({ json, onChange, readOnly = false, projectId }: ItemFormEditorProps) {

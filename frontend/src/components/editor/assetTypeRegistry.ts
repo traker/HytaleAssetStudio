@@ -5,10 +5,11 @@
  * All form editor routing in AssetSidePanel must use this function.
  *
  * Detection order is deterministic (more specific before more general):
- *   entity-effect → projectile-config → projectile → npc-role → drop-table → item → unknown
+ *   quality → entity-effect → projectile-config → projectile → npc-role → drop-table → item → unknown
  */
 
 export type AssetKind =
+  | 'quality'            // Server/Item/Qualities/
   | 'item'               // Server/Item/Items/ — items, blocks, potions, tools…
   | 'entity-effect'      // Server/Entity/Effects/ or Server/EntityEffect/
   | 'projectile-config'  // Server/ProjectileConfigs/
@@ -22,6 +23,10 @@ export function detectAssetKind(
   vfsPath: string,
 ): AssetKind {
   const path = vfsPath.replace(/\\/g, '/').toLowerCase()
+
+  if (path.includes('/item/qualities/')) {
+    return 'quality'
+  }
 
   // 1. entity-effect — path match or JSON shape
   if (

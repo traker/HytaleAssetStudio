@@ -26,6 +26,12 @@ def _iter_strings(obj):
             yield from _iter_strings(v)
 
 
+def _drop_top_level_keys(obj, keys: set[str]):
+    if not isinstance(obj, dict):
+        return obj
+    return {k: v for k, v in obj.items() if k not in keys}
+
+
 _INTERACTION_KEY_LABEL = {
     "Next": "next",
     "Failed": "failed",
@@ -86,6 +92,8 @@ def _group_for_server_path(vfs_path: str) -> str:
     p = vfs_path.replace("\\", "/").lower()
     if "/item/items/" in p:
         return "item"
+    if "/item/qualities/" in p:
+        return "quality"
     if "/rootinteractions/" in p:
         return "rootinteraction"
     if "/interactions/" in p:
@@ -107,6 +115,24 @@ def _group_for_server_path(vfs_path: str) -> str:
     if "/block/" in p or "/blocks/" in p:
         return "block"
     return "json_data"
+
+
+def _resolve_quality_path(index, quality_name: str) -> str | None:
+    quality = quality_name.strip()
+    if not quality or not _ID_CANDIDATE.match(quality):
+        return None
+
+    direct_path = f"Server/Item/Qualities/{quality}.json"
+    if direct_path in index.effective_mount_by_vfs_path:
+        return direct_path
+
+    candidates = index.server_id_to_all_paths.get(quality, [])
+    for path in candidates:
+        normalized = path.replace("\\", "/").lower()
+        if normalized.startswith("server/item/qualities/"):
+            return path
+
+    return None
 
 
 def build_focus_graph(cfg: ProjectConfig, root_key: str, depth: int | None) -> dict:
@@ -165,12 +191,18 @@ def build_focus_graph(cfg: ProjectConfig, root_key: str, depth: int | None) -> d
         if rel.lower().startswith("common/"):
             rel = rel[7:]
 
-        vfs_path = f"Common/{rel}".replace("\\", "/")
-        # Must exist in current VFS mapping to avoid noisy edges.
-        if vfs_path not in index.effective_mount_by_vfs_path:
-            return None
+        candidate_rel_paths = [rel]
+        rel_path = Path(rel)
+        if rel_path.suffix:
+                        candidate_rel_paths.append(rel_path.with_name(f"{rel_path.stem}@2x{rel_path.suffix}").as_posix())
 
-        return f"common:{rel}"
+        for candidate_rel in candidate_rel_paths:
+            vfs_path = f"Common/{candidate_rel}".replace("\\", "/")
+            # Must exist in current VFS mapping to avoid noisy edges.
+            if vfs_path in index.effective_mount_by_vfs_path:
+                return f"common:{candidate_rel}"
+
+        return None
 
     nodes: dict[str, dict] = {}
     edges: set[tuple[str, str, str]] = set()
@@ -245,6 +277,15 @@ def build_focus_graph(cfg: ProjectConfig, root_key: str, depth: int | None) -> d
             # values using server_id_to_all_paths so ambiguous IDs (e.g. Block_Primary
             # present in both /Interactions/ and /RootInteractions/) are not silently dropped.
             if isinstance(data, dict):
+                quality_name = data.get("Quality")
+                if isinstance(quality_name, str):
+                    quality_path = _resolve_quality_path(index, quality_name)
+                    if quality_path is not None:
+                        edges.add((node_key_for_path(current_path), node_key_for_path(quality_path), "quality"))
+                        if quality_path not in seen:
+                            seen.add(quality_path)
+                            queue.append((quality_path, d + 1))
+
                 item_ints = data.get("Interactions")
                 if isinstance(item_ints, dict):
                     for slot_val in item_ints.values():
@@ -255,7 +296,8 @@ def build_focus_graph(cfg: ProjectConfig, root_key: str, depth: int | None) -> d
                                     seen.add(child_path)
                                     queue.append((child_path, d + 1))
 
-            for s in _iter_strings(data):
+            generic_scan_source = _drop_top_level_keys(data, {"Interactions", "Quality"})
+            for s in _iter_strings(generic_scan_source):
                 s = s.strip()
 
                 # Common resources (textures/sounds/models...) referenced by path
@@ -269,6 +311,8 @@ def build_focus_graph(cfg: ProjectConfig, root_key: str, depth: int | None) -> d
                 if s not in unique_ids:
                     continue
                 child_path = index.server_id_to_path[s]
+                if child_path == current_path:
+                    continue
                 edges.add((node_key_for_path(current_path), node_key_for_id(s), "ref"))
                 if child_path not in seen:
                     seen.add(child_path)
@@ -334,10 +378,15 @@ def build_modified_graph(cfg: ProjectConfig, depth: int) -> dict:
         rel = s
         if rel.lower().startswith("common/"):
             rel = rel[7:]
-        vfs_path = f"Common/{rel}".replace("\\", "/")
-        if vfs_path not in index.effective_mount_by_vfs_path:
-            return None
-        return f"common:{rel}"
+        candidate_rel_paths = [rel]
+        rel_path = _Path(rel)
+        if rel_path.suffix:
+            candidate_rel_paths.append(rel_path.with_name(f"{rel_path.stem}@2x{rel_path.suffix}").as_posix())
+        for candidate_rel in candidate_rel_paths:
+            vfs_path = f"Common/{candidate_rel}".replace("\\", "/")
+            if vfs_path in index.effective_mount_by_vfs_path:
+                return f"common:{candidate_rel}"
+        return None
 
     nodes: dict[str, dict] = {}
     edges: set[tuple[str, str, str]] = set()
@@ -412,6 +461,15 @@ def build_modified_graph(cfg: ProjectConfig, depth: int) -> dict:
             # so ambiguous IDs (same filename in /Interactions/ and /RootInteractions/) are
             # not silently dropped.
             if isinstance(data, dict):
+                quality_name = data.get("Quality")
+                if isinstance(quality_name, str):
+                    quality_path = _resolve_quality_path(index, quality_name)
+                    if quality_path is not None:
+                        edges.add((node_key_for_path(current_path), node_key_for_path(quality_path), "quality"))
+                        if quality_path not in seen:
+                            seen.add(quality_path)
+                            queue.append((quality_path, d + 1))
+
                 item_ints = data.get("Interactions")
                 if isinstance(item_ints, dict):
                     for slot_val in item_ints.values():
@@ -422,7 +480,8 @@ def build_modified_graph(cfg: ProjectConfig, depth: int) -> dict:
                                     seen.add(child_path)
                                     queue.append((child_path, d + 1))
 
-            for s in _iter_strings(data):
+            generic_scan_source = _drop_top_level_keys(data, {"Interactions", "Quality"})
+            for s in _iter_strings(generic_scan_source):
                 s = s.strip()
                 common_key = _try_common_asset_key(s)
                 if common_key:
@@ -434,6 +493,8 @@ def build_modified_graph(cfg: ProjectConfig, depth: int) -> dict:
                 if s not in unique_ids:
                     continue
                 child_path = index.server_id_to_path[s]
+                if child_path == current_path:
+                    continue
                 edges.add((node_key_for_path(current_path), node_key_for_id(s), "ref"))
                 if child_path not in seen:
                     seen.add(child_path)

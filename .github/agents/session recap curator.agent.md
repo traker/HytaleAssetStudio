@@ -25,13 +25,13 @@ Maintenir `docs/docs_data/SESSION_RECAP.md` propre et navigable en :
    - Utilitaire finecraft-api → tableau `📦 finecraft-api` de `.github/copilot-instructions.md`
    - Décision spécifique à un plugin → `plugin-<name>/docs/ARCHITECTURE.md`
    - Pattern Hytale réutilisable → `.github/SKILLS/<topic>/SKILL.md`
-2. Archivant les entries plus vieilles que 30 jours dans `docs/docs_data/archive/SESSION_RECAP_<YYYY_MM>.md` (créer le fichier si nécessaire).
+2. Archivant les entries plus vieilles que 15 jours ou 20 dernières entries dans `docs/docs_data/archive/SESSION_RECAP_<YYYY_MM>.md` (créer le fichier si nécessaire).
 3. Remplaçant les entries archivées par une ligne de référence dans SESSION_RECAP.md :
    `> Archivé → [SESSION_RECAP_2026_01.md](docs/docs_data/archive/SESSION_RECAP_2026_01.md)`
 
 Constraints:
 - Ne jamais supprimer une entry sans l'avoir archivée ou promue.
-- Ne pas toucher aux entries des 30 derniers jours.
+- Ne pas toucher aux entries des 15 derniers jours ou 20 derniers entries.
 - Si une connaissance est déjà présente dans la destination cible, ne pas dupliquer.
 - Garder SESSION_RECAP.md sous 80 lignes après nettoyage.
 

@@ -477,7 +477,8 @@ function InlineInteractionEditor({
   function addBdEntry() {
     // find a stat name not yet used
     const candidates = ['Physical', 'Fire', 'Ice', 'Lightning', 'Poison', 'Holy', 'Dark']
-    const next = candidates.find((c) => !(c in bd)) ?? `Stat_${Date.now()}`
+    const next = candidates.find((candidate) => !(candidate in bd))
+      ?? `Stat_${Object.keys(bd).length + 1}`
     set('DamageCalculator', { ...dc, BaseDamage: { ...(bd as DamageStats), [next]: 0 } })
   }
   function renameBdEntry(oldStat: string, newStat: string) {

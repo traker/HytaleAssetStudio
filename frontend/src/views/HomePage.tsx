@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { HasApiError, hasApi } from '../api'
-import { useWorkspace } from '../context/WorkspaceContext'
+import { useWorkspace } from '../context/useWorkspace'
 import { PathInput } from '../components/ui/PathInput'
 
 type Props = {
@@ -31,7 +31,7 @@ export function HomePage({ onSelectProject, onProjectCreated }: Props) {
 
   function deriveDir(id: string): string {
     if (!workspace) return id
-    const base = workspace.projectsDir.replace(/[\/\\]$/, '')
+    const base = workspace.projectsDir.replace(/[/\\]$/, '')
     return id ? `${base}/${id}` : base
   }
 

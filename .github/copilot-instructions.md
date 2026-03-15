@@ -63,6 +63,19 @@ Point d'entrée : `docs/Hytale Docs/01_Getting_Started.md`
 
 Règle pratique : si un comportement attendu n'est pas spécifié dans `VISION.md` / `API_BACKEND_MINIMAL.md`, s'appuyer sur ces docs pour **interpréter** les JSON ; si c'est encore ambigu, revenir à la règle "ne pas inventer" et poser des questions.
 
+## Base de connaissance de référence
+
+La knowledge base de référence du Studio est :
+
+- les assets vanilla observés localement en lecture seule,
+- la documentation `docs/Hytale Docs/`.
+
+Règle pratique :
+
+- considérer les assets vanilla comme la source terrain prioritaire pour vérifier les formes JSON, chemins réels, références et usages concrets,
+- considérer `docs/Hytale Docs/` comme la base documentaire qui explicite ces formats et mécaniques,
+- ne pas traiter `legacy/tools_graph_assets/` comme knowledge base métier ; ce snapshot reste uniquement une référence d'implémentation historique.
+
 ## Dev: Accès aux assets vanilla locaux (hors-repo)
 
 Pendant le développement du Studio, il est acceptable (et attendu) de **consulter** le dossier d'assets vanilla local pour vérifier la structure réelle des fichiers et des références.

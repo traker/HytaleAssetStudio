@@ -8,7 +8,7 @@
  * - Shows type-specific fields from interactionSchemas
  */
 
-import { useEffect, useRef, useState } from 'react'
+import { useState } from 'react'
 import { getColorForInteractionType } from '../graph/colors'
 import { getSchemaForType, type FieldDef } from '../graph/interactionSchemas'
 import { renderTypeSpecificFields } from './InteractionFormTypeSections'
@@ -177,6 +177,13 @@ function renderField(
 
 type DictTimeEntry = { id: string; timeKey: string; val: unknown }
 
+let dictTimeEntrySequence = 0
+
+function nextDictTimeEntryId(): string {
+  dictTimeEntrySequence += 1
+  return `new_${dictTimeEntrySequence}`
+}
+
 function timeKeySortValue(raw: string): number {
   const parsed = Number.parseFloat(raw)
   return Number.isFinite(parsed) ? parsed : Number.POSITIVE_INFINITY
@@ -225,16 +232,6 @@ function DictTimeEditor({
 
   const [entries, setEntries] = useState<DictTimeEntry[]>(() => toEntries(value))
 
-  // Sync when the node changes (value prop changes externally)
-  const prevSig = useRef(JSON.stringify(value))
-  useEffect(() => {
-    const sig = JSON.stringify(value)
-    if (sig !== prevSig.current) {
-      prevSig.current = sig
-      setEntries(toEntries(value))
-    }
-  })
-
   function emit(next: DictTimeEntry[]) {
     const d: Record<string, unknown> = {}
     for (const e of sortDictTimeEntries(next)) {
@@ -264,7 +261,7 @@ function DictTimeEditor({
   }
 
   function handleAdd() {
-    setEntries((prev) => [...prev, { id: `new_${Date.now()}`, timeKey: '', val: null }])
+    setEntries((prev) => [...prev, { id: nextDictTimeEntryId(), timeKey: '', val: null }])
   }
 
   function handleModeChange(id: string, mode: 'ref' | 'inline') {
@@ -554,14 +551,6 @@ export function InteractionFormPanel({
   const [rawError, setRawError] = useState<string | null>(null)
   const [dirty, setDirty] = useState(false)
 
-  // Reset draft whenever the selected node changes
-  useEffect(() => {
-    setDraft({ ...rawFields })
-    setRawText(JSON.stringify(rawFields, null, 2))
-    setRawError(null)
-    setDirty(false)
-  }, [nodeId]) // eslint-disable-line react-hooks/exhaustive-deps
-
   const schema = getSchemaForType(nodeType)
   const typeColor = getColorForInteractionType(nodeType)
 
@@ -723,7 +712,7 @@ export function InteractionFormPanel({
                 {visibleSchemaFields.map((field) =>
                   field.type === 'dict-time' ? (
                     <DictTimeEditor
-                      key={field.key}
+                      key={`${field.key}:${JSON.stringify(draft[field.key] ?? null)}`}
                       field={field}
                       value={draft[field.key]}
                       onChange={handleFieldChange}

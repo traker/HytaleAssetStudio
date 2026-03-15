@@ -1,19 +1,7 @@
-import { createContext, useContext, useState, type ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 import { HasApiError, hasApi } from '../api'
 import type { ProjectInfo, WorkspaceOpenResponse } from '../api'
-
-type WorkspaceContextValue = {
-  workspaceRoot: string
-  setWorkspaceRoot: (v: string) => void
-  workspace: WorkspaceOpenResponse | null
-  projects: ProjectInfo[]
-  isBusy: boolean
-  error: string | null
-  openWorkspace: () => Promise<void>
-  refreshProjects: () => Promise<void>
-}
-
-const WorkspaceContext = createContext<WorkspaceContextValue | null>(null)
+import { WorkspaceContext } from './WorkspaceContext.shared'
 
 export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const [workspaceRoot, setWorkspaceRoot] = useState(
@@ -57,10 +45,4 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       {children}
     </WorkspaceContext.Provider>
   )
-}
-
-export function useWorkspace(): WorkspaceContextValue {
-  const ctx = useContext(WorkspaceContext)
-  if (!ctx) throw new Error('useWorkspace must be used inside <WorkspaceProvider>')
-  return ctx
 }
