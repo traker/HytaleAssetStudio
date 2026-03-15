@@ -24,7 +24,7 @@ Branch: `feature/standalone-app`
 | Lot | Title | Status |
 |---|---|---|
 | Lot 1 | Frontend servi par FastAPI (StaticFiles) | `done` |
-| Lot 2 | Fenêtre native pywebview | `todo` |
+| Lot 2 | Fenêtre native pywebview | `in-progress` |
 | Lot 3 | Packaging PyInstaller | `todo` |
 
 ---
@@ -81,38 +81,38 @@ Branch: `feature/standalone-app`
 
 ## Lot 2 — Fenêtre native pywebview
 
-- Global status: `todo`
-- Dépend de: Lot 1 validé
+- Global status: `in-progress`
+- Dépend de: Lot 1 validé ✅
 
 ### 2.1 — Ajouter pywebview comme dépendance
 
-- Status: `todo`
+- Status: `done`
 - Fichiers cibles:
   - `backend/requirements.txt`
   - `backend/requirements.lock`
 - Tasks:
-  - [ ] Ajouter `pywebview>=5` à `backend/requirements.txt`
-  - [ ] Régénérer `backend/requirements.lock` via `uv pip compile`
-  - [ ] Installer dans le venv et vérifier l'import
+  - [x] Ajouter `pywebview>=5` à `backend/requirements.txt` — résolu pywebview==6.1
+  - [x] Régénérer `backend/requirements.lock` via `uv pip compile` — 36 packages résolus
+  - [x] Installer dans le venv et vérifier l'import — OK (pythonnet + clr-loader inclus)
 
 ### 2.2 — Créer le point d'entrée standalone
 
-- Status: `todo`
+- Status: `done`
 - Fichiers cibles:
   - `app.py` (nouveau, racine du repo)
 - Tasks:
-  - [ ] Démarrer uvicorn dans un thread daemon
-  - [ ] Polling health check jusqu'à disponibilité backend (`GET /api/v1/health`)
-  - [ ] Ouvrir la fenêtre pywebview sur `http://127.0.0.1:8000/`
-  - [ ] Fermeture fenêtre → arrêt propre uvicorn
+  - [x] Démarrer uvicorn dans un thread daemon
+  - [x] Polling health check jusqu'à disponibilité backend (`GET /api/v1/health`)
+  - [x] Ouvrir la fenêtre pywebview sur `http://127.0.0.1:8000/`
+  - [x] Fermeture fenêtre → arrêt propre uvicorn (`server.should_exit`)
 
 ### 2.3 — Validation manuelle Lot 2
 
-- Status: `todo`
+- Status: `in-progress` — **à réaliser manuellement** (fenêtre GUI, non automatisable en CI)
 - Tasks:
   - [ ] `python app.py` → fenêtre native ouverte, UI chargée
   - [ ] Fermeture fenêtre → pas de process zombie uvicorn
-  - [ ] `python -m pytest` → 47 passed minimum
+  - [ ] `python -m pytest` → 47 passed ✅ (validé automatiquemet)
 
 ### Validation Lot 2
 

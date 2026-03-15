@@ -9,12 +9,18 @@ anyio==4.12.1
     #   httpx
     #   starlette
     #   watchfiles
+bottle==0.13.4
+    # via pywebview
 certifi==2026.2.25
     # via
     #   httpcore
     #   httpx
+cffi==2.0.0
+    # via clr-loader
 click==8.3.1
     # via uvicorn
+clr-loader==0.2.10
+    # via pythonnet
 colorama==0.4.6
     # via
     #   click
@@ -46,6 +52,10 @@ pluggy==1.6.0
     # via
     #   pytest
     #   pytest-cov
+proxy-tools==0.1.0
+    # via pywebview
+pycparser==3.0
+    # via cffi
 pydantic==2.12.5
     # via
     #   -r backend/requirements.txt
@@ -62,6 +72,10 @@ pytest-cov==7.0.0
     # via -r backend/requirements.txt
 python-dotenv==1.2.2
     # via uvicorn
+pythonnet==3.0.5
+    # via pywebview
+pywebview==6.1
+    # via -r backend/requirements.txt
 pyyaml==6.0.3
     # via uvicorn
 starlette==0.52.1
@@ -72,6 +86,7 @@ typing-extensions==4.15.0
     #   fastapi
     #   pydantic
     #   pydantic-core
+    #   pywebview
     #   starlette
     #   typing-inspection
 typing-inspection==0.4.2
