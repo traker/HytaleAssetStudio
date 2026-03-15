@@ -4,12 +4,14 @@ import ipaddress
 import logging
 import time
 from contextlib import asynccontextmanager
+from pathlib import Path
 from urllib.parse import urlparse
 
 from fastapi import FastAPI
 from fastapi import Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 
 from backend.core.config import get_settings
 from backend.core.perf import build_server_timing_header, finish_request_perf, log_request_perf, start_request_perf
@@ -152,3 +154,25 @@ app.include_router(index_graph_router)
 app.include_router(assets_router)
 app.include_router(dialog_router)
 app.include_router(interactions_router)
+
+# --- Static frontend serving (production mode) ---
+# Activated only when frontend/dist/ exists (built via `npm run build`).
+# In dev mode the Vite dev server is used instead (scripts/dev.ps1).
+# Must be registered AFTER all API routes so API paths are matched first.
+_FRONTEND_DIST = Path(__file__).resolve().parent.parent.parent / "frontend" / "dist"
+
+if _FRONTEND_DIST.is_dir():
+    _assets_dir = _FRONTEND_DIST / "assets"
+    if _assets_dir.is_dir():
+        app.mount("/assets", StaticFiles(directory=_assets_dir), name="frontend-assets")
+
+    @app.get("/", include_in_schema=False)
+    async def _serve_root():
+        return FileResponse(_FRONTEND_DIST / "index.html")
+
+    @app.get("/{catchall:path}", include_in_schema=False)
+    async def _serve_spa(catchall: str):
+        candidate = _FRONTEND_DIST / catchall
+        if candidate.is_file():
+            return FileResponse(candidate)
+        return FileResponse(_FRONTEND_DIST / "index.html")
