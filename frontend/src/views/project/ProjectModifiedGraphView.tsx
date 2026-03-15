@@ -1053,15 +1053,6 @@ export function ProjectModifiedGraphView(props: Props) {
           )}
         </div>
 
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', fontSize: 10 }}>
-          <span style={{ color: '#dff8ea', background: '#36c275', borderRadius: 999, padding: '2px 8px', fontWeight: 700 }}>
-            NEW = only in current project
-          </span>
-          <span style={{ color: '#2b1800', background: '#ffb347', borderRadius: 999, padding: '2px 8px', fontWeight: 700 }}>
-            OVERRIDE = ID exists below
-          </span>
-        </div>
-
         {!loading && !error && visibleModifiedEntries.length > 0 && (
           <div
             style={{

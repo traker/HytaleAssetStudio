@@ -67,9 +67,13 @@ export async function layoutGraphElk<TNode extends Node>(
     layoutOptions: {
       'elk.algorithm': 'layered',
       'elk.direction': direction === 'LR' ? 'RIGHT' : 'DOWN',
-      'elk.layered.spacing.nodeNodeBetweenLayers': '140',
+      'elk.layered.spacing.nodeNodeBetweenLayers': '40',
       'elk.spacing.nodeNode': '60',
       'elk.layered.nodePlacement.strategy': 'BRANDES_KOEPF',
+      'elk.layered.crossingMinimization.strategy': 'INTERACTIVE',
+      'elk.layered.wrapping.strategy': 'MULTI_EDGE',
+      'elk.layered.compaction.postCompaction.strategy': 'EDGE_LENGTH',
+      'elk.layered.unnecessaryBendpoints': 'true',
     },
     children: nodes.map((n) => ({
       id: n.id,
