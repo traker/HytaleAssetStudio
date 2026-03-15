@@ -25,7 +25,7 @@ Branch: `feature/standalone-app`
 |---|---|---|
 | Lot 1 | Frontend servi par FastAPI (StaticFiles) | `done` |
 | Lot 2 | Fenêtre native pywebview | `in-progress` |
-| Lot 3 | Packaging PyInstaller | `todo` |
+| Lot 3 | Packaging PyInstaller | `in-progress` |
 
 ---
 
@@ -124,45 +124,47 @@ Branch: `feature/standalone-app`
 
 ## Lot 3 — Packaging PyInstaller
 
-- Global status: `todo`
+- Global status: `in-progress`
 - Dépend de: Lot 2 validé
 
 ### 3.1 — Configurer PyInstaller
 
-- Status: `todo`
+- Status: `done`
 - Fichiers cibles:
   - `HytaleAssetStudio.spec` (nouveau, racine)
   - `backend/requirements.txt` (ajout pyinstaller)
   - `backend/requirements.lock` (régénéré)
+  - `backend/app/main.py` (fix `sys._MEIPASS` pour data files bundle)
 - Tasks:
-  - [ ] Ajouter `pyinstaller` à `backend/requirements.txt` et régénérer le lock
-  - [ ] Créer `HytaleAssetStudio.spec` : datas frontend/dist, hidden imports uvicorn/fastapi, mode onedir, console=False
-  - [ ] Identifier les hidden imports manquants (uvicorn.logging, uvicorn.loops.*, etc.)
+  - [x] Ajouter `pyinstaller>=6` à `backend/requirements.txt` et régénérer le lock — pyinstaller==6.19.0
+  - [x] Créer `HytaleAssetStudio.spec` : datas frontend/dist + webview/lib/js + clr_loader DLLs + pythonnet runtime, hidden imports uvicorn/fastapi/webview, hookspath pywebview, mode onedir, console=False
+  - [x] Fixer `_FRONTEND_DIST` dans `main.py` pour utiliser `sys._MEIPASS` en mode bundle
 
 ### 3.2 — Valider le build PyInstaller
 
-- Status: `todo`
+- Status: `in-progress`
 - Tasks:
-  - [ ] `pyinstaller HytaleAssetStudio.spec` → build sans erreur
-  - [ ] Lancer `dist/HytaleAssetStudio/HytaleAssetStudio.exe`
-  - [ ] Vérifier UI fonctionnelle (workspace, assets, graphe)
-  - [ ] Vérifier sur environnement sans Python dans PATH
+  - [x] `pyinstaller HytaleAssetStudio.spec --clean -y` → build sans erreur ✅
+  - [x] Smoke test EXE (5s sans crash) ✅
+  - [ ] Lancer `dist/HytaleAssetStudio/HytaleAssetStudio.exe` → fenêtre UI fonctionnelle **(manuel)**
+  - [ ] Vérifier UI fonctionnelle (workspace, assets, graphe) **(manuel)**
+  - [ ] Vérifier sur environnement sans Python dans PATH **(optionnel)**
 
 ### 3.3 — Script de build release
 
-- Status: `todo`
+- Status: `done`
 - Fichiers cibles:
   - `scripts/build-release.ps1` (nouveau)
-  - `README.md`
 - Tasks:
-  - [ ] Créer `scripts/build-release.ps1` : npm build + pyinstaller
+  - [x] Créer `scripts/build-release.ps1` : npm build + pyinstaller `-y`
   - [ ] Mettre à jour `README.md` section installation
 
 ### Validation Lot 3
 
-- [ ] `scripts/build-release.ps1` → exe produit sans erreur
-- [ ] `dist/HytaleAssetStudio/HytaleAssetStudio.exe` fonctionne sans Python préalable
-- [ ] Toutes opérations Studio fonctionnelles depuis l'exe
+- [x] `pyinstaller HytaleAssetStudio.spec --clean -y` → exe produit sans erreur ✅
+- [x] Smoke test exe 5s sans crash ✅
+- [ ] `dist/HytaleAssetStudio/HytaleAssetStudio.exe` → UI fonctionnelle **(validation manuelle en attente)**
+- [ ] Toutes opérations Studio fonctionnelles depuis l'exe **(validation manuelle en attente)**
 
 ---
 

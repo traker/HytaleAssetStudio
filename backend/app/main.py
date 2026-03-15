@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import ipaddress
 import logging
+import sys
 import time
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -159,7 +160,11 @@ app.include_router(interactions_router)
 # Activated only when frontend/dist/ exists (built via `npm run build`).
 # In dev mode the Vite dev server is used instead (scripts/dev.ps1).
 # Must be registered AFTER all API routes so API paths are matched first.
-_FRONTEND_DIST = Path(__file__).resolve().parent.parent.parent / "frontend" / "dist"
+_FRONTEND_DIST = (
+    Path(sys._MEIPASS) / "frontend" / "dist"  # type: ignore[attr-defined]
+    if getattr(sys, "frozen", False)
+    else Path(__file__).resolve().parent.parent.parent / "frontend" / "dist"
+)
 
 if _FRONTEND_DIST.is_dir():
     _assets_dir = _FRONTEND_DIST / "assets"
