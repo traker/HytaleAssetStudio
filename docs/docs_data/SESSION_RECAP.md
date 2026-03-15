@@ -160,6 +160,32 @@
 - Les chantiers `INTERACTIONEDITOR1`, `ASSETFORMS1`, `STABILSTAGE2` et `UXWORKFLOW1` sont clôturés pour ce cycle.
 - Les prochaines reprises doivent partir de la synthèse active ici, puis remonter aux archives si un détail d'implémentation manque.
 
+### Avancement `STANDALONE1` — Lots 1, 2, 3 validés (2026-03-15)
+
+- Branche: `feature/standalone-app`
+- Objectif: distribuer le Studio comme un exe double-clic pour les modders non-dev.
+- Architecture retenue: StaticFiles FastAPI + pywebview (EdgeWebView2) + PyInstaller onedir.
+
+- **Lot 1** (StaticFiles): `frontend/dist/` servi par FastAPI. `scripts/run.ps1` créé. Validé.
+- **Lot 2** (pywebview): `app.py` point d'entrée standalone — uvicorn thread daemon, healthcheck poll, fenêtre 1400×860. Validé manuellement.
+- **Lot 3** (PyInstaller): `HytaleAssetStudio.spec` + `scripts/build-release.ps1`. Build `dist/HytaleAssetStudio/HytaleAssetStudio.exe` fonctionnel.
+
+- Correctifs appliqués pendant le Lot 3:
+  - `uvicorn.Config` : passage de l'objet `_fastapi_app` au lieu du string `"backend.app.main:app"` (import_from_string échoue en bundle frozen).
+  - `main.py` : `sys._MEIPASS` pour résoudre `frontend/dist/` dans le bundle.
+  - `dialog.py` : remplacement de `tkinter` (exclu du bundle) par `webview.windows[0].create_file_dialog(FileDialog.FOLDER)` en mode standalone ; fallback tkinter en mode dev.
+  - Crash logging vers `HytaleAssetStudio.log` à côté de l'exe en cas d'échec de démarrage.
+  - `build/` ajouté à `.gitignore`.
+
+- Validations:
+  - `pytest` → 47 passed.
+  - Exe démarre, UI s'affiche, dialogue browse dossier natif Windows fonctionnel.
+
+- Reste avant merge:
+  - `VISION.md` section distribution à mettre à jour.
+  - `README.md` section installation à mettre à jour.
+  - Merge `feature/standalone-app` → `master`.
+
 ## Archives
 
 > Archivé → [SESSION_RECAP_2026_03.md](docs/docs_data/archive/SESSION_RECAP_2026_03.md)

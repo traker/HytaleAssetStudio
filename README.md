@@ -63,7 +63,26 @@ Validated in the current publication pass:
 
 ## Quick start
 
-### Recommended on Windows
+### Standalone executable (recommended for non-developers)
+
+Build a self-contained Windows executable:
+
+```powershell
+# Requires: .venv with all dependencies (uv pip install -r backend/requirements.lock)
+.\scripts\build-release.ps1
+```
+
+This runs `npm run build` then PyInstaller and produces `dist/HytaleAssetStudio/`. Copy or zip that folder — no Python or Node required on the target machine (WebView2 Runtime is pre-installed on Windows 10/11).
+
+Launch directly:
+
+```
+dist\HytaleAssetStudio\HytaleAssetStudio.exe
+```
+
+If the application fails to start, check `dist\HytaleAssetStudio\HytaleAssetStudio.log` for the error.
+
+### Development mode
 
 Use the launcher from the repository root:
 
@@ -71,7 +90,7 @@ Use the launcher from the repository root:
 ./scripts/dev.ps1
 ```
 
-The launcher now uses `uv` to prepare the backend `.venv` automatically before starting the API.
+The launcher uses `uv` to prepare the backend `.venv` automatically before starting the API.
 
 This starts:
 

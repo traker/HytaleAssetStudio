@@ -343,7 +343,63 @@ Et annoter les edges avec un label (`next`, `failed`, `calls`, `fork`, `blocked`
 
 ---
 
-## 4. Les Workflows (Parcours Utilisateur)
+## 4. Distribution (Mode Standalone)
+
+Le Studio est conçu pour être utilisé par des **modders non-développeurs** qui n'ont pas Python ni Node.js installés.
+La distribution cible est un **exécutable double-clic** auto-contenu.
+
+### Mode de distribution retenu
+
+- **Exécutable `HytaleAssetStudio.exe`** (Windows, mode `--onedir` PyInstaller).
+- L'exe embarque : le backend Python/FastAPI, le frontend React buildé, les DLLs pywebview (EdgeWebView2) et les assemblies pythonnet.
+- L'utilisateur double-clique → une fenêtre native s'ouvre (Edge WebView2), le backend démarre en arrière-plan.
+- Aucune dépendance à installer (Python, Node, npm) sauf WebView2 Runtime (pré-installé sur Windows 10/11).
+
+### Build d'une release
+
+Depuis la racine du repo, dans un venv avec toutes les dépendances :
+
+```powershell
+# Build complet (frontend + exe)
+.\scripts\build-release.ps1
+
+# Si le frontend/dist est déjà à jour
+.\scripts\build-release.ps1 -SkipFrontendBuild
+```
+
+Résultat : `dist/HytaleAssetStudio/` — copier ou zipper ce dossier pour distribuer.
+
+### Lancement standalone (dev/test)
+
+```powershell
+python app.py
+python app.py --port 8080
+```
+
+### Schéma technique
+
+```
+HytaleAssetStudio.exe
+  └── _internal/
+       ├── backend/          (FastAPI, uvicorn — thread daemon)
+       ├── frontend/dist/    (React build — servi par StaticFiles)
+       ├── webview/lib+js/   (EdgeWebView2 DLLs)
+       ├── pythonnet/runtime/ (Python.Runtime.dll)
+       └── clr_loader/ffi/   (ClrLoader.dll)
+```
+
+### Fichiers clés
+
+| Fichier | Rôle |
+|---|---|
+| `app.py` | Point d'entrée standalone (uvicorn thread + pywebview window) |
+| `HytaleAssetStudio.spec` | Spec PyInstaller (datas, hidden imports, hookspath) |
+| `scripts/build-release.ps1` | Script de build release (npm + pyinstaller) |
+| `scripts/run.ps1` | Lancement prod sans fenêtre native (frontend buildé + uvicorn) |
+
+---
+
+## 5. Les Workflows (Parcours Utilisateur)
 
 Voici le détail chronologique des actions qu'un utilisateur peut faire avec Hytale Asset Studio :
 
@@ -468,7 +524,7 @@ Voici le détail chronologique des actions qu'un utilisateur peut faire avec Hyt
 4. **Vue "Dry-Run" (Aperçu) :** Le backend émule le comportement de Hytalor. Il fusionne virtuellement le fichier d'origine et le patch, pour afficher au moddeur le *JSON final généré* tel que le jeu le lira in-game. Cela permet de vérifier instantanément que la syntaxe du patch (qui est source de nombreuses erreurs) est valide.
 5. *Note : Cette fonctionnalité est techniquement complexe (nécessite l'émulation du résolveur de patchs Hytalor) et est consignée ici pour la feuille de route à long terme.*
 
-## 5. Principes d'Interface (UI/UX) et Comportements Visuels
+## 6. Principes d'Interface (UI/UX) et Comportements Visuels
 
 Pour éviter que le Front-end (React/Vite) ne parte dans toutes les directions, il doit respecter quelques règles claires et unifiées :
 

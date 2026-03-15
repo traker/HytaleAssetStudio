@@ -15,6 +15,10 @@ node_modules/
 dist/
 .vite/
 
+# PyInstaller build artifacts
+build/
+*.spec.bak
+
 # OS / editor
 .DS_Store
 Thumbs.db

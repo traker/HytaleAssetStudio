@@ -38,7 +38,15 @@ The repository launcher `scripts/dev.ps1` uses this same `uv`-managed `.venv` fl
 
 ## Run in development
 
+The dev setup runs the backend and the Vite frontend separately. The Vite dev server proxies `/api` to the backend and provides hot-reload for the UI.
+
 From the repository root:
+
+```powershell
+scripts/dev.ps1
+```
+
+Or manually, from the repository root:
 
 ```powershell
 .\.venv\Scripts\python.exe -m uvicorn backend.app.main:app --reload --host 127.0.0.1 --port 8000
@@ -52,6 +60,30 @@ Why `python -m uvicorn`:
 The frontend Vite proxy targets `http://127.0.0.1:${HAS_API_PORT}` and assumes `8000` by default.
 
 If you change the backend port, export `HAS_API_PORT` before starting the frontend.
+
+## Run in production (frontend bundled)
+
+In production mode the React build is served directly by FastAPI. Node.js is not required at runtime.
+
+From the repository root:
+
+```powershell
+scripts/run.ps1
+```
+
+This script:
+
+1. Runs `npm run build` in `frontend/` (produces `frontend/dist/`)
+2. Ensures the backend venv is up to date
+3. Starts uvicorn on `http://127.0.0.1:8000/` (no hot-reload)
+
+The Studio UI is then accessible at `http://127.0.0.1:8000/` directly.
+
+Optional flags:
+
+- `-SkipBuild` — skip the frontend build step (use an existing `frontend/dist/`)
+- `-PerfAudit` — enable backend performance headers
+- `-ApiPort <n>` — use a different port (default: `8000`)
 
 ## Environment variables
 
