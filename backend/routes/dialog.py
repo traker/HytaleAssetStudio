@@ -12,14 +12,41 @@ class DialogResponse(BaseModel):
     path: str | None  # None if user cancelled
 
 
-def _open_dialog(mode: str, filter_zip: bool) -> str | None:
-    """Open a native Tk dialog in its own hidden root window."""
-    import tkinter as tk
-    from tkinter import filedialog
+def _open_dialog_webview(mode: str, filter_zip: bool) -> str | None:
+    """Use pywebview's built-in dialog when a window is open.
+
+    Required in standalone/frozen mode: pywebview owns the main thread so
+    tkinter cannot create a window from a uvicorn worker thread.
+    pywebview.window.create_file_dialog() marshals to the UI thread internally.
+    """
+    import webview  # noqa: PLC0415
+
+    windows = webview.windows
+    if not windows:
+        return None
+
+    win = windows[0]
+    if mode == "folder":
+        result = win.create_file_dialog(webview.FOLDER_DIALOG)
+    elif filter_zip:
+        result = win.create_file_dialog(
+            webview.OPEN_DIALOG,
+            file_types=("ZIP files (*.zip)", "All files (*.*)")
+        )
+    else:
+        result = win.create_file_dialog(webview.OPEN_DIALOG)
+
+    return result[0] if result else None
+
+
+def _open_dialog_tkinter(mode: str, filter_zip: bool) -> str | None:
+    """Fallback: Tk dialog for dev / run.ps1 mode (no pywebview window)."""
+    import tkinter as tk  # noqa: PLC0415
+    from tkinter import filedialog  # noqa: PLC0415
 
     root = tk.Tk()
-    root.withdraw()          # hide the empty Tk window
-    root.attributes("-topmost", True)   # dialog appears on top
+    root.withdraw()
+    root.attributes("-topmost", True)
 
     if mode == "folder":
         result = filedialog.askdirectory(title="Select folder", parent=root)
@@ -38,6 +65,28 @@ def _open_dialog(mode: str, filter_zip: bool) -> str | None:
 
     root.destroy()
     return result or None
+
+
+def _open_dialog(mode: str, filter_zip: bool) -> str | None:
+    """Open a native OS file/folder dialog and return the selected path."""
+    # Prefer pywebview dialog when a window is active (standalone exe mode).
+    # Falls back to tkinter in dev/run.ps1 mode where no pywebview window exists.
+    try:
+        path = _open_dialog_webview(mode, filter_zip)
+        if path is not None or _has_webview_window():
+            return path
+    except Exception:
+        pass
+
+    return _open_dialog_tkinter(mode, filter_zip)
+
+
+def _has_webview_window() -> bool:
+    try:
+        import webview  # noqa: PLC0415
+        return bool(webview.windows)
+    except Exception:
+        return False
 
 
 @router.get("/dialog/browse", response_model=DialogResponse)
