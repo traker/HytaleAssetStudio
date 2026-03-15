@@ -81,6 +81,15 @@ function computeNodeDepths(rootId: string, rawEdges: GraphEdge[]): Map<string, n
   return depths
 }
 
+function collectHydratedNodeIds(nodeDepths: Map<string, number>, rawEdges: GraphEdge[], depth: number): Set<string> {
+  return new Set(
+    Array.from(nodeDepths.entries())
+      .filter(([, nodeDepth]) => nodeDepth < depth)
+      .map(([nodeId]) => nodeId)
+      .filter((nodeId) => hasLoadedChildren(nodeId, rawEdges)),
+  )
+}
+
 function collectVisibleSubgraph(
   rawNodes: GraphNode[],
   rawEdges: GraphEdge[],
@@ -370,9 +379,13 @@ export function ProjectGraphEditor(props: Props) {
             nodeIds: new Set([targetId]),
           })
           if (collapsedNodeIdsRef.current.has(sourceId)) {
-            collapsedNodeIdsRef.current.delete(sourceId)
-            revealedChildIdsRef.current.delete(sourceId)
-            rebuildFlowRef.current()
+            if (expandedNodeIdsRef.current.has(sourceId)) {
+              collapsedNodeIdsRef.current.delete(sourceId)
+              revealedChildIdsRef.current.delete(sourceId)
+              rebuildFlowRef.current()
+            } else {
+              void expandNode(sourceId)
+            }
           } else if (!expandedNodeIdsRef.current.has(sourceId)) {
             void expandNode(sourceId)
           }
@@ -448,13 +461,13 @@ export function ProjectGraphEditor(props: Props) {
       })
       rawNodesRef.current = data.nodes
       rawEdgesRef.current = data.edges
-      expandedNodeIdsRef.current.add(target.assetKey)
       const nodeDepths = computeNodeDepths(target.assetKey, data.edges)
+      expandedNodeIdsRef.current = collectHydratedNodeIds(nodeDepths, data.edges, depth)
       collapsedNodeIdsRef.current = new Set(
         Array.from(nodeDepths.entries())
           .filter(([, nodeDepth]) => nodeDepth === depth)
           .map(([nodeId]) => nodeId)
-          .filter((nodeId) => nodeId !== target.assetKey && hasLoadedChildren(nodeId, data.edges)),
+          .filter((nodeId) => hasLoadedChildren(nodeId, data.edges)),
       )
       pendingViewportActionRef.current = { kind: 'fit-all' }
       rebuildFlow()

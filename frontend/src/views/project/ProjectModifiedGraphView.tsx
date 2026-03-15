@@ -76,6 +76,15 @@ function computeNodeDepthsFromRoots(rootIds: string[], rawEdges: RawEdge[]): Map
   return depths
 }
 
+function collectHydratedNodeIds(nodeDepths: Map<string, number>, rawEdges: RawEdge[], depth: number): Set<string> {
+  return new Set(
+    Array.from(nodeDepths.entries())
+      .filter(([, nodeDepth]) => nodeDepth < depth)
+      .map(([nodeId]) => nodeId)
+      .filter((nodeId) => hasLoadedChildren(nodeId, rawEdges)),
+  )
+}
+
 function resolveEntryModificationKind(entry: ModifiedAssetEntry): 'override' | 'new' {
   return entry.modificationKind ?? (entry.isNew ? 'new' : 'override')
 }
@@ -592,9 +601,13 @@ export function ProjectModifiedGraphView(props: Props) {
       })
       if (!visibleNodeIdsRef.current.has(targetId)) {
         if (collapsedNodeIdsRef.current.has(sourceId)) {
-          collapsedNodeIdsRef.current.delete(sourceId)
-          revealedChildIdsRef.current.delete(sourceId)
-          rebuildFlowRef.current()
+          if (expandedNodeIdsRef.current.has(sourceId)) {
+            collapsedNodeIdsRef.current.delete(sourceId)
+            revealedChildIdsRef.current.delete(sourceId)
+            rebuildFlowRef.current()
+          } else {
+            void expandNodeRef.current(sourceId)
+          }
         } else if (!expandedNodeIdsRef.current.has(sourceId)) {
           void expandNodeRef.current(sourceId)
         }
@@ -739,7 +752,6 @@ export function ProjectModifiedGraphView(props: Props) {
       rawNodesRef.current = applyModificationKindsToNodes(graphResp.nodes, modifiedResp.entries)
       rawEdgesRef.current = graphResp.edges
       modifiedIdSetRef.current = new Set(graphResp.modifiedIds ?? [])
-      expandedNodeIdsRef.current = new Set(graphResp.modifiedIds ?? [])
       collapsedNodeIdsRef.current = new Set()
       revealedChildIdsRef.current = new Map()
       visibleNodeIdsRef.current = new Set()
@@ -747,6 +759,7 @@ export function ProjectModifiedGraphView(props: Props) {
         .filter((node) => node.isModifiedRoot ?? modifiedIdSetRef.current.has(node.id))
         .map((node) => node.id)
       const nodeDepths = computeNodeDepthsFromRoots(modifiedRoots, graphResp.edges)
+      expandedNodeIdsRef.current = collectHydratedNodeIds(nodeDepths, graphResp.edges, depth)
       collapsedNodeIdsRef.current = new Set(
         Array.from(nodeDepths.entries())
           .filter(([, nodeDepth]) => nodeDepth === depth)
@@ -811,8 +824,6 @@ export function ProjectModifiedGraphView(props: Props) {
         rawNodesRef.current = applyModificationKindsToNodes(graphResp.nodes, modifiedResp.entries)
         rawEdgesRef.current = graphResp.edges
         modifiedIdSetRef.current = new Set(graphResp.modifiedIds ?? [])
-        // Modified roots were already traversed by the BFS
-        expandedNodeIdsRef.current = new Set(graphResp.modifiedIds ?? [])
         collapsedNodeIdsRef.current = new Set()
         revealedChildIdsRef.current = new Map()
         visibleNodeIdsRef.current = new Set()
@@ -820,6 +831,7 @@ export function ProjectModifiedGraphView(props: Props) {
           .filter((node) => node.isModifiedRoot ?? modifiedIdSetRef.current.has(node.id))
           .map((node) => node.id)
         const nodeDepths = computeNodeDepthsFromRoots(modifiedRoots, graphResp.edges)
+        expandedNodeIdsRef.current = collectHydratedNodeIds(nodeDepths, graphResp.edges, depth)
         collapsedNodeIdsRef.current = new Set(
           Array.from(nodeDepths.entries())
             .filter(([, nodeDepth]) => nodeDepth === depth)
