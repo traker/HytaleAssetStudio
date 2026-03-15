@@ -66,7 +66,7 @@ if (-not $SkipFrontendBuild) {
 }
 
 # Verify frontend/dist exists
-$FrontendDist = Join-Path $Root "frontend" "dist"
+$FrontendDist = Join-Path (Join-Path $Root "frontend") "dist"
 if (-not (Test-Path $FrontendDist)) {
     Write-Error "frontend/dist not found. Run without -SkipFrontendBuild or run 'npm run build' manually."
     exit 1
@@ -75,7 +75,7 @@ if (-not (Test-Path $FrontendDist)) {
 # ---------------------------------------------------------------------------
 # 2. PyInstaller
 # ---------------------------------------------------------------------------
-$Python = Join-Path $Root ".venv" "Scripts" "python.exe"
+$Python = Join-Path (Join-Path (Join-Path $Root ".venv") "Scripts") "python.exe"
 if (-not (Test-Path $Python)) {
     Write-Error ".venv not found at $Python. Activate or create the virtual environment first."
     exit 1
@@ -98,7 +98,7 @@ try {
 # ---------------------------------------------------------------------------
 # 3. Report + zip packaging
 # ---------------------------------------------------------------------------
-$OutputDir = Join-Path $Root "dist" "HytaleAssetStudio"
+$OutputDir = Join-Path (Join-Path $Root "dist") "HytaleAssetStudio"
 if (Test-Path $OutputDir) {
     $SizeMB = [math]::Round((Get-ChildItem $OutputDir -Recurse | Measure-Object -Property Length -Sum).Sum / 1MB, 1)
     Write-Host ""
@@ -108,7 +108,7 @@ if (Test-Path $OutputDir) {
 
     if (-not $SkipZip) {
         $ZipName = "HytaleAssetStudio-v${Version}-win64.zip"
-        $ZipPath = Join-Path $Root "dist" $ZipName
+        $ZipPath = Join-Path (Join-Path $Root "dist") $ZipName
 
         Write-Host ""
         Write-Host "==> Packaging $ZipName ..." -ForegroundColor Cyan
@@ -125,5 +125,5 @@ if (Test-Path $OutputDir) {
     Write-Host "    Run the app:" -ForegroundColor Cyan
     Write-Host "      $OutputDir\HytaleAssetStudio.exe" -ForegroundColor Cyan
 } else {
-    Write-Warning "Output directory not found after build — check PyInstaller output above."
+    Write-Warning "Output directory not found after build - check PyInstaller output above."
 }
