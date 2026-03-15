@@ -32,5 +32,7 @@ Thumbs.db
 .studio_cache/
 .tmp/
 archived*
-!archived_task/
-!archived_task/**
+
+# Internal / not for public repo
+docs/
+.github/
