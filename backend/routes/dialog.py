@@ -26,15 +26,16 @@ def _open_dialog_webview(mode: str, filter_zip: bool) -> str | None:
         return None
 
     win = windows[0]
+    FileDialog = webview.FileDialog  # pywebview >= 4 enum (replaces legacy constants)
     if mode == "folder":
-        result = win.create_file_dialog(webview.FOLDER_DIALOG)
+        result = win.create_file_dialog(FileDialog.FOLDER)
     elif filter_zip:
         result = win.create_file_dialog(
-            webview.OPEN_DIALOG,
+            FileDialog.OPEN,
             file_types=("ZIP files (*.zip)", "All files (*.*)")
         )
     else:
-        result = win.create_file_dialog(webview.OPEN_DIALOG)
+        result = win.create_file_dialog(FileDialog.OPEN)
 
     return result[0] if result else None
 
