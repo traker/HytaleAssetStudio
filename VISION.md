@@ -29,7 +29,7 @@ Le socle du fonctionnement repose sur quatre notions métiers (Entities) :
 3. **Le Projet Actif (Le Focus / Sortie)**
    * Indique dans quel dossier (parmi les calques chargés) seront **enregistrés** les travaux de la session en cours. Tout nouveau fichier ou override généré par l'outil sera sauvegardé exclusivement dans ce sous-projet.
 4. **Le Graphe de Dépendances**
-   * Un moteur `NetworkX` qui parcourt tous ces JSON superposés, extrait les références croisées et construit la fameuse "carte mentale" des liens.
+   * Un moteur de parcours (BFS custom côté backend) qui parcourt tous ces JSON superposés, extrait les références croisées et construit la fameuse "carte mentale" des liens. Le graphe résultant (nœuds + edges) est servi au frontend sous forme de données compactes et affiché avec React Flow.
 
 ### 3.0. Répartition Frontend / Backend (Performance, Vanilla lourd)
 

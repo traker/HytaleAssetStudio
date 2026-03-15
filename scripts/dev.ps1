@@ -26,7 +26,7 @@ function Ensure-BackendVenv([string]$RootPath, [string]$UvCommand) {
   }
 
   Write-Host "Syncing backend dependencies with uv..." -ForegroundColor Green
-  & $UvCommand pip install --python $venvPython -r (Join-Path $RootPath 'backend\requirements.txt')
+  & $UvCommand pip install --python $venvPython -r (Join-Path $RootPath 'backend\requirements.lock')
   if ($LASTEXITCODE -ne 0) {
     throw "uv pip install failed with exit code $LASTEXITCODE."
   }

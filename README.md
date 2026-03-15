@@ -17,6 +17,20 @@ The Studio currently covers these workflows:
 
 The product vision and target architecture remain documented in [VISION.md](VISION.md).
 
+## License
+
+The Studio source code in this repository is licensed under PolyForm Noncommercial 1.0.0. See [LICENSE](LICENSE).
+
+This means:
+
+- community, hobbyist, research, learning, and other noncommercial use is allowed
+- commercial use of the Studio is not allowed without a separate agreement from the maintainer
+- if you want to use the Studio in a paid product, paid service, commercial bundle, or other business context, you need a separate commercial license
+
+This repository license applies to the Studio source code in this repository. It does not grant rights to Hytale itself, to Hypixel trademarks, or to vanilla game assets and third-party content that are only referenced by the tool.
+
+Third-party dependencies used by the Studio remain under their own licenses. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+
 ## Local-only operating model
 
 This application is designed to run on a single trusted machine.
@@ -40,16 +54,11 @@ Validated in the current publication pass:
 - frontend interaction contract test passes
 - backend pytest suite passes from a clean `uv` virtual environment (`47 passed`)
 
-Still in progress during this publication pass:
-
-- backend startup still emits a FastAPI deprecation warning for `@app.on_event("startup")`; this is tracked as non-blocking cleanup rather than a publication blocker
-
 ## Repository layout
 
 - `backend/`: FastAPI API, VFS/index/graph services, import/export and workspace/project logic
 - `frontend/`: React + TypeScript UI, graph views, side panels, structured editors
 - `docs/`: active project docs, session recap, backend API notes, Hytale reference docs
-- `legacy/`: historical implementation snapshot used as reference only
 - `scripts/`: local developer helpers such as the Windows dev launcher
 
 ## Quick start
@@ -121,4 +130,6 @@ Backend tests from the repository root after installing backend requirements:
 ## Publication note
 
 If you publish the repository, publish it as a local asset tool. Do not present it as a hosted service or multi-user web application.
+
+Commercial licensing can be discussed separately with the maintainer.
 

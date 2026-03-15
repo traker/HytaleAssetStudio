@@ -2,6 +2,12 @@
 
 ## 2026-03-15 — Snapshot actif
 
+### Decision licence publique
+
+- La licence publique du repo a ete changee de `MIT` vers `PolyForm Noncommercial 1.0.0`.
+- Motivation retenue: garder un usage gratuit pour la communaute Hytale tout en refusant l'exploitation commerciale opportuniste sans accord du maintainer.
+- La doc publique du repo a ete alignee pour expliciter la frontiere suivante: usage non commercial autorise, usage commercial soumis a une licence separee.
+
 ### Nouveau chantier `PUBLICATION1` initialise
 
 - Contexte:

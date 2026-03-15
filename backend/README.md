@@ -21,10 +21,16 @@ From the repository root, create a virtual environment and install backend requi
 
 ```powershell
 uv venv .venv
-uv pip install --python .venv\Scripts\python.exe -r backend/requirements.txt
+uv pip install --python .venv\Scripts\python.exe -r backend/requirements.lock
 ```
 
-Current backend requirements are defined in `backend/requirements.txt` and include FastAPI, Uvicorn, Pydantic, HTTPX, and pytest.
+`backend/requirements.lock` is the pinned lockfile generated from `backend/requirements.txt` via `uv pip compile`. Use it for reproducible installs. To regenerate after updating `requirements.txt`:
+
+```powershell
+uv pip compile backend/requirements.txt --python .venv\Scripts\python.exe -o backend/requirements.lock
+```
+
+Current backend requirements include FastAPI, Uvicorn, Pydantic, HTTPX, and pytest.
 
 This `uv` flow was re-validated during the current publication pass on Windows.
 
