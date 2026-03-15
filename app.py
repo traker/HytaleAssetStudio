@@ -21,6 +21,10 @@ import httpx
 import uvicorn
 import webview
 
+# Import the FastAPI app object directly — avoids uvicorn's import_from_string
+# which can silently fail in a PyInstaller frozen bundle.
+from backend.app.main import app as _fastapi_app  # noqa: E402
+
 # ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
@@ -44,20 +48,25 @@ class _ServerThread(threading.Thread):
         self.host = host
         self.port = port
         self._server: uvicorn.Server | None = None
+        self.error: BaseException | None = None
 
     def run(self) -> None:
-        config = uvicorn.Config(
-            "backend.app.main:app",
-            host=self.host,
-            port=self.port,
-            log_level="warning",
-            # No reload in standalone mode.
-            reload=False,
-            # Single worker — in-memory state is not shared across processes.
-            workers=1,
-        )
-        self._server = uvicorn.Server(config)
-        self._server.run()
+        try:
+            config = uvicorn.Config(
+                _fastapi_app,  # Pass object directly — string form fails in frozen bundles
+                host=self.host,
+                port=self.port,
+                log_level="warning",
+                # No reload in standalone mode.
+                reload=False,
+                # Single worker — in-memory state is not shared across processes.
+                workers=1,
+            )
+            self._server = uvicorn.Server(config)
+            self._server.run()
+        except Exception as exc:
+            self.error = exc
+            raise
 
     def stop(self) -> None:
         if self._server is not None:
@@ -103,7 +112,17 @@ def main() -> None:
 
     logger.info("Waiting for backend on %s …", health_url)
     if not _wait_for_backend(health_url):
-        logger.error("Backend did not become ready within the timeout. Exiting.")
+        err_detail = repr(server_thread.error) if server_thread.error else "health check timeout (no exception captured)"
+        logger.error("Backend did not become ready: %s", err_detail)
+        # Write a startup-failure log next to the exe for user diagnostics
+        import os, traceback
+        _log_dir = os.path.dirname(sys.executable) if getattr(sys, "frozen", False) else "."
+        _log_path = os.path.join(_log_dir, "HytaleAssetStudio.log")
+        with open(_log_path, "w", encoding="utf-8") as _f:
+            _f.write(f"Backend startup failed: {err_detail}\n")
+            if server_thread.error is not None:
+                traceback.print_exception(type(server_thread.error), server_thread.error,
+                                          server_thread.error.__traceback__, file=_f)
         server_thread.stop()
         sys.exit(1)
 
@@ -135,4 +154,16 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    # In a frozen bundle (console=False) all exceptions are swallowed silently.
+    # Write a crash log next to the exe so the user (and devs) can diagnose.
+    import os, traceback
+    _log_dir = os.path.dirname(sys.executable) if getattr(sys, "frozen", False) else "."
+    _log_path = os.path.join(_log_dir, "HytaleAssetStudio.log")
+    try:
+        main()
+    except SystemExit:
+        raise  # sys.exit() — already logged by _wait_for_backend handler above
+    except Exception:
+        with open(_log_path, "a", encoding="utf-8") as _f:
+            traceback.print_exc(file=_f)
+        raise
