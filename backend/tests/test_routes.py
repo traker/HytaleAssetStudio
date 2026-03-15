@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from backend.app.main import app
+from backend.app.main import _is_loopback_origin, _validate_runtime_policy, app
 from backend.core.config import get_settings, Settings
 
 client = TestClient(app)
@@ -24,6 +24,43 @@ def test_health_returns_ok() -> None:
     resp = client.get("/api/v1/health")
     assert resp.status_code == 200
     assert resp.json() == {"ok": True}
+
+
+def test_health_rejects_non_loopback_client_in_local_only_mode() -> None:
+    remote_client = TestClient(app, client=("192.168.1.25", 50000))
+
+    resp = remote_client.get("/api/v1/health")
+
+    assert resp.status_code == 403
+    body = resp.json()
+    assert body["error"]["code"] == "LOCAL_ONLY_MODE"
+    assert body["error"]["details"]["clientHost"] == "192.168.1.25"
+
+
+def test_health_rejects_non_loopback_origin_in_local_only_mode() -> None:
+    resp = client.get("/api/v1/health", headers={"Origin": "https://example.com"})
+
+    assert resp.status_code == 403
+    body = resp.json()
+    assert body["error"]["code"] == "LOCAL_ONLY_MODE"
+    assert body["error"]["details"]["origin"] == "https://example.com"
+
+
+def test_validate_runtime_policy_rejects_non_loopback_origins_in_local_only_mode(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("HAS_LOCAL_ONLY", "1")
+    monkeypatch.setenv("HAS_ALLOWED_ORIGINS", "http://127.0.0.1:5173,https://example.com")
+    get_settings.cache_clear()
+
+    with pytest.raises(RuntimeError, match="HAS_LOCAL_ONLY=1 only supports loopback CORS origins"):
+        _validate_runtime_policy()
+
+    get_settings.cache_clear()
+
+
+def test_loopback_origin_helper_accepts_localhost_and_rejects_remote() -> None:
+    assert _is_loopback_origin("http://localhost:5173") is True
+    assert _is_loopback_origin("http://127.0.0.1:5173") is True
+    assert _is_loopback_origin("https://example.com") is False
 
 
 def test_workspace_open_missing_body_returns_422() -> None:

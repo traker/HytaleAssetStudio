@@ -31,6 +31,7 @@ const nodeTypes = { blueprint: BlueprintNode }
 
 type Props = {
   projectId: string
+  isVisible: boolean
   onBack: () => void
   onOpenInteractions: (root: { assetKey: string; display: string }) => void
 }
@@ -105,6 +106,42 @@ function computeIsolatedSubgraph(rootId: string, edges: RawEdge[]): Set<string> 
     }
   }
   return nodeIds
+}
+
+function findPathFromRoots(rootIds: string[], targetId: string, rawEdges: RawEdge[]): string[] | null {
+  if (rootIds.includes(targetId)) return [targetId]
+
+  const outgoingMap = new Map<string, string[]>()
+  for (const edge of rawEdges) {
+    const list = outgoingMap.get(edge.from)
+    if (list) list.push(edge.to)
+    else outgoingMap.set(edge.from, [edge.to])
+  }
+
+  const queue = [...rootIds]
+  const previousByNode = new Map<string, string | null>()
+  for (const rootId of rootIds) previousByNode.set(rootId, null)
+
+  while (queue.length > 0) {
+    const current = queue.shift()!
+    for (const nextId of outgoingMap.get(current) ?? []) {
+      if (previousByNode.has(nextId)) continue
+      previousByNode.set(nextId, current)
+      if (nextId === targetId) {
+        const path: string[] = [targetId]
+        let cursor: string | null = current
+        while (cursor) {
+          path.push(cursor)
+          cursor = previousByNode.get(cursor) ?? null
+        }
+        path.reverse()
+        return path
+      }
+      queue.push(nextId)
+    }
+  }
+
+  return null
 }
 
 function collectVisibleSubgraph(
@@ -306,11 +343,18 @@ export function ProjectModifiedGraphView(props: Props) {
   const previousProjectIdRef = useRef<string | null>(null)
 
   const [activeHighlight, setActiveHighlight] = useState<HighlightState | null>(null)
+  const [viewportActionVersion, setViewportActionVersion] = useState(0)
   const previousSelectedNodeIdRef = useRef<string | null>(null)
   const previousActiveHighlightRef = useRef<HighlightState | null>(null)
   const reactFlowInstanceRef = useRef<{ fitView: (opts?: { nodes?: Array<{ id: string }>, padding?: number, duration?: number }) => void } | null>(null)
   const pendingViewportActionRef = useRef<PendingViewportAction | null>(null)
   const pendingAssetActionRef = useRef<(() => void) | null>(null)
+  const expandNodeRef = useRef<(nodeId: string) => Promise<void>>(() => Promise.resolve())
+
+  const scheduleViewportAction = useCallback((action: PendingViewportAction) => {
+    pendingViewportActionRef.current = action
+    setViewportActionVersion((value) => value + 1)
+  }, [])
 
   const modifiedRootNodes = rawNodesRef.current.filter((node) => node.isModifiedRoot)
   const newRootCount = modifiedRootNodes.filter((node) => node.modificationKind === 'new').length
@@ -330,7 +374,7 @@ export function ProjectModifiedGraphView(props: Props) {
   }, [modifiedEntries])
 
   // Map assetKey → group resolved from rawNodesRef; re-computed when graph is rebuilt
-  const entryGroupMap = useMemo(() => {
+  const entryGroupMap = (() => {
     const map = new Map<string, string>()
     for (const entry of visibleModifiedEntries) {
       if (!entry.assetKey) continue
@@ -340,9 +384,7 @@ export function ProjectModifiedGraphView(props: Props) {
       map.set(entry.assetKey, node?.group ?? 'json_data')
     }
     return map
-  // rebuildTick signals rawNodesRef was updated
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [visibleModifiedEntries, rebuildTick])
+  })()
 
   const availableGroups = useMemo(() => {
     const groups = new Set<string>()
@@ -405,27 +447,45 @@ export function ProjectModifiedGraphView(props: Props) {
       (n) => n.id === assetKey || (n.path != null && assetKey === `server-path:${n.path}`),
     )
     requestAssetPanelAction(() => {
-      // Clear any active isolation so the full graph is visible before focusing
+      const targetNodeId = graphNode?.id ?? assetKey
+
+      let rootIds: string[]
+      let viewportAction: PendingViewportAction = { kind: 'focus-node', id: targetNodeId }
+
       if (isolatedRootIdRef.current !== null) {
-        isolatedRootIdRef.current = null
-        setIsolatedRootId(null)
-        lastFlowSignatureRef.current = null
-        rebuildFlowRef.current()
+        const isolatedNodeIds = computeIsolatedSubgraph(isolatedRootIdRef.current, rawEdgesRef.current)
+        if (isolatedNodeIds.has(targetNodeId)) {
+          rootIds = [isolatedRootIdRef.current]
+        } else {
+          isolatedRootIdRef.current = targetNodeId
+          setIsolatedRootId(targetNodeId)
+          lastFlowSignatureRef.current = null
+          rootIds = [targetNodeId]
+          viewportAction = { kind: 'fit-all' }
+        }
+      } else {
+        rootIds = rawNodesRef.current
+          .filter((node) => node.isModifiedRoot ?? modifiedIdSetRef.current.has(node.id))
+          .map((node) => node.id)
       }
 
-      if (graphNode) {
-        // Use the graph node's actual ID so the highlight effect updates `nodes`
-        // (which triggers the focus useEffect to call fitView)
-        pendingViewportActionRef.current = { kind: 'focus-node', id: graphNode.id }
-        setSelectedNodeId(graphNode.id)
-      } else {
-        pendingViewportActionRef.current = { kind: 'focus-node', id: assetKey }
-        setSelectedNodeId(assetKey)
+      if (!visibleNodeIdsRef.current.has(targetNodeId)) {
+        const path = findPathFromRoots(rootIds, targetNodeId, rawEdgesRef.current)
+        if (path) {
+          for (const nodeId of path.slice(0, -1)) {
+            collapsedNodeIdsRef.current.delete(nodeId)
+            revealedChildIdsRef.current.delete(nodeId)
+          }
+          lastFlowSignatureRef.current = null
+        }
       }
+
+      scheduleViewportAction(viewportAction)
+      setSelectedNodeId(targetNodeId)
       setActiveHighlight(null)
+      rebuildFlowRef.current()
     })
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [requestAssetPanelAction])
+  }, [requestAssetPanelAction, scheduleViewportAction])
 
   // ── Sync isSelected + isConnected on nodes, animate highlighted edges ─────
   useEffect(() => {
@@ -495,26 +555,29 @@ export function ProjectModifiedGraphView(props: Props) {
 
     previousSelectedNodeIdRef.current = selectedNodeId
     previousActiveHighlightRef.current = activeHighlight
-  // rebuildTick ensures this re-runs after an expand merges new edges into baseEdgesRef
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedNodeId, activeHighlight, rebuildTick])
 
   // Apply only explicit viewport actions after nodes state is updated.
   useEffect(() => {
     const action = pendingViewportActionRef.current
     if (!action) return
+    if (!props.isVisible) return
+    if (action.kind === 'focus-node' && !nodes.some((node) => node.id === action.id)) return
     pendingViewportActionRef.current = null
-    if (action.kind === 'fit-all') {
-      reactFlowInstanceRef.current?.fitView({ padding: 0.15, duration: 400 })
-      return
-    }
-    reactFlowInstanceRef.current?.fitView({
-      nodes: [{ id: action.id }] as { id: string }[],
-      padding: 0.5,
-      duration: 500,
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        if (action.kind === 'fit-all') {
+          reactFlowInstanceRef.current?.fitView({ padding: 0.15, duration: 400 })
+          return
+        }
+        reactFlowInstanceRef.current?.fitView({
+          nodes: [{ id: action.id }] as { id: string }[],
+          padding: 0.5,
+          duration: 500,
+        })
+      })
     })
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [nodes])
+  }, [nodes, props.isVisible, viewportActionVersion])
 
   // dep-ref click from inside a BlueprintNode
   const handleSelectNode = useCallback((sourceId: string, targetId: string) => {
@@ -533,11 +596,10 @@ export function ProjectModifiedGraphView(props: Props) {
           revealedChildIdsRef.current.delete(sourceId)
           rebuildFlowRef.current()
         } else if (!expandedNodeIdsRef.current.has(sourceId)) {
-          void expandNode(sourceId)
+          void expandNodeRef.current(sourceId)
         }
       }
     })
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [requestAssetPanelAction])
 
   // Rebuild ReactFlow display from accumulated raw data
@@ -584,7 +646,7 @@ export function ProjectModifiedGraphView(props: Props) {
             collapsedNodeIdsRef.current.delete(nodeId)
             rebuildFlowRef.current()
           } else {
-            void expandNode(nodeId)
+            void expandNodeRef.current(nodeId)
           }
           return
         }
@@ -594,7 +656,7 @@ export function ProjectModifiedGraphView(props: Props) {
           rebuildFlowRef.current()
           return
         }
-        void expandNode(nodeId)
+        void expandNodeRef.current(nodeId)
       },
       collapsedNodeIdsRef.current,
     )
@@ -631,7 +693,7 @@ export function ProjectModifiedGraphView(props: Props) {
     } else {
       applyPositions(layoutGraph(freshNodes, edges, 'LR').nodes)
     }
-  }, [engine, rebuildTick]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [engine, rebuildTick])
 
   useEffect(() => {
     if (graphPaintStartedAtRef.current == null) return
@@ -650,15 +712,17 @@ export function ProjectModifiedGraphView(props: Props) {
     isolatedRootIdRef.current = selectedNodeId
     setIsolatedRootId(selectedNodeId)
     lastFlowSignatureRef.current = null
+    scheduleViewportAction({ kind: 'fit-all' })
     rebuildFlowRef.current()
-  }, [selectedNodeId])
+  }, [selectedNodeId, scheduleViewportAction])
 
   const clearIsolation = useCallback(() => {
     isolatedRootIdRef.current = null
     setIsolatedRootId(null)
     lastFlowSignatureRef.current = null
+    scheduleViewportAction({ kind: 'fit-all' })
     rebuildFlowRef.current()
-  }, [])
+  }, [scheduleViewportAction])
 
   // ── Soft graph refresh after a save (keeps current selection) ────────────
   const softReloadGraph = useCallback(async () => {
@@ -690,13 +754,13 @@ export function ProjectModifiedGraphView(props: Props) {
           .filter((nodeId) => hasLoadedChildren(nodeId, graphResp.edges)),
       )
       setModifiedEntries(modifiedResp.entries)
-      pendingViewportActionRef.current = { kind: 'fit-all' }
+      scheduleViewportAction({ kind: 'fit-all' })
       rebuildFlowRef.current()
       setError(null)
     } catch (e) {
       setError(e instanceof HasApiError ? e.message : 'Failed to refresh modified graph')
     }
-  }, [props.projectId, depth])
+  }, [props.projectId, depth, scheduleViewportAction])
 
   const handleAssetRefresh = useCallback(async (nextSelectedNodeId?: string) => {
     if (nextSelectedNodeId) {
@@ -763,7 +827,7 @@ export function ProjectModifiedGraphView(props: Props) {
             .filter((nodeId) => hasLoadedChildren(nodeId, graphResp.edges)),
         )
         setModifiedEntries(modifiedResp.entries)
-        pendingViewportActionRef.current = { kind: 'fit-all' }
+        scheduleViewportAction({ kind: 'fit-all' })
         rebuildFlowRef.current()
 
         if (selectedNodeIdRef.current && !graphResp.nodes.some((node) => node.id === selectedNodeIdRef.current)) {
@@ -781,7 +845,7 @@ export function ProjectModifiedGraphView(props: Props) {
     return () => {
       cancelled = true
     }
-  }, [props.projectId, depth])
+  }, [props.projectId, depth, scheduleViewportAction])
 
   // ── Expand a node (load its depth-1 subgraph and merge) ───────────────────
   const expandNode = useCallback(
@@ -832,6 +896,7 @@ export function ProjectModifiedGraphView(props: Props) {
     },
     [props.projectId],
   )
+  expandNodeRef.current = expandNode
 
   // ── Asset load for side panel ──────────────────────────────────────────────
   useEffect(() => {

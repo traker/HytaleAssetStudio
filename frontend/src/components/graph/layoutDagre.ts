@@ -1,10 +1,37 @@
 import type { Edge, Node } from '@xyflow/react'
 import dagre from 'dagre'
-import ELK from 'elkjs/lib/elk.bundled.js'
 
 import { measureSync } from '../../perf/audit'
 
-const elk = new ELK()
+type ElkLayoutNode = {
+  id: string
+  x?: number
+  y?: number
+}
+
+type ElkLayoutResult = {
+  children?: ElkLayoutNode[]
+}
+
+type ElkLayoutGraph = {
+  id: string
+  layoutOptions: Record<string, string>
+  children: Array<{ id: string; width: number; height: number }>
+  edges: Array<{ id: string; sources: string[]; targets: string[] }>
+}
+
+type ElkLayoutEngine = {
+  layout: (graph: ElkLayoutGraph) => Promise<ElkLayoutResult>
+}
+
+let elkPromise: Promise<ElkLayoutEngine> | null = null
+
+async function getElk(): Promise<ElkLayoutEngine> {
+  if (!elkPromise) {
+    elkPromise = import('elkjs/lib/elk.bundled.js').then(({ default: ELK }) => new ELK())
+  }
+  return elkPromise
+}
 
 const LAYOUT_CACHE_LIMIT = 24
 const layoutCache = new Map<string, Map<string, { x: number; y: number }>>()
@@ -160,8 +187,9 @@ export async function layoutGraphElk<TNode extends Node>(
       sources: [e.source],
       targets: [e.target],
     })),
-  }
+  } satisfies ElkLayoutGraph
 
+  const elk = await getElk()
   const result = await elk.layout(elkGraph)
 
   const posMap = new Map<string, { x: number; y: number }>()

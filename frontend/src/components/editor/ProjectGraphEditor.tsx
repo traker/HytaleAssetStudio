@@ -275,7 +275,7 @@ export function ProjectGraphEditor(props: Props) {
         data: {
           ...n.data,
           isSelected: n.id === selectedNodeId,
-          isConnected: activeHighlight?.nodeIds.has(n.id) === true && n.id !== selectedNodeId,
+          isConnected: activeHighlight?.nodeIds.has(n.id) === true,
         },
       }))
     )
@@ -284,9 +284,14 @@ export function ProjectGraphEditor(props: Props) {
         activeHighlight?.edgeIds.has(e.id)
           ? {
               ...e,
-              animated: false,
+              animated: true,
               zIndex: 1000,
-              style: { ...(e.style as object), stroke: '#00D4FF', strokeWidth: 2.5 },
+              style: {
+                ...(e.style as object),
+                stroke: '#00D4FF',
+                strokeWidth: 2.5,
+                strokeDasharray: '6 4',
+              },
               markerEnd: { type: 'arrowclosed' as const, color: '#00D4FF' },
             }
           : e,
@@ -475,7 +480,7 @@ export function ProjectGraphEditor(props: Props) {
     } else {
       applyPositions(layoutGraph(freshNodes, edges, 'LR').nodes)
     }
-  }, [engine, layoutTick]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [engine, layoutTick])
 
   // Apply only explicit viewport actions after graph rebuilds.
   useEffect(() => {
@@ -483,7 +488,6 @@ export function ProjectGraphEditor(props: Props) {
     if (!action) return
     pendingViewportActionRef.current = null
     reactFlowInstanceRef.current?.fitView({ padding: 0.2, duration: 400 })
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [nodes])
 
   useEffect(() => {
@@ -503,13 +507,13 @@ export function ProjectGraphEditor(props: Props) {
     setIsDropdownOpen(false)
     setSearchTerm('')
     setSearchResults([])
-  }, [props.root?.assetKey, props.root?.display])
+  }, [props.root])
 
   useEffect(() => {
     if (!props.autoLoad) return
     if (!selected) return
     void loadGraph()
-  }, [props.autoLoad, selected?.assetKey, loadGraph])
+  }, [props.autoLoad, selected, loadGraph])
 
   useEffect(() => {
     if (!searchEnabled) return
@@ -532,7 +536,7 @@ export function ProjectGraphEditor(props: Props) {
       }
     }, 200)
     return () => clearTimeout(t)
-  }, [isDropdownOpen, searchTerm, props.projectId])
+  }, [searchEnabled, isDropdownOpen, searchTerm, props.projectId])
 
   const selectedNode = useMemo(() => {
     if (!selectedNodeId) return null
@@ -572,7 +576,13 @@ export function ProjectGraphEditor(props: Props) {
         onNodeClick={(_, n) => {
           requestAssetPanelAction(() => {
             setSelectedNodeId(n.id)
-            setActiveHighlight(null)
+            const connectedEdges = baseEdgesRef.current.filter((edge) => edge.source === n.id || edge.target === n.id)
+            const neighborIds = new Set<string>()
+            connectedEdges.forEach((edge) => {
+              if (edge.source !== n.id) neighborIds.add(edge.source)
+              if (edge.target !== n.id) neighborIds.add(edge.target)
+            })
+            setActiveHighlight({ edgeIds: new Set(connectedEdges.map((edge) => edge.id)), nodeIds: neighborIds })
           })
         }}
         onPaneClick={() => requestAssetPanelAction(() => { setSelectedNodeId(null); setActiveHighlight(null) })}

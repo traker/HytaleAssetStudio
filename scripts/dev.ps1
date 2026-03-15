@@ -7,6 +7,33 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
+function Get-UvCommand() {
+  $uv = Get-Command uv -ErrorAction SilentlyContinue | Select-Object -First 1
+  if (-not $uv) {
+    throw "The dev launcher now requires 'uv' on PATH to manage the backend virtual environment."
+  }
+  return $uv.Source
+}
+
+function Ensure-BackendVenv([string]$RootPath, [string]$UvCommand) {
+  $venvPython = Join-Path $RootPath '.venv\Scripts\python.exe'
+  if (-not (Test-Path $venvPython)) {
+    Write-Host "Creating backend virtual environment with uv..." -ForegroundColor Green
+    & $UvCommand venv (Join-Path $RootPath '.venv')
+    if ($LASTEXITCODE -ne 0) {
+      throw "uv venv failed with exit code $LASTEXITCODE."
+    }
+  }
+
+  Write-Host "Syncing backend dependencies with uv..." -ForegroundColor Green
+  & $UvCommand pip install --python $venvPython -r (Join-Path $RootPath 'backend\requirements.txt')
+  if ($LASTEXITCODE -ne 0) {
+    throw "uv pip install failed with exit code $LASTEXITCODE."
+  }
+
+  return $venvPython
+}
+
 function Get-ListeningPids([int]$Port) {
   try {
     return @(
@@ -63,6 +90,8 @@ if (@($webPids).Count -gt 0) {
 $env:HAS_API_PORT = "$ApiPort"
 
 $root = Resolve-Path (Join-Path $PSScriptRoot '..')
+$uvCommand = Get-UvCommand
+$backendPython = Ensure-BackendVenv -RootPath $root -UvCommand $uvCommand
 
 $preferredShell = (Get-Command pwsh -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty Source)
 if (-not $preferredShell) {
@@ -80,7 +109,7 @@ $commonShellArgs = @(
   '-Command'
 )
 
-$backendCommand = "python -m uvicorn backend.app.main:app --reload --host 127.0.0.1 --port $ApiPort"
+$backendCommand = "& '$backendPython' -m uvicorn backend.app.main:app --reload --host 127.0.0.1 --port $ApiPort"
 if ($PerfAudit) {
   $backendCommand = "`$env:HAS_PERF_AUDIT='1'; $backendCommand"
 }

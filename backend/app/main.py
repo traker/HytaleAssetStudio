@@ -1,12 +1,15 @@
 from __future__ import annotations
 
+import ipaddress
 import logging
-import os
 import time
+from contextlib import asynccontextmanager
+from urllib.parse import urlparse
 
 from fastapi import FastAPI
 from fastapi import Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from backend.core.config import get_settings
 from backend.core.perf import build_server_timing_header, finish_request_perf, log_request_perf, start_request_perf
@@ -19,30 +22,96 @@ from backend.routes.workspace import router as workspace_router
 
 logger = logging.getLogger("uvicorn.error")
 
-app = FastAPI(title="Hytale Asset Studio API", version="0.1.0")
 
-# Dev origins: 127.0.0.1 / localhost on the default Vite port.
-# For multi-machine deployments set HAS_ALLOWED_ORIGINS (comma-separated).
-_allowed_origins_env = os.getenv("HAS_ALLOWED_ORIGINS", "")
-_CORS_ORIGINS: list[str] = (
-    [o.strip() for o in _allowed_origins_env.split(",") if o.strip()]
-    if _allowed_origins_env
-    else ["http://127.0.0.1:5173", "http://localhost:5173"]
-)
+def _is_loopback_host(host: str) -> bool:
+    normalized_host = host.strip().lower()
+    if normalized_host in {"localhost", "testclient"}:
+        return True
+
+    try:
+        return ipaddress.ip_address(normalized_host).is_loopback
+    except ValueError:
+        return False
+
+
+def _is_loopback_origin(origin: str) -> bool:
+    parsed = urlparse(origin)
+    if parsed.scheme not in {"http", "https"} or parsed.hostname is None:
+        return False
+    return _is_loopback_host(parsed.hostname)
+
+
+def _validate_runtime_policy() -> None:
+    settings = get_settings()
+    invalid_origins = [origin for origin in settings.allowed_origins if not _is_loopback_origin(origin)]
+    if settings.local_only and invalid_origins:
+        raise RuntimeError(
+            "HAS_LOCAL_ONLY=1 only supports loopback CORS origins. "
+            f"Invalid origins: {', '.join(invalid_origins)}. "
+            "Set HAS_LOCAL_ONLY=0 only if you are deliberately leaving the supported local-only model."
+        )
+
+    if settings.local_only:
+        logger.info("startup local_only=%s allowed_origins=%s", settings.local_only, ",".join(settings.allowed_origins))
+        return
+
+    logger.warning(
+        "startup local_only=%s allowed_origins=%s; remote exposure is outside the supported product model",
+        settings.local_only,
+        ",".join(settings.allowed_origins),
+    )
+
+
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    settings = get_settings()
+    _validate_runtime_policy()
+    logger.info("startup perf_audit_enabled=%s", settings.perf_audit_enabled)
+    yield
+
+
+app = FastAPI(title="Hytale Asset Studio API", version="0.1.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=_CORS_ORIGINS,
+    allow_origins=list(get_settings().allowed_origins),
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-
-@app.on_event("startup")
-async def log_perf_audit_status() -> None:
+@app.middleware("http")
+async def local_only_middleware(request: Request, call_next):
     settings = get_settings()
-    logger.info("startup perf_audit_enabled=%s", settings.perf_audit_enabled)
+    if settings.local_only:
+        client_host = request.client.host if request.client is not None else None
+        if client_host and not _is_loopback_host(client_host):
+            logger.warning("blocked non-local client host=%s path=%s", client_host, request.url.path)
+            return JSONResponse(
+                status_code=403,
+                content={
+                    "error": {
+                        "code": "LOCAL_ONLY_MODE",
+                        "message": "This backend only accepts loopback requests while HAS_LOCAL_ONLY=1.",
+                        "details": {"clientHost": client_host},
+                    }
+                },
+            )
+
+        origin = request.headers.get("origin")
+        if origin and not _is_loopback_origin(origin):
+            logger.warning("blocked non-local origin origin=%s path=%s", origin, request.url.path)
+            return JSONResponse(
+                status_code=403,
+                content={
+                    "error": {
+                        "code": "LOCAL_ONLY_MODE",
+                        "message": "This backend only accepts loopback browser origins while HAS_LOCAL_ONLY=1.",
+                        "details": {"origin": origin},
+                    }
+                },
+            )
+
+    return await call_next(request)
 
 
 @app.middleware("http")

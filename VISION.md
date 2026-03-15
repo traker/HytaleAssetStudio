@@ -12,6 +12,7 @@ Son objectif premier est de cartographier ces relations (sous forme de Graphe), 
 * **Ce n'est pas un IDE Hytale Complet.** Il ne compile pas de code Java/C#, il ne lance pas le serveur localement.
 * **Ce n'est pas un éditeur 3D.** Il ne gère pas les meshes `.obj` ou `.gltf` ni leur géométrie en 3D.
 * **Ce n'est pas un vérificateur JSON strict ultime.** Si le moteur de jeu met à jour sa logique implicite inconnue, l'outil peut l'ignorer, il ne remplace pas les logs d'erreurs du jeu.
+* **Ce n'est pas un service distant.** Le Studio manipule volontairement des chemins disque locaux et doit être exploité comme un outil desktop/local-only sur une machine de confiance.
 
 ## 3. Architecture Logique (Le "Moteur" Python)
 
