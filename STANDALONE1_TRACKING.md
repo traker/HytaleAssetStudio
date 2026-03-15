@@ -174,5 +174,5 @@ Branch: `feature/standalone-app`
 - [x] Lot 2 validé
 - [x] Lot 3 validé
 - [x] `SESSION_RECAP.md` mis à jour
-- [ ] `VISION.md` mis à jour (section distribution)
-- [ ] `README.md` mis à jour (section installation → `scripts/build-release.ps1`)
+- [x] `VISION.md` mis à jour (section 4 Distribution ajoutée, ancienne §4→§5, §5→§6)
+- [x] `README.md` mis à jour (section standalone exe en tête du Quick start)
