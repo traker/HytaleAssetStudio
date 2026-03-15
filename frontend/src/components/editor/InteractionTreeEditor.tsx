@@ -25,11 +25,10 @@ import { InteractionPalette, DRAG_MIME } from './InteractionPalette'
 import { InteractionFormPanel } from './InteractionFormPanel'
 import { InteractionNode, type InteractionNodeData } from '../../components/graph/InteractionNode'
 import { getColorForEdgeType } from '../../components/graph/colors'
-import { formatGraphTruncationWarning, layoutGraph, layoutGraphElk } from '../../components/graph/layoutDagre'
+import { layoutGraphElk } from '../../components/graph/layoutDagre'
 import { exportInteractionTree } from '../../components/graph/interactionExport'
 import { UnsavedChangesDialog } from '../ui/UnsavedChangesDialog'
 import { useAsset } from '../../hooks/useAsset'
-import { useLayoutEngine } from '../../hooks/useLayoutEngine'
 
 type Props = {
   projectId: string
@@ -101,7 +100,7 @@ function toFlow(data: InteractionTreeResponse): { nodes: Node[]; edges: Edge[]; 
     }
   })
 
-  return layoutGraph(nodes, edges, 'TB')
+  return { nodes, edges }
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -125,7 +124,6 @@ function InteractionTreeEditorInner(props: Props) {
 
   const [status, setStatus] = useState<Status>({ kind: 'loading' })
   const [error, setError] = useState<string | null>(null)
-  const [truncationWarning, setTruncationWarning] = useState<string | null>(null)
   const [nodes, setNodes] = useState<Node[]>([])
   const [edges, setEdges] = useState<Edge[]>([])
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
@@ -143,8 +141,6 @@ function InteractionTreeEditorInner(props: Props) {
   const layoutNodesRef = useRef<Node[]>([])
   const layoutEdgesRef = useRef<Edge[]>([])
   const [layoutTick, setLayoutTick] = useState(0)
-
-  const { engine, toggleEngine } = useLayoutEngine()
 
   const onNodesChange = useCallback(
     (changes: NodeChange[]) => setNodes((prev) => applyNodeChanges(changes, prev)),
@@ -189,7 +185,7 @@ function InteractionTreeEditorInner(props: Props) {
     [edges, activeHighlight],
   )
 
-  // Re-apply layout when engine or data changes
+  // Re-apply layout when data changes
   useEffect(() => {
     if (!layoutNodesRef.current.length) return
     const freshNodes = layoutNodesRef.current.map((n) => ({ ...n, position: { x: 0, y: 0 } }))
@@ -198,12 +194,8 @@ function InteractionTreeEditorInner(props: Props) {
       const posMap = new Map(newNodes.map((n) => [n.id, n.position]))
       setNodes((prev) => prev.map((n) => ({ ...n, position: posMap.get(n.id) ?? n.position })))
     }
-    if (engine === 'elk') {
-      void layoutGraphElk(freshNodes, edges, 'TB').then((r) => applyPositions(r.nodes))
-    } else {
-      applyPositions(layoutGraph(freshNodes, edges, 'TB').nodes)
-    }
-  }, [engine, layoutTick])
+    void layoutGraphElk(freshNodes, edges, 'TB').then((r) => applyPositions(r.nodes))
+  }, [layoutTick])
 
   // Load tree
   useEffect(() => {
@@ -220,14 +212,6 @@ function InteractionTreeEditorInner(props: Props) {
         setNodes(flow.nodes)
         setEdges(flow.edges)
         setLayoutTick((t) => t + 1)
-        setTruncationWarning(
-          flow.truncatedAt != null
-            ? formatGraphTruncationWarning(
-                flow.truncatedAt,
-                'Open a referenced interaction from the side panel to inspect a smaller branch.',
-              )
-            : null,
-        )
         setStatus({ kind: 'idle', message: `Interaction graph ready: ${data.nodes.length} nodes, ${data.edges.length} edges loaded.` })
         setTimeout(() => setStatus({ kind: 'idle' }), 1500)
       } catch (e) {
@@ -491,13 +475,6 @@ function InteractionTreeEditorInner(props: Props) {
                 ← Back
               </button>
               <button
-                onClick={toggleEngine}
-                title="Basculer moteur de layout"
-                style={{ ...btnStyle(engine === 'elk' ? '#2a1a4a' : '#333'), color: engine === 'elk' ? '#9977dd' : '#aaa', borderColor: engine === 'elk' ? '#7755cc' : '#555', fontSize: 11 }}
-              >
-                {engine === 'elk' ? 'ELK' : 'Dagre'}
-              </button>
-              <button
                 onClick={() => {
                   if (editMode) {
                     requestAssetPanelAction(() => {
@@ -536,7 +513,6 @@ function InteractionTreeEditorInner(props: Props) {
               </div>
             )}
             {status.message && <p style={{ marginTop: 8, opacity: 0.8, fontSize: 12 }}>{status.message}</p>}
-            {truncationWarning && <p style={{ marginTop: 6, color: '#FF9500', fontSize: 11 }}>{truncationWarning}</p>}
             {error && <p style={{ marginTop: 8, color: '#FF6B6B', fontSize: 12 }}>{error}</p>}
             {saveStatus === 'error' && saveError && (
               <p style={{ marginTop: 6, color: '#FF6B6B', fontSize: 11 }}>{saveError}</p>

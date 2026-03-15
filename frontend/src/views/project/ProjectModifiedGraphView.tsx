@@ -19,10 +19,9 @@ import { BlueprintNode } from '../../components/graph/BlueprintNode'
 import type { BlueprintNodeData, OutgoingDep } from '../../components/graph/blueprintTypes'
 import { getBlueprintNodeDisplay, isInteractionBlueprintGroup } from '../../components/graph/blueprintTypes'
 import { getColorForGroup, getColorForEdgeType } from '../../components/graph/colors'
-import { formatGraphTruncationWarning, layoutGraph, layoutGraphElk } from '../../components/graph/layoutDagre'
+import { layoutGraphElk } from '../../components/graph/layoutDagre'
 import { UnsavedChangesDialog } from '../../components/ui/UnsavedChangesDialog'
 import { measureAsync, measureSync, schedulePaintMeasure } from '../../perf/audit'
-import { useLayoutEngine } from '../../hooks/useLayoutEngine'
 
 const SEMANTIC_EDGE_TYPES = new Set([
   'next', 'failed', 'replace', 'fork', 'blocked', 'collisionNext', 'groundNext',
@@ -288,7 +287,7 @@ function toFlow(
       }
     })
 
-    return layoutGraph(nodes, edges, 'LR')
+    return { nodes, edges }
   }, { nodes: visibleNodes.length, edges: visibleEdges.length, modifiedRoots: modifiedIdSet.size })
 }
 
@@ -298,7 +297,6 @@ export function ProjectModifiedGraphView(props: Props) {
   const [loading, setLoading] = useState(false)
   const [expandLoading, setExpandLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [truncationWarning, setTruncationWarning] = useState<string | null>(null)
   const [modifiedEntries, setModifiedEntries] = useState<ModifiedAssetEntry[]>([])
   const [filterText, setFilterText] = useState('')
   const [filterGroup, setFilterGroup] = useState<string | null>(null)
@@ -326,8 +324,6 @@ export function ProjectModifiedGraphView(props: Props) {
   const rebuildFlowRef = useRef<() => void>(() => {})
   const layoutNodesRef = useRef<Array<Node<BlueprintNodeData>>>([])
   const layoutEdgesRef = useRef<Edge[]>([])
-
-  const { engine, toggleEngine } = useLayoutEngine()
 
   const onNodesChange = useCallback(
     (changes: NodeChange[]) => setNodes((n) => applyNodeChanges(changes, n) as Array<Node<BlueprintNodeData>>),
@@ -644,7 +640,7 @@ export function ProjectModifiedGraphView(props: Props) {
       return
     }
 
-    const { nodes: fn, edges: fe, truncatedAt } = toFlow(
+    const { nodes: fn, edges: fe } = toFlow(
       visibleNodes,
       visibleEdges,
       candidateNodes,
@@ -680,19 +676,11 @@ export function ProjectModifiedGraphView(props: Props) {
     layoutEdgesRef.current = fe
     setNodes(fn)
     setEdges(fe)
-    setTruncationWarning(
-      truncatedAt != null
-        ? formatGraphTruncationWarning(
-            truncatedAt,
-            'Lower depth or isolate one modified root from the list to inspect more.',
-          )
-        : null,
-    )
     setRebuildTick((t) => t + 1)
   }, [handleSelectNode])
   rebuildFlowRef.current = rebuildFlow
 
-  // Re-apply layout when engine or rebuild tick changes
+  // Re-apply layout when data changes
   useEffect(() => {
     if (!layoutNodesRef.current.length) return
     const freshNodes = layoutNodesRef.current.map((n) => ({ ...n, position: { x: 0, y: 0 } }))
@@ -701,12 +689,8 @@ export function ProjectModifiedGraphView(props: Props) {
       const posMap = new Map(newNodes.map((n) => [n.id, n.position]))
       setNodes((prev) => prev.map((n) => ({ ...n, position: posMap.get(n.id) ?? n.position })))
     }
-    if (engine === 'elk') {
-      void layoutGraphElk(freshNodes, edges, 'LR').then((r) => applyPositions(r.nodes))
-    } else {
-      applyPositions(layoutGraph(freshNodes, edges, 'LR').nodes)
-    }
-  }, [engine, rebuildTick])
+    void layoutGraphElk(freshNodes, edges, 'LR').then((r) => applyPositions(r.nodes))
+  }, [rebuildTick])
 
   useEffect(() => {
     if (graphPaintStartedAtRef.current == null) return
@@ -1012,22 +996,6 @@ export function ProjectModifiedGraphView(props: Props) {
           >
             ← Back
           </button>
-          <button
-            onClick={toggleEngine}
-            title="Basculer moteur de layout"
-            style={{
-              background: engine === 'elk' ? '#2e1e5a' : 'none',
-              border: `1px solid ${engine === 'elk' ? '#5544aa' : '#3a3a55'}`,
-              borderRadius: 4,
-              color: engine === 'elk' ? '#8877ee' : '#888',
-              fontSize: 10,
-              cursor: 'pointer',
-              padding: '2px 8px',
-              fontWeight: 600,
-            }}
-          >
-            {engine === 'elk' ? 'ELK' : 'Dagre'}
-          </button>
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
@@ -1060,9 +1028,6 @@ export function ProjectModifiedGraphView(props: Props) {
             <span style={{ color: '#e06c75' }}>{error}</span>
           ) : (
             <>
-              {truncationWarning && (
-                <div style={{ color: '#FF9500', marginBottom: 4, fontSize: 10 }}>{truncationWarning}</div>
-              )}
               <span style={{ color: '#FF9500' }}>
                 {modifiedIdSetRef.current.size} modified
               </span>

@@ -21,10 +21,9 @@ import { BlueprintNode } from '../../components/graph/BlueprintNode'
 import type { BlueprintNodeData, OutgoingDep } from '../../components/graph/blueprintTypes'
 import { getBlueprintNodeDisplay, isInteractionBlueprintGroup } from '../../components/graph/blueprintTypes'
 import { getColorForGroup, getColorForEdgeType } from '../../components/graph/colors'
-import { formatGraphTruncationWarning, layoutGraph, layoutGraphElk } from '../../components/graph/layoutDagre'
+import { layoutGraphElk } from '../../components/graph/layoutDagre'
 import { measureAsync, measureSync, schedulePaintMeasure } from '../../perf/audit'
 import { useAsset } from '../../hooks/useAsset'
-import { useLayoutEngine } from '../../hooks/useLayoutEngine'
 import { UnsavedChangesDialog } from '../ui/UnsavedChangesDialog'
 
 type Props = {
@@ -187,7 +186,7 @@ function toFlow(
       }
     })
 
-    return layoutGraph(nodes, edges, 'LR')
+    return { nodes, edges }
   }, { nodes: visibleNodes.length, edges: visibleEdges.length, rootId })
 }
 
@@ -208,8 +207,6 @@ export function ProjectGraphEditor(props: Props) {
 
   const [status, setStatus] = useState<Status>({ kind: 'idle' })
   const [error, setError] = useState<string | null>(null)
-  const [truncationWarning, setTruncationWarning] = useState<string | null>(null)
-
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
   const [activeHighlight, setActiveHighlight] = useState<{ edgeIds: Set<string>; nodeIds: Set<string> } | null>(null)
   const [assetPanelDirty, setAssetPanelDirty] = useState(false)
@@ -219,8 +216,6 @@ export function ProjectGraphEditor(props: Props) {
   const layoutNodesRef = useRef<Node[]>([])
   const layoutEdgesRef = useRef<Edge[]>([])
   const [layoutTick, setLayoutTick] = useState(0)
-
-  const { engine, toggleEngine } = useLayoutEngine()
 
   const rawNodesRef = useRef<GraphNode[]>([])
   const rawEdgesRef = useRef<GraphEdge[]>([])
@@ -422,14 +417,6 @@ export function ProjectGraphEditor(props: Props) {
     layoutEdgesRef.current = flow.edges
     setNodes(flow.nodes)
     setEdges(flow.edges)
-    setTruncationWarning(
-      flow.truncatedAt != null
-        ? formatGraphTruncationWarning(
-            flow.truncatedAt,
-            'Reduce depth or load a narrower root from search to inspect more.',
-          )
-        : null,
-    )
     setLayoutTick((t) => t + 1)
   }, [expandNode, requestAssetPanelAction])
   rebuildFlowRef.current = rebuildFlow
@@ -479,7 +466,7 @@ export function ProjectGraphEditor(props: Props) {
     }
   }, [props.projectId, selected, depth, rebuildFlow])
 
-  // Re-apply layout when engine or data changes.
+  // Re-apply layout when data changes.
   useEffect(() => {
     if (!layoutNodesRef.current.length) return
     const freshNodes = layoutNodesRef.current.map((n) => ({ ...n, position: { x: 0, y: 0 } }))
@@ -488,12 +475,8 @@ export function ProjectGraphEditor(props: Props) {
       const posMap = new Map(newNodes.map((n) => [n.id, n.position]))
       setNodes((prev) => prev.map((n) => ({ ...n, position: posMap.get(n.id) ?? n.position })))
     }
-    if (engine === 'elk') {
-      void layoutGraphElk(freshNodes, edges, 'LR').then((r) => applyPositions(r.nodes))
-    } else {
-      applyPositions(layoutGraph(freshNodes, edges, 'LR').nodes)
-    }
-  }, [engine, layoutTick])
+    void layoutGraphElk(freshNodes, edges, 'LR').then((r) => applyPositions(r.nodes))
+  }, [layoutTick])
 
   // Apply only explicit viewport actions after graph rebuilds.
   useEffect(() => {
@@ -744,22 +727,6 @@ export function ProjectGraphEditor(props: Props) {
             </button>
 
             <button
-              onClick={toggleEngine}
-              title="Basculer moteur de layout"
-              style={{
-                padding: '5px 10px',
-                background: engine === 'elk' ? '#4a3f7a' : '#333',
-                color: '#fff',
-                border: '1px solid #555',
-                borderRadius: '4px',
-                cursor: 'pointer',
-                fontSize: 11,
-              }}
-            >
-              {engine === 'elk' ? 'ELK' : 'Dagre'}
-            </button>
-
-            <button
               onClick={props.onBack}
               disabled={status.kind === 'loading'}
               style={{
@@ -781,7 +748,6 @@ export function ProjectGraphEditor(props: Props) {
 
           {expandLoading && <p style={{ marginTop: 4, fontSize: 10, color: '#888', fontStyle: 'italic' }}>⟳ Expanding…</p>}
           {status.message && <p style={{ marginTop: 10, opacity: 0.8 }}>{status.message}</p>}
-          {truncationWarning && <p style={{ marginTop: 8, color: '#FF9500', fontSize: 11 }}>{truncationWarning}</p>}
           {error && <p style={{ marginTop: 8, color: '#FF6B6B' }}>{error}</p>}
         </Panel>
       </ReactFlow>
