@@ -188,14 +188,27 @@ function collectVisibleSubgraph(
   }
 }
 
-function buildFlowSignature(rawNodes: RawNode[], rawEdges: RawEdge[], modifiedIdSet: Set<string>): string {
-  const nodePart = rawNodes
+function buildFlowSignature(
+  visibleNodes: RawNode[],
+  visibleEdges: RawEdge[],
+  dependencyEdges: RawEdge[],
+  modifiedIdSet: Set<string>,
+  collapsedNodeIds: Set<string>,
+): string {
+  const nodePart = visibleNodes
     .map((node) => `${node.id}|${node.path ?? ''}|${node.group ?? ''}|${node.state}|${node.modificationKind ?? ''}|${modifiedIdSet.has(node.id) ? '1' : '0'}`)
     .join('~')
-  const edgePart = rawEdges
+  const edgePart = visibleEdges
     .map((edge) => `${edge.from}>${edge.to}:${edge.type}`)
     .join('~')
-  return `${nodePart}#${edgePart}`
+  const dependencyPart = dependencyEdges
+    .map((edge) => `${edge.from}>${edge.to}:${edge.type}`)
+    .join('~')
+  const collapsedPart = Array.from(collapsedNodeIds)
+    .filter((nodeId) => visibleNodes.some((node) => node.id === nodeId))
+    .sort()
+    .join('~')
+  return `${nodePart}#${edgePart}#${dependencyPart}#${collapsedPart}`
 }
 
 function collectAffectedNodeIds(
@@ -635,7 +648,13 @@ export function ProjectModifiedGraphView(props: Props) {
       revealedChildIdsRef.current,
     )
     visibleNodeIdsRef.current = new Set(visibleNodes.map((node) => node.id))
-    const flowSignature = buildFlowSignature(visibleNodes, visibleEdges, modifiedIdSetRef.current)
+    const flowSignature = buildFlowSignature(
+      visibleNodes,
+      visibleEdges,
+      candidateEdges,
+      modifiedIdSetRef.current,
+      collapsedNodeIdsRef.current,
+    )
     if (lastFlowSignatureRef.current === flowSignature) {
       return
     }
