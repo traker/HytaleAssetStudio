@@ -11,7 +11,48 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
-## [0.1.0] — 2026-03-15
+## [0.2.0] — 2026-03-16
+
+Full coverage of Hytale vanilla asset types with dedicated form editors. Every asset opened
+in the side panel now shows a structured Form tab instead of raw JSON.
+
+### Added
+
+- **14 new form editors** covering all major Hytale Server asset categories:
+  - *Lot 1 — Items / Blocks / Stats*
+    - `DropTableFormEditor` — recursive Multiple / Choice / Single container editor.
+    - `BlockFormEditor` — Identity, BlockType, Textures, Sound & Particles, Gathering, Aliases, ResourceTypes.
+    - `EntityStatFormEditor` — Base values, Regeneration entries, MinValueEffects / MaxValueEffects.
+  - *Lot 2 — Audio*
+    - `SoundEventFormEditor` — Global settings, Layers list (Files, Volume, StartDelay, RandomSettings).
+    - `ItemSoundSetFormEditor` — Slot → Sound Event ID mapping table.
+  - *Lot 3 — Gameplay / Commerce / IA*
+    - `BarterShopFormEditor` — Shop settings, Fixed/Pool trade slots, stock ranges.
+    - `NPCGroupFormEditor` — IncludeRoles / ExcludeRoles / IncludeGroups / ExcludeGroups tag lists.
+    - `TagPatternFormEditor` — Recursive Op tree (Equals / Or / And) with inline Tag field.
+    - `ResponseCurveFormEditor` — Discriminated editor per curve type (Exponential, Logistic, SineWave).
+  - *Lot 4 — Advanced types*
+    - `MovementConfigFormEditor` — ~50 numeric fields across Base / Jump / Speed Multipliers / Air Control / Climb / Fly sections.
+    - `GameplayConfigFormEditor` — Parent inheritance + Death / World / Player / ItemEntity / Respawn / Ping sections.
+    - `ObjectiveFormEditor` — TaskSets[] with discriminated task editors (KillNPC, Gather, Craft, ReachLocation…) + Completions[].
+    - `ReputationFormEditor` — Stats key-value table, Faction identity, FactionAllies / FactionEnemies, Attitudes.
+    - `AmbienceFXFormEditor` — Conditions (DayTime / SunLightLevel / Walls min-max + EnvironmentTagPattern), AmbientBed, Music tracks.
+  - *Lot 5 — Display-only*
+    - `PrefabFormEditor` — Read-only metadata: version, blockIdVersion, anchorX/Y/Z, block count.
+- **15 new `AssetKind` union members** in `assetTypeRegistry.ts` with ordered detection heuristics.
+- **15 new path classification rules** in `backend/core/graph_service.py` (`_group_for_server_path`).
+- **15 new node colours** in `frontend/src/components/graph/colors.ts`.
+- **ESLint** — `varsIgnorePattern: "^_"` added to `@typescript-eslint/no-unused-vars` rule so
+  destructuring-to-omit patterns (`const { [key]: _, ...rest }`) are lint-clean.
+
+### Changed
+
+- `AssetSidePanel.tsx` — 15 new `import` statements and `switch` cases wired to the new editors.
+
+---
+
+[Unreleased]: https://github.com/traker/HytaleAssetStudio/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/traker/HytaleAssetStudio/compare/v0.1.0...v0.2.0
 
 First distributable release.
 
@@ -42,6 +83,5 @@ First distributable release.
 
 ---
 
-[Unreleased]: https://github.com/traker/HytaleAssetStudio/compare/v0.1.0...HEAD
 [0.1.0]: https://github.com/traker/HytaleAssetStudio/releases/tag/v0.1.0
 

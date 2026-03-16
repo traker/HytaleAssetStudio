@@ -11,6 +11,21 @@ import { ProjectileFormEditor } from './ProjectileFormEditor'
 import { ProjectileConfigFormEditor } from './ProjectileConfigFormEditor'
 import { NPCRoleFormEditor } from './NPCRoleFormEditor'
 import { QualityFormEditor } from './QualityFormEditor'
+import { DropTableFormEditor } from './DropTableFormEditor'
+import { BlockFormEditor } from './BlockFormEditor'
+import { EntityStatFormEditor } from './EntityStatFormEditor'
+import { SoundEventFormEditor } from './SoundEventFormEditor'
+import { ItemSoundSetFormEditor } from './ItemSoundSetFormEditor'
+import { BarterShopFormEditor } from './BarterShopFormEditor'
+import { NPCGroupFormEditor } from './NPCGroupFormEditor'
+import { TagPatternFormEditor } from './TagPatternFormEditor'
+import { ResponseCurveFormEditor } from './ResponseCurveFormEditor'
+import { MovementConfigFormEditor } from './MovementConfigFormEditor'
+import { GameplayConfigFormEditor } from './GameplayConfigFormEditor'
+import { ObjectiveFormEditor } from './ObjectiveFormEditor'
+import { ReputationFormEditor } from './ReputationFormEditor'
+import { AmbienceFXFormEditor } from './AmbienceFXFormEditor'
+import { PrefabFormEditor } from './PrefabFormEditor'
 import { detectAssetKind } from './assetTypeRegistry'
 
 type Tab = 'json' | 'form' | 'vars'
@@ -911,6 +926,126 @@ export function AssetSidePanel(props: Props) {
 
         {props.asset && !isCommonResource && tab === 'form' && (() => {
           switch (assetKind) {
+            case 'drop-table':
+              return (
+                <DropTableFormEditor
+                  json={currentFormJson}
+                  onChange={canEdit ? handleFormChange : () => {}}
+                  readOnly={!canEdit}
+                />
+              )
+            case 'block':
+              return (
+                <BlockFormEditor
+                  json={currentFormJson}
+                  onChange={canEdit ? handleFormChange : () => {}}
+                  readOnly={!canEdit}
+                />
+              )
+            case 'entity-stat':
+              return (
+                <EntityStatFormEditor
+                  json={currentFormJson}
+                  onChange={canEdit ? handleFormChange : () => {}}
+                  readOnly={!canEdit}
+                />
+              )
+            case 'sound-event':
+              return (
+                <SoundEventFormEditor
+                  json={currentFormJson}
+                  onChange={canEdit ? handleFormChange : () => {}}
+                  readOnly={!canEdit}
+                />
+              )
+            case 'item-sound-set':
+              return (
+                <ItemSoundSetFormEditor
+                  json={currentFormJson}
+                  onChange={canEdit ? handleFormChange : () => {}}
+                  readOnly={!canEdit}
+                />
+              )
+            case 'barter-shop':
+              return (
+                <BarterShopFormEditor
+                  json={currentFormJson}
+                  onChange={canEdit ? handleFormChange : () => {}}
+                  readOnly={!canEdit}
+                />
+              )
+            case 'npc-group':
+              return (
+                <NPCGroupFormEditor
+                  json={currentFormJson}
+                  onChange={canEdit ? handleFormChange : () => {}}
+                  readOnly={!canEdit}
+                />
+              )
+            case 'tag-pattern':
+              return (
+                <TagPatternFormEditor
+                  json={currentFormJson}
+                  onChange={canEdit ? handleFormChange : () => {}}
+                  readOnly={!canEdit}
+                />
+              )
+            case 'response-curve':
+              return (
+                <ResponseCurveFormEditor
+                  json={currentFormJson}
+                  onChange={canEdit ? handleFormChange : () => {}}
+                  readOnly={!canEdit}
+                />
+              )
+            case 'movement-config':
+              return (
+                <MovementConfigFormEditor
+                  json={currentFormJson}
+                  onChange={canEdit ? handleFormChange : () => {}}
+                  readOnly={!canEdit}
+                />
+              )
+            case 'gameplay-config':
+              return (
+                <GameplayConfigFormEditor
+                  json={currentFormJson}
+                  onChange={canEdit ? handleFormChange : () => {}}
+                  readOnly={!canEdit}
+                />
+              )
+            case 'objective':
+              return (
+                <ObjectiveFormEditor
+                  json={currentFormJson}
+                  onChange={canEdit ? handleFormChange : () => {}}
+                  readOnly={!canEdit}
+                />
+              )
+            case 'reputation':
+              return (
+                <ReputationFormEditor
+                  json={currentFormJson}
+                  onChange={canEdit ? handleFormChange : () => {}}
+                  readOnly={!canEdit}
+                />
+              )
+            case 'ambience-fx':
+              return (
+                <AmbienceFXFormEditor
+                  json={currentFormJson}
+                  onChange={canEdit ? handleFormChange : () => {}}
+                  readOnly={!canEdit}
+                />
+              )
+            case 'prefab':
+              return (
+                <PrefabFormEditor
+                  json={currentFormJson}
+                  onChange={canEdit ? handleFormChange : () => {}}
+                  readOnly={!canEdit}
+                />
+              )
             case 'quality':
               return (
                 <QualityFormEditor

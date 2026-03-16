@@ -104,7 +104,11 @@ def _group_for_server_path(vfs_path: str) -> str:
         return "projectile"
     if "/particles/" in p:
         return "particle"
-    if "/sounds/" in p or "/soundevents/" in p:
+    if "/audio/soundevents/" in p or "/soundevents/" in p:
+        return "sound-event"
+    if "/audio/itemsounds/" in p or "/itemsounds/" in p:
+        return "item-sound-set"
+    if "/sounds/" in p:
         return "sound"
     if "/models/" in p:
         return "model"
@@ -114,6 +118,28 @@ def _group_for_server_path(vfs_path: str) -> str:
         return "prefab"
     if "/block/" in p or "/blocks/" in p:
         return "block"
+    if "/drops/" in p:
+        return "drop-table"
+    if "/entity/stats/" in p or "/entitystats/" in p:
+        return "entity-stat"
+    if "/bartershops/" in p or "/barter/" in p:
+        return "barter-shop"
+    if "/npc/groups/" in p or "/npcgroups/" in p:
+        return "npc-group"
+    if "/tagpatterns/" in p or "/tag/patterns/" in p:
+        return "tag-pattern"
+    if "/responsecurves/" in p or "/response/curves/" in p:
+        return "response-curve"
+    if "/entity/movementconfig/" in p or "/movementconfigs/" in p or "/movementconfig/" in p:
+        return "movement-config"
+    if "/gameplayconfigs/" in p or "/gameplayconfig/" in p:
+        return "gameplay-config"
+    if "/objective/" in p:
+        return "objective"
+    if "/reputation/" in p:
+        return "reputation"
+    if "/ambiencefx/" in p or "/ambience/" in p and "/audio/" in p:
+        return "ambience-fx"
     return "json_data"
 
 
