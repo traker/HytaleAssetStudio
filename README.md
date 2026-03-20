@@ -146,9 +146,3 @@ Backend tests from the repository root after installing backend requirements:
 - Active session recap: [docs/docs_data/SESSION_RECAP.md](docs/docs_data/SESSION_RECAP.md)
 - Hytale reference docs entry point: [docs/Hytale Docs/01_Getting_Started.md](docs/Hytale%20Docs/01_Getting_Started.md)
 
-## Publication note
-
-If you publish the repository, publish it as a local asset tool. Do not present it as a hosted service or multi-user web application.
-
-Commercial licensing can be discussed separately with the maintainer.
-
